@@ -3,6 +3,5 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  // update base to '/your-repo-name/' when deploying to GitHub Pages
-  base: '/chess-academy-app/',
+  base: '/kaft-chess-academy-app/',
 })
