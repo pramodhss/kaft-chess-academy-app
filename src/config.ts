@@ -1,12 +1,7 @@
-// ── Sheet ID and OAuth ────────────────────────────────────────────────────────
-export const SHEET_ID = '1NFpFlMl6dID0X5kEkXRO_eV2CfqyHME3oHagmKv6uTc';
-
-// Paste your OAuth Client ID here after creating it in Google Cloud Console
+export const SHEET_ID       = '1NFpFlMl6dID0X5kEkXRO_eV2CfqyHME3oHagmKv6uTc';
 export const GOOGLE_CLIENT_ID = '16060935138-l3bdagved67grnreahq96fbmjge7pamu.apps.googleusercontent.com';
+export const SCOPES         = 'https://www.googleapis.com/auth/spreadsheets';
 
-export const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
-
-// Sheet tab names — must exactly match the Google Sheet tab names
 export const TABS = {
   STUDENTS:    "Students & Parents",
   ATTENDANCE:  "Weekend Attendance",
@@ -17,9 +12,13 @@ export const TABS = {
   VAN:         "Van Allotment",
   METRICS:     "Monthly Metrics",
   TOURNAMENTS: "Tournament Achievements",
+  UPCOMING:    "Upcoming Tournaments",
+  RESOURCES:   "Resources",
 } as const;
 
-// Update these with your academy's actual social media handles
+export const ATT_DATE_START = 2;
+export const ATT_STUDENT_ROWS = 100;
+
 export const SOCIAL = {
   facebook:  'https://www.facebook.com/',
   instagram: 'https://www.instagram.com/',
@@ -27,8 +26,5 @@ export const SOCIAL = {
   whatsapp:  'https://wa.me/',
 };
 
-// Weekend Attendance column layout
-export const ATT_NAME_COL  = 0;  // A = Student Name
-export const ATT_BATCH_COL = 1;  // B = Batch
-export const ATT_DATE_START = 2; // C = first date column
-export const ATT_STUDENT_ROWS = 100; // rows 2–101
+export const ACADEMY_NAME = 'KAFT Chess Academy';
+export const ACADEMY_PHONE = '919000000000'; // update with real WhatsApp number (country code + number, no +)
