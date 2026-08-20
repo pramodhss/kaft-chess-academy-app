@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
@@ -46,6 +46,7 @@ export function MonthlyReport() {
   const { token, logout } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [reports, setReports] = useState<StudentReport[]>([]);
+  const reportRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -151,11 +152,28 @@ export function MonthlyReport() {
     setLoaded(false); setReports([]);
   };
 
+  const downloadPdf = async () => {
+    if (!reportRef.current) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const html2pdf = ((await import('html2pdf.js')) as any).default;
+    html2pdf().from(reportRef.current).set({
+      margin: 8,
+      filename: `Chess_Academy_${MONTHS[selectedMonth].label}.pdf`,
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#f9fafb' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).save();
+  };
+
   return (
     <Layout title="Monthly Report" action={
-      loaded ? <button onClick={() => window.print()} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full no-print">🖨️ Print</button> : undefined
+      loaded ? (
+        <div className="flex gap-1 no-print">
+          <button onClick={downloadPdf} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">⬇ PDF</button>
+          <button onClick={() => window.print()} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">🖨️</button>
+        </div>
+      ) : undefined
     }>
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3" ref={reportRef}>
         {/* Month selector */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-500 mb-2">Select Month</p>
