@@ -97,6 +97,20 @@ export function Attendance() {
 
   const presentCount = rows.filter(r => dirty.get(r.sheetRow) ?? r.present).length;
   const date = WEEKEND_DATES[selectedIdx];
+  const batches = ['All', ...Array.from(new Set(rows.map(r => r.batch).filter(Boolean)))];
+  const [batchFilter, setBatchFilter] = useState('All');
+  const visibleRows = rows.filter(r => r.name && (batchFilter === 'All' || r.batch === batchFilter));
+
+  const markAllPresent = () => {
+    setRows(prev => prev.map(r =>
+      visibleRows.some(v => v.sheetRow === r.sheetRow) ? { ...r, present: true } : r
+    ));
+    setDirty(prev => {
+      const m = new Map(prev);
+      visibleRows.forEach(r => m.set(r.sheetRow, true));
+      return m;
+    });
+  };
 
   return (
     <Layout title="Attendance" action={
@@ -127,6 +141,18 @@ export function Attendance() {
             </div>
           </div>
 
+          {/* Batch filter + bulk action */}
+          <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2">
+            <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
+              className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none">
+              {batches.map(b => <option key={b}>{b}</option>)}
+            </select>
+            <button onClick={markAllPresent}
+              className="flex-shrink-0 bg-green-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+              ✓ All Present
+            </button>
+          </div>
+
           {/* Summary */}
           <div className="px-4 py-2 bg-chess-light flex items-center justify-between">
             <span className="text-navy font-semibold text-sm">
@@ -139,7 +165,7 @@ export function Attendance() {
 
           {/* Student list */}
           <div className="flex-1 overflow-y-auto">
-            {rows.filter(r => r.name).map(r => {
+            {visibleRows.map(r => {
               const isPresent = dirty.get(r.sheetRow) ?? r.present;
               return (
                 <button key={r.sheetRow} onClick={() => toggle(r.sheetRow, isPresent)}

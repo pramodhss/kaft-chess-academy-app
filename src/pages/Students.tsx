@@ -176,20 +176,31 @@ export function Students() {
           </InfoSection>
           <InfoSection title="Parent 1">
             <Row label="Name" value={selected.parent1Name} />
-            <Row label="Phone" value={selected.parent1Phone} />
-            <Row label="WhatsApp" value={selected.parent1WhatsApp} />
+            <Row label="Phone">
+              {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
+            </Row>
+            <Row label="WhatsApp">
+              {selected.parent1WhatsApp ? (
+                <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/[^0-9]/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer"
+                  className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a>
+              ) : null}
+            </Row>
             <Row label="Email" value={selected.parent1Email} />
           </InfoSection>
           {(selected.parent2Name || selected.parent2Phone) && (
             <InfoSection title="Parent 2">
               <Row label="Name" value={selected.parent2Name} />
-              <Row label="Phone" value={selected.parent2Phone} />
+              <Row label="Phone">
+                {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
+              </Row>
             </InfoSection>
           )}
           {(selected.emergencyContact || selected.emergencyPhone) && (
             <InfoSection title="Emergency Contact">
               <Row label="Name" value={selected.emergencyContact} />
-              <Row label="Phone" value={selected.emergencyPhone} />
+              <Row label="Phone">
+                {selected.emergencyPhone ? <a href={`tel:${selected.emergencyPhone}`} className="font-medium text-chess-blue underline">{selected.emergencyPhone}</a> : null}
+              </Row>
             </InfoSection>
           )}
           {selected.notes && (

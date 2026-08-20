@@ -5,7 +5,9 @@ import { useCoachName } from '../hooks/useCoachName';
 import { SOCIAL } from '../config';
 
 const ITEMS = [
-  { to:'/monthly-report', icon:'📊', label:'Monthly Report',       desc:'Attendance + fees + achievements per student', hi:true },
+  { to:'/leaderboard',    icon:'🥇', label:'Leaderboard',         desc:'Tournament rankings by medals & wins'                       },
+  { to:'/leaderboard',    icon:'🏆', label:'Leaderboard',         desc:'Tournament rankings by medals & wins'                            },
+  { to:'/monthly-report', icon:'📊', label:'Monthly Report',       desc:'Attendance + fees + achievements per student', hi:true as true },
   { to:'/upcoming',       icon:'📋', label:'Upcoming Tournaments', desc:'Post and view upcoming events'                        },
   { to:'/resources',      icon:'📚', label:'Resources & eBooks',   desc:'Share study material and links'                       },
   { to:'/tournaments',    icon:'🏆', label:'Tournament Results',   desc:'Past results, ratings & medals'                       },
