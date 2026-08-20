@@ -152,7 +152,9 @@ export function MonthlyReport() {
   };
 
   return (
-    <Layout title="Monthly Report">
+    <Layout title="Monthly Report" action={
+      loaded ? <button onClick={() => window.print()} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full no-print">🖨️ Print</button> : undefined
+    }>
       <div className="p-4 space-y-3">
         {/* Month selector */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
