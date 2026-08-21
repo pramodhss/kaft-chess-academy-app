@@ -1,19 +1,25 @@
 {
-  "name": "Chess Academy",
-  "short_name": "Chess Academy",
-  "description": "Chess Academy Operations Manager",
+  "name": "Kaft Chess Academy",
+  "short_name": "Kaft Chess",
+  "description": "Kaft Chess Academy Operations Manager",
   "start_url": "/kaft-chess-academy-app/",
   "scope": "/kaft-chess-academy-app/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#17365D",
+  "background_color": "#0D0D1A",
   "theme_color": "#17365D",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2317365D'/><text y='75' font-size='65' text-anchor='middle' x='50'>♟</text></svg>",
+      "src": "chess-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "chess-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

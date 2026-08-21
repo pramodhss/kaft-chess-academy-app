@@ -33,3 +33,28 @@ html, body, #root {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 }
+
+/* ── Dark mode overrides ──────────────────────────────────────────────────── */
+html.dark { color-scheme: dark; }
+html.dark body,
+html.dark .bg-gray-50   { background-color: #111827 !important; }
+html.dark .bg-white     { background-color: #1f2937 !important; }
+html.dark .bg-gray-100  { background-color: #374151 !important; }
+html.dark .bg-gray-50.border-b { background-color: #1f2937 !important; }
+html.dark .text-gray-900 { color: #f9fafb !important; }
+html.dark .text-gray-700 { color: #d1d5db !important; }
+html.dark .text-gray-600 { color: #9ca3af !important; }
+html.dark .text-gray-500 { color: #6b7280 !important; }
+html.dark .text-gray-400 { color: #4b5563 !important; }
+html.dark .border-gray-100,
+html.dark .border-gray-200 { border-color: #374151 !important; }
+html.dark .shadow-sm    { box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #374151 !important;
+  color: #f9fafb !important;
+  border-color: #4b5563 !important;
+}
+html.dark .badge-gray   { background-color: #374151 !important; color: #d1d5db !important; }
+html.dark .badge-blue   { background-color: #1e3a5f !important; color: #93c5fd !important; }

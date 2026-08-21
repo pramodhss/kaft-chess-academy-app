@@ -26,7 +26,7 @@ export const SOCIAL = {
   whatsapp:  'https://wa.me/',
 };
 
-export const ACADEMY_NAME = 'KAFT Chess Academy';
+export const ACADEMY_NAME = 'Kaft Chess Academy';
 export const ACADEMY_PHONE = '919000000000'; // update with real WhatsApp number (country code + number, no +)
 
 // Free image hosting — get your key at https://api.imgbb.com (free account)
