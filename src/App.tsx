@@ -17,6 +17,8 @@ import { MonthlyReport }        from './pages/MonthlyReport';
 import { UpcomingTournaments }  from './pages/UpcomingTournaments';
 import { Resources }            from './pages/Resources';
 import { Leaderboard }          from './pages/Leaderboard';
+import { ErrorBoundary }         from './components/ErrorBoundary';
+import { ToastProvider }         from './context/ToastContext';
 
 function CoachNameModal({ onSave }: { onSave: (n: string) => void }) {
   const [val, setVal] = useState('');
@@ -64,12 +66,16 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <AuthProvider>
-        <HashRouter>
-          <AppRoutes />
-        </HashRouter>
-      </AuthProvider>
-    </GoogleOAuthProvider>
+    <ErrorBoundary>
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <AuthProvider>
+          <ToastProvider>
+            <HashRouter>
+              <AppRoutes />
+            </HashRouter>
+          </ToastProvider>
+        </AuthProvider>
+      </GoogleOAuthProvider>
+    </ErrorBoundary>
   );
 }

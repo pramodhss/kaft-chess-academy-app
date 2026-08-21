@@ -20,7 +20,15 @@ export interface Student {
   photoConsent: string;
   thisMonthAttended: string;
   notes: string;
-  rowIndex: number; // 1-based sheet row (header = row 1, first student = row 2)
+  school: string;
+  standard: string;
+  tnscaId: string;
+  fideId: string;
+  aicfId: string;
+  ratingClassical: string;
+  ratingRapid: string;
+  ratingBlitz: string;
+  rowIndex: number;
 }
 
 export interface AttendanceRow {

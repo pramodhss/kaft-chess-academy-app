@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { EmptyState, ErrorState } from '../components/EmptyState';
 import { readSheet, batchWrite, colLetter } from '../lib/sheets';
 import { SHEET_ID, TABS, ATT_DATE_START, ATT_STUDENT_ROWS } from '../config';
 
@@ -38,6 +40,7 @@ interface AttRow { name: string; batch: string; present: boolean; sheetRow: numb
 
 export function Attendance() {
   const { token, logout } = useAuth();
+  const toast = useToast();
   const [selectedIdx, setSelectedIdx] = useState(nearestDateIdx);
   const [rows, setRows] = useState<AttRow[]>([]);
   const [dirty, setDirty] = useState<Map<number, boolean>>(new Map());
@@ -91,7 +94,7 @@ export function Attendance() {
       }));
       await batchWrite(token, SHEET_ID, updates);
       setDirty(new Map());
-    } catch (e: any) { alert('Save failed: ' + e.message); }
+    } catch (e: any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
   };
 
@@ -185,7 +188,7 @@ export function Attendance() {
           </div>
 
           {dirty.size > 0 && (
-            <div className="p-4 bg-white border-t border-gray-200">
+            <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
               <button onClick={save} disabled={saving}
                 className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-50">
                 {saving ? 'Saving…' : `💾 Save Attendance (${dirty.size} changes) — by ${coachName}`}

@@ -8,8 +8,8 @@ export function Login() {
   return (
     <div className="min-h-screen bg-navy flex flex-col items-center justify-center p-6">
       <div className="text-center mb-10">
-        <div className="text-7xl mb-4">♟</div>
-        <h1 className="text-3xl font-bold text-white">Chess Academy</h1>
+        <img src="logo.jpg" alt="Kaft Chess Academy" className="w-28 h-28 rounded-2xl mx-auto mb-4 shadow-lg object-cover"/>
+        <h1 className="text-3xl font-bold text-white">Kaft Chess Academy</h1>
         <p className="text-chess-light mt-2 text-sm">Operations Manager</p>
       </div>
 

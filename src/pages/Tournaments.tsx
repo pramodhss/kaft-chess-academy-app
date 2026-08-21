@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { EmptyState, ErrorState } from '../components/EmptyState';
 import { readSheet, appendRows } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import type { TournamentEntry } from '../types';
@@ -25,6 +27,7 @@ function rowToEntry(row: string[], idx: number): TournamentEntry {
 
 export function Tournaments() {
   const { token, logout } = useAuth();
+  const toast = useToast();
   const [entries, setEntries] = useState<TournamentEntry[]>([]);
   const [students, setStudents] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,15 +69,15 @@ export function Tournaments() {
         form.position, form.ratingBefore, form.ratingAfter, ratingChange,
         form.medal, form.prize, '', form.coachNotes, '',
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY_F }); await load();
-    } catch (e: any) { alert('Save failed: ' + e.message); }
+      setShowAdd(false); setForm({ ...EMPTY_F }); await load(); toast.success('Tournament result added!');
+    } catch (e: any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
   };
 
-  if (loading) return <Layout title="Tournaments"><Spinner /></Layout>;
+  if (loading) return <Layout title="Tournaments" showBack><Spinner /></Layout>;
 
   return (
-    <Layout title="Tournaments" action={
+    <Layout title="Tournaments" showBack action={
       <button onClick={() => setShowAdd(true)} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
     }>
       <div className="p-4 space-y-3">

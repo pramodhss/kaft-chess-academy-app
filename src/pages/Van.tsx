@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { EmptyState, ErrorState } from '../components/EmptyState';
 import { readSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import type { VanEntry } from '../types';
@@ -17,6 +19,7 @@ function rowToVan(row: string[], idx: number): VanEntry {
 
 export function Van() {
   const { token, logout } = useAuth();
+  const toast = useToast();
   const [entries, setEntries] = useState<VanEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -39,10 +42,10 @@ export function Van() {
     ? entries.filter(e => e.studentName.toLowerCase().includes(search.toLowerCase()) || (e.vanId ?? '').toLowerCase().includes(search.toLowerCase()))
     : entries;
 
-  if (loading) return <Layout title="Van Allotment"><Spinner /></Layout>;
+  if (loading) return <Layout title="Van Allotment" showBack><Spinner /></Layout>;
 
   return (
-    <Layout title="Van Allotment">
+    <Layout title="Van Allotment" showBack>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <input value={search} onChange={e => setSearch(e.target.value)}

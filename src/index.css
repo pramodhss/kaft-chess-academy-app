@@ -40,12 +40,18 @@ html.dark body,
 html.dark .bg-gray-50   { background-color: #111827 !important; }
 html.dark .bg-white     { background-color: #1f2937 !important; }
 html.dark .bg-gray-100  { background-color: #374151 !important; }
+html.dark .bg-chess-light { background-color: #2d2000 !important; }
+html.dark .bg-pink-50   { background-color: #2d1515 !important; }
+html.dark .bg-red-50    { background-color: #2d1515 !important; }
+html.dark .bg-green-50  { background-color: #0f2010 !important; }
 html.dark .bg-gray-50.border-b { background-color: #1f2937 !important; }
-html.dark .text-gray-900 { color: #f9fafb !important; }
-html.dark .text-gray-700 { color: #d1d5db !important; }
-html.dark .text-gray-600 { color: #9ca3af !important; }
-html.dark .text-gray-500 { color: #6b7280 !important; }
-html.dark .text-gray-400 { color: #4b5563 !important; }
+html.dark .text-gray-900,
+html.dark .text-gray-800 { color: #f9fafb !important; }
+html.dark .text-gray-700 { color: #e5e7eb !important; }
+html.dark .text-gray-600 { color: #d1d5db !important; }
+html.dark .text-gray-500 { color: #9ca3af !important; }
+html.dark .text-gray-400 { color: #6b7280 !important; }
+html.dark .text-gray-300 { color: #4b5563 !important; }
 html.dark .border-gray-100,
 html.dark .border-gray-200 { border-color: #374151 !important; }
 html.dark .shadow-sm    { box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }
@@ -58,3 +64,44 @@ html.dark textarea {
 }
 html.dark .badge-gray   { background-color: #374151 !important; color: #d1d5db !important; }
 html.dark .badge-blue   { background-color: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .badge-green  { background-color: #14532d !important; color: #86efac !important; }
+html.dark .badge-amber  { background-color: #451a03 !important; color: #fde68a !important; }
+html.dark .badge-red    { background-color: #450a0a !important; color: #fca5a5 !important; }
+/* ── Chess animations ─────────────────────────────────────────────────────── */
+@keyframes chess-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes chess-shadow {
+  0%, 100% { transform: translateX(-50%) scaleX(1); opacity: 0.3; }
+  50% { transform: translateX(-50%) scaleX(0.5); opacity: 0.1; }
+}
+@keyframes chess-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+@keyframes chess-slide {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes chess-slide-down {
+  from { transform: translateY(-12px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+@keyframes chess-pop {
+  0%   { transform: scale(0.8); opacity: 0; }
+  70%  { transform: scale(1.05); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+@keyframes knight-hop {
+  0%,100% { transform: translateY(0) rotate(0deg); }
+  30%     { transform: translateY(-8px) rotate(-5deg); }
+  60%     { transform: translateY(-4px) rotate(3deg); }
+}
+.animate-chess-float  { animation: chess-float  2s ease-in-out infinite; }
+.animate-chess-shadow { animation: chess-shadow 2s ease-in-out infinite; }
+.animate-chess-pulse  { animation: chess-pulse  1.8s ease-in-out infinite; }
+.animate-chess-slide  { animation: chess-slide  0.3s ease-out; }
+.animate-chess-slide-down { animation: chess-slide-down 0.3s ease-out; }
+.animate-chess-pop    { animation: chess-pop    0.25s ease-out; }
+.animate-knight-hop   { animation: knight-hop   1.4s ease-in-out infinite; }

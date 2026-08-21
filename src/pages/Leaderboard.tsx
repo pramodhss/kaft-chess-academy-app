@@ -44,7 +44,7 @@ export function Leaderboard() {
   if (loading) return <Layout title="Leaderboard"><Spinner /></Layout>;
 
   return (
-    <Layout title="🏆 Leaderboard">
+    <Layout title="🏆 Leaderboard" showBack>
       <div className="p-4 space-y-2">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         {board.length === 0 && (

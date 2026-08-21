@@ -3,44 +3,76 @@ import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { readSheet, appendRows, batchWrite } from '../lib/sheets';
+import { useToast } from '../context/ToastContext';
+import { EmptyState, ErrorState } from '../components/EmptyState';
 import { SHEET_ID, TABS } from '../config';
 import type { Student } from '../types';
 
-const BATCHES  = ['Beginner A','Beginner B','Intermediate','Advanced','Competitive'];
-const LEVELS   = ['Beginner','Intermediate','Advanced','Competitive'];
-const STATUSES = ['Active','On Hold','Inactive'];
-const GENDERS  = ['Female','Male','Non-binary','Prefer not to say'];
+const BATCHES    = ['Beginner A','Beginner B','Intermediate','Advanced','Competitive'];
+const LEVELS     = ['Beginner','Intermediate','Advanced','Competitive'];
+const STANDARDS  = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th','Graduate'];
+const CATEGORY_COLOR: Record<string,string> = {
+  'Under 7':'bg-blue-100 text-blue-800','Under 9':'bg-cyan-100 text-cyan-800',
+  'Under 11':'bg-green-100 text-green-800','Under 13':'bg-emerald-100 text-emerald-800',
+  'Under 15':'bg-amber-100 text-amber-800','Under 17':'bg-orange-100 text-orange-800',
+  'Under 19':'bg-red-100 text-red-800','Open':'bg-purple-100 text-purple-800',
+};
 
-type FormData = { name:string; dob:string; gender:string; grade:string; batch:string; level:string;
-  joiningDate:string; status:string; parent1Name:string; parent1Phone:string; parent1WhatsApp:string;
-  parent1Email:string; parent2Name:string; parent2Phone:string; emergencyContact:string;
-  emergencyPhone:string; address:string; photoConsent:string; notes:string };
+function getCategory(age: string): string {
+  const a = parseInt(age);
+  if (!a || isNaN(a)) return '';
+  if (a <= 6)  return 'Under 7';
+  if (a <= 8)  return 'Under 9';
+  if (a <= 10) return 'Under 11';
+  if (a <= 12) return 'Under 13';
+  if (a <= 14) return 'Under 15';
+  if (a <= 16) return 'Under 17';
+  if (a <= 18) return 'Under 19';
+  return 'Open';
+}
+
+type FormData = {
+  name:string; dob:string; gender:string; grade:string; batch:string; level:string;
+  joiningDate:string; status:string; parent1Name:string; parent1Phone:string;
+  parent1WhatsApp:string; parent1Email:string; parent2Name:string; parent2Phone:string;
+  emergencyContact:string; emergencyPhone:string; address:string; photoConsent:string; notes:string;
+  school:string; standard:string; tnscaId:string; fideId:string; aicfId:string;
+  ratingClassical:string; ratingRapid:string; ratingBlitz:string;
+};
 
 const EMPTY: FormData = {
   name:'', dob:'', gender:'Female', grade:'', batch:'Beginner A', level:'Beginner',
   joiningDate:'', status:'Active', parent1Name:'', parent1Phone:'', parent1WhatsApp:'',
   parent1Email:'', parent2Name:'', parent2Phone:'', emergencyContact:'', emergencyPhone:'',
   address:'', photoConsent:'Yes', notes:'',
+  school:'', standard:'', tnscaId:'', fideId:'', aicfId:'',
+  ratingClassical:'', ratingRapid:'', ratingBlitz:'',
 };
 
 function rowToStudent(row: string[], rowIndex: number): Student {
   return {
-    name: row[0]??'', dob: row[1]??'', age: row[2]??'', gender: row[3]??'',
-    grade: row[4]??'', batch: row[5]??'', level: row[6]??'', joiningDate: row[7]??'',
-    status: row[8]??'', parent1Name: row[9]??'', parent1Phone: row[10]??'',
-    parent1WhatsApp: row[11]??'', parent1Email: row[12]??'', parent2Name: row[13]??'',
-    parent2Phone: row[14]??'', emergencyContact: row[15]??'', emergencyPhone: row[16]??'',
-    address: row[17]??'', photoConsent: row[18]??'', thisMonthAttended: row[19]??'',
-    notes: row[20]??'', rowIndex,
+    name:row[0]??'', dob:row[1]??'', age:row[2]??'', gender:row[3]??'', grade:row[4]??'',
+    batch:row[5]??'', level:row[6]??'', joiningDate:row[7]??'', status:row[8]??'',
+    parent1Name:row[9]??'', parent1Phone:row[10]??'', parent1WhatsApp:row[11]??'',
+    parent1Email:row[12]??'', parent2Name:row[13]??'', parent2Phone:row[14]??'',
+    emergencyContact:row[15]??'', emergencyPhone:row[16]??'', address:row[17]??'',
+    photoConsent:row[18]??'', thisMonthAttended:row[19]??'', notes:row[20]??'',
+    school:row[21]??'', standard:row[22]??'', tnscaId:row[23]??'', fideId:row[24]??'',
+    aicfId:row[25]??'', ratingClassical:row[26]??'', ratingRapid:row[27]??'', ratingBlitz:row[28]??'',
+    rowIndex,
   };
 }
 
 function studentToForm(s: Student): FormData {
-  return { name: s.name, dob: s.dob, gender: s.gender, grade: s.grade, batch: s.batch,
-    level: s.level, joiningDate: s.joiningDate, status: s.status, parent1Name: s.parent1Name,
-    parent1Phone: s.parent1Phone, parent1WhatsApp: s.parent1WhatsApp, parent1Email: s.parent1Email,
-    parent2Name: s.parent2Name, parent2Phone: s.parent2Phone, emergencyContact: s.emergencyContact,
-    emergencyPhone: s.emergencyPhone, address: s.address, photoConsent: s.photoConsent, notes: s.notes };
+  return {
+    name:s.name, dob:s.dob, gender:s.gender, grade:s.grade, batch:s.batch, level:s.level,
+    joiningDate:s.joiningDate, status:s.status, parent1Name:s.parent1Name,
+    parent1Phone:s.parent1Phone, parent1WhatsApp:s.parent1WhatsApp, parent1Email:s.parent1Email,
+    parent2Name:s.parent2Name, parent2Phone:s.parent2Phone, emergencyContact:s.emergencyContact,
+    emergencyPhone:s.emergencyPhone, address:s.address, photoConsent:s.photoConsent, notes:s.notes,
+    school:s.school, standard:s.standard, tnscaId:s.tnscaId, fideId:s.fideId, aicfId:s.aicfId,
+    ratingClassical:s.ratingClassical, ratingRapid:s.ratingRapid, ratingBlitz:s.ratingBlitz,
+  };
 }
 
 export function Students() {
@@ -55,26 +87,29 @@ export function Students() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<FormData>({ ...EMPTY });
   const [saving, setSaving] = useState(false);
+  const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
+  const toast = useToast();
 
   const load = async () => {
     if (!token) return;
     setLoading(true); setError('');
     try {
-      const rows = await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:U`);
-      const data = rows.slice(1).filter(r => r[0]?.trim()).map((r, i) => rowToStudent(r, i + 2));
+      const rows = await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
+      const data = rows.slice(1).filter(r => r[0]?.trim()).map((r,i) => rowToStudent(r, i+2));
       setStudents(data); setFiltered(data);
-    } catch (e: any) {
-      if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
+    } catch(e:any) {
+      if(e.message==='TOKEN_EXPIRED'){logout();return;}
       setError(e.message);
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [token]);
-
   useEffect(() => {
     const q = search.toLowerCase();
     setFiltered(students.filter(s =>
-      s.name.toLowerCase().includes(q) || s.batch.toLowerCase().includes(q) || s.level.toLowerCase().includes(q)
+      s.name.toLowerCase().includes(q) || s.batch.toLowerCase().includes(q) ||
+      s.level.toLowerCase().includes(q) || s.tnscaId.toLowerCase().includes(q) ||
+      s.fideId.toLowerCase().includes(q) || s.school.toLowerCase().includes(q)
     ));
   }, [search, students]);
 
@@ -82,14 +117,16 @@ export function Students() {
     if (!token || !form.name.trim()) return;
     setSaving(true);
     try {
-      await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:U`, [[
+      await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`, [[
         form.name, form.dob, '', form.gender, form.grade, form.batch, form.level,
         form.joiningDate, form.status, form.parent1Name, form.parent1Phone,
         form.parent1WhatsApp, form.parent1Email, form.parent2Name, form.parent2Phone,
         form.emergencyContact, form.emergencyPhone, form.address, form.photoConsent, '', form.notes,
+        form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
+        form.ratingClassical, form.ratingRapid, form.ratingBlitz,
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY }); await load();
-    } catch (e: any) { alert('Save failed: ' + e.message); }
+      setShowAdd(false); setForm({ ...EMPTY }); await load(); toast.success('Student added successfully!');
+    } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
 
@@ -97,47 +134,53 @@ export function Students() {
     if (!token || !selected || !form.name.trim()) return;
     setSaving(true);
     try {
-      const row = selected.rowIndex;
-      const tab = TABS.STUDENTS;
-      // Update non-formula columns only (skip C=Age formula, T=ThisMonthAttended formula)
+      const row = selected.rowIndex; const tab = TABS.STUDENTS;
       await batchWrite(token, SHEET_ID, [
-        { range: `'${tab}'!A${row}`, value: form.name },
-        { range: `'${tab}'!B${row}`, value: form.dob },
-        { range: `'${tab}'!D${row}`, value: form.gender },
-        { range: `'${tab}'!E${row}`, value: form.grade },
-        { range: `'${tab}'!F${row}`, value: form.batch },
-        { range: `'${tab}'!G${row}`, value: form.level },
-        { range: `'${tab}'!H${row}`, value: form.joiningDate },
-        { range: `'${tab}'!I${row}`, value: form.status },
-        { range: `'${tab}'!J${row}`, value: form.parent1Name },
-        { range: `'${tab}'!K${row}`, value: form.parent1Phone },
-        { range: `'${tab}'!L${row}`, value: form.parent1WhatsApp },
-        { range: `'${tab}'!M${row}`, value: form.parent1Email },
-        { range: `'${tab}'!N${row}`, value: form.parent2Name },
-        { range: `'${tab}'!O${row}`, value: form.parent2Phone },
-        { range: `'${tab}'!P${row}`, value: form.emergencyContact },
-        { range: `'${tab}'!Q${row}`, value: form.emergencyPhone },
-        { range: `'${tab}'!R${row}`, value: form.address },
-        { range: `'${tab}'!S${row}`, value: form.photoConsent },
-        { range: `'${tab}'!U${row}`, value: form.notes },
+        {range:`'${tab}'!A${row}`,value:form.name},
+        {range:`'${tab}'!B${row}`,value:form.dob},
+        {range:`'${tab}'!D${row}`,value:form.gender},
+        {range:`'${tab}'!E${row}`,value:form.grade},
+        {range:`'${tab}'!F${row}`,value:form.batch},
+        {range:`'${tab}'!G${row}`,value:form.level},
+        {range:`'${tab}'!H${row}`,value:form.joiningDate},
+        {range:`'${tab}'!I${row}`,value:form.status},
+        {range:`'${tab}'!J${row}`,value:form.parent1Name},
+        {range:`'${tab}'!K${row}`,value:form.parent1Phone},
+        {range:`'${tab}'!L${row}`,value:form.parent1WhatsApp},
+        {range:`'${tab}'!M${row}`,value:form.parent1Email},
+        {range:`'${tab}'!N${row}`,value:form.parent2Name},
+        {range:`'${tab}'!O${row}`,value:form.parent2Phone},
+        {range:`'${tab}'!P${row}`,value:form.emergencyContact},
+        {range:`'${tab}'!Q${row}`,value:form.emergencyPhone},
+        {range:`'${tab}'!R${row}`,value:form.address},
+        {range:`'${tab}'!S${row}`,value:form.photoConsent},
+        {range:`'${tab}'!U${row}`,value:form.notes},
+        {range:`'${tab}'!V${row}`,value:form.school},
+        {range:`'${tab}'!W${row}`,value:form.standard},
+        {range:`'${tab}'!X${row}`,value:form.tnscaId},
+        {range:`'${tab}'!Y${row}`,value:form.fideId},
+        {range:`'${tab}'!Z${row}`,value:form.aicfId},
+        {range:`'${tab}'!AA${row}`,value:form.ratingClassical},
+        {range:`'${tab}'!AB${row}`,value:form.ratingRapid},
+        {range:`'${tab}'!AC${row}`,value:form.ratingBlitz},
       ]);
-      setEditMode(false); setSelected(null); await load();
-    } catch (e: any) { alert('Save failed: ' + e.message); }
+      setEditMode(false); setSelected(null); await load(); toast.success('Student updated!');
+    } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
 
   if (loading) return <Layout title="Students"><Spinner /></Layout>;
 
-  // ── Edit mode ──────────────────────────────────────────────────────────────
+  // Edit mode
   if (selected && editMode) {
     return (
       <Layout title="Edit Student" action={
         <button onClick={() => setEditMode(false)} className="text-white text-sm">Cancel</button>
       }>
-        <div className="p-4 pb-24 space-y-3 overflow-y-auto">
+        <div className="p-4 pb-28 space-y-3 overflow-y-auto">
           <StudentForm form={form} setForm={setForm} />
         </div>
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           <button onClick={handleEdit} disabled={saving || !form.name.trim()}
             className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-50">
             {saving ? 'Saving…' : '💾 Save Changes'}
@@ -147,8 +190,9 @@ export function Students() {
     );
   }
 
-  // ── Detail view ────────────────────────────────────────────────────────────
+  // Detail view
   if (selected) {
+    const category = getCategory(selected.age);
     return (
       <Layout title={selected.name} action={
         <div className="flex items-center gap-2">
@@ -158,62 +202,76 @@ export function Students() {
         </div>
       }>
         <div className="p-4 space-y-3">
-          <InfoSection title="Academy">
-            <Row label="Batch" value={selected.batch} />
-            <Row label="Level" value={selected.level} />
-            <Row label="Status">
-              <span className={selected.status === 'Active' ? 'badge-green' : 'badge-gray'}>{selected.status}</span>
-            </Row>
-            <Row label="Joined" value={selected.joiningDate} />
-            <Row label="This Month" value={`${selected.thisMonthAttended || 0} days attended`} />
+          {/* Chess Profile */}
+          <InfoSection title="Chess Profile">
+            <div className="flex flex-wrap gap-2 mb-2">
+              {category && <span className={`text-xs font-bold px-3 py-1 rounded-full ${CATEGORY_COLOR[category] ?? 'badge-blue'}`}>🏆 {category}</span>}
+              <span className="badge-blue">{selected.level}</span>
+              <span className="badge-gray">{selected.batch}</span>
+            </div>
+            {(selected.ratingClassical||selected.ratingRapid||selected.ratingBlitz) && (
+              <div className="grid grid-cols-3 gap-2 my-2">
+                {selected.ratingClassical && <RatingBox label="Classical" value={selected.ratingClassical}/>}
+                {selected.ratingRapid     && <RatingBox label="Rapid"     value={selected.ratingRapid}/>}
+                {selected.ratingBlitz     && <RatingBox label="Blitz"     value={selected.ratingBlitz}/>}
+              </div>
+            )}
+            <Row label="TNSCA ID" value={selected.tnscaId}/>
+            <Row label="FIDE ID"  value={selected.fideId}/>
+            <Row label="AICF ID"  value={selected.aicfId}/>
+            <Row label="Joined"   value={selected.joiningDate}/>
+            <Row label="This Month" value={`${selected.thisMonthAttended||0} days`}/>
           </InfoSection>
+
+          {/* Personal */}
           <InfoSection title="Personal">
-            <Row label="DOB" value={selected.dob} />
-            <Row label="Age" value={selected.age} />
-            <Row label="Gender" value={selected.gender} />
-            <Row label="Grade / School" value={selected.grade} />
-            <Row label="Address" value={selected.address} />
+            <Row label="DOB"    value={selected.dob}/>
+            <Row label="Age"    value={selected.age ? `${selected.age} yrs` : ''}/>
+            <Row label="Gender" value={selected.gender}/>
+            <Row label="Status"><span className={selected.status==='Active'?'badge-green':'badge-gray'}>{selected.status}</span></Row>
           </InfoSection>
+
+          {/* Academic */}
+          <InfoSection title="Academic">
+            <Row label="School"    value={selected.school||selected.grade}/>
+            <Row label="Standard"  value={selected.standard}/>
+            <Row label="Grade / School" value={selected.school ? selected.grade : ''}/>
+          </InfoSection>
+
+          {/* Parents */}
           <InfoSection title="Parent 1">
-            <Row label="Name" value={selected.parent1Name} />
+            <Row label="Name" value={selected.parent1Name}/>
             <Row label="Phone">
               {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
             </Row>
             <Row label="WhatsApp">
-              {selected.parent1WhatsApp ? (
-                <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/[^0-9]/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer"
-                  className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a>
-              ) : null}
+              {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/[^0-9]/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
             </Row>
-            <Row label="Email" value={selected.parent1Email} />
+            <Row label="Email" value={selected.parent1Email}/>
           </InfoSection>
-          {(selected.parent2Name || selected.parent2Phone) && (
+          {(selected.parent2Name||selected.parent2Phone) && (
             <InfoSection title="Parent 2">
-              <Row label="Name" value={selected.parent2Name} />
+              <Row label="Name" value={selected.parent2Name}/>
               <Row label="Phone">
                 {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
               </Row>
             </InfoSection>
           )}
-          {(selected.emergencyContact || selected.emergencyPhone) && (
-            <InfoSection title="Emergency Contact">
-              <Row label="Name" value={selected.emergencyContact} />
+          {(selected.emergencyContact||selected.emergencyPhone) && (
+            <InfoSection title="Emergency">
+              <Row label="Name" value={selected.emergencyContact}/>
               <Row label="Phone">
                 {selected.emergencyPhone ? <a href={`tel:${selected.emergencyPhone}`} className="font-medium text-chess-blue underline">{selected.emergencyPhone}</a> : null}
               </Row>
             </InfoSection>
           )}
-          {selected.notes && (
-            <InfoSection title="Notes">
-              <p className="text-sm text-gray-700">{selected.notes}</p>
-            </InfoSection>
-          )}
+          {selected.notes && <InfoSection title="Notes"><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
         </div>
       </Layout>
     );
   }
 
-  // ── List view ──────────────────────────────────────────────────────────────
+  // List view
   return (
     <Layout title="Students" action={
       <button onClick={() => { setForm({ ...EMPTY }); setShowAdd(true); }}
@@ -222,31 +280,53 @@ export function Students() {
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name, batch or level…"
-          className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-chess-blue" />
-        <p className="text-xs text-gray-400">{filtered.length} student{filtered.length !== 1 ? 's' : ''}</p>
-        {filtered.map(s => (
-          <button key={s.name + s.rowIndex} onClick={() => setSelected(s)}
-            className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-left flex items-center justify-between active:bg-gray-50">
-            <div>
-              <p className="font-semibold text-gray-900">{s.name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{s.batch} · {s.level}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={s.status === 'Active' ? 'badge-green' : 'badge-gray'}>{s.status}</span>
-              <span className="text-gray-300">›</span>
-            </div>
-          </button>
-        ))}
+          placeholder="Search by name, batch, FIDE ID, school…"
+          className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-chess-blue"/>
+        <div className="flex gap-2 items-center">
+          <p className="text-xs text-gray-400 flex-1">{filtered.length} student{filtered.length!==1?'s':''}</p>
+          <select value={sortKey} onChange={e=>setSortKey(e.target.value as typeof sortKey)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white">
+            <option value="name">A → Z</option>
+            <option value="batch">By Batch</option>
+            <option value="level">By Level</option>
+            <option value="status">Active First</option>
+            <option value="attendance">Attendance ↓</option>
+          </select>
+        </div>
+        {[...filtered].sort((a,b)=>{
+            if(sortKey==='name')       return a.name.localeCompare(b.name);
+            if(sortKey==='batch')      return a.batch.localeCompare(b.batch);
+            if(sortKey==='level')      { const o=['Beginner','Intermediate','Advanced','Competitive']; return o.indexOf(a.level)-o.indexOf(b.level); }
+            if(sortKey==='status')     return a.status==='Active'?-1:1;
+            if(sortKey==='attendance') return parseInt(b.thisMonthAttended||'0')-parseInt(a.thisMonthAttended||'0');
+            return 0;
+          }).map(s => {
+          const cat = getCategory(s.age);
+          return (
+            <button key={s.name+s.rowIndex} onClick={() => setSelected(s)}
+              className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-left flex items-center justify-between active:bg-gray-50">
+              <div>
+                <p className="font-semibold text-gray-900">{s.name}</p>
+                <div className="flex gap-1 mt-0.5 flex-wrap">
+                  <span className="text-xs text-gray-500">{s.batch}</span>
+                  {cat && <span className={`text-xs font-medium px-1.5 py-0 rounded ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
+                  {s.fideId && <span className="text-xs text-gray-400">FIDE: {s.fideId}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={s.status==='Active'?'badge-green':'badge-gray'}>{s.status}</span>
+                <span className="text-gray-300">›</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
       {showAdd && (
         <Modal title="Add Student" onClose={() => setShowAdd(false)}>
-          <div className="max-h-[60vh] overflow-y-auto pr-1">
-            <StudentForm form={form} setForm={setForm} />
-          </div>
-          <button onClick={handleAdd} disabled={saving || !form.name.trim()}
+          <div className="max-h-[65vh] overflow-y-auto pr-1"><StudentForm form={form} setForm={setForm}/></div>
+          <button onClick={handleAdd} disabled={saving||!form.name.trim()}
             className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
-            {saving ? 'Saving…' : 'Add Student'}
+            {saving?'Saving…':'Add Student'}
           </button>
         </Modal>
       )}
@@ -254,66 +334,110 @@ export function Students() {
   );
 }
 
-// ── Reusable form ─────────────────────────────────────────────────────────────
 function StudentForm({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
   const f = <K extends keyof FormData>(k: K) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-      setForm({ ...form, [k]: e.target.value });
+    (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
+  
+  // Compute auto values from DOB/age
+  const dobDate = form.dob ? new Date(form.dob) : null;
+  const computedAge = dobDate && !isNaN(dobDate.getTime())
+    ? Math.floor((Date.now() - dobDate.getTime()) / (365.25 * 86400000))
+    : null;
+  const category = computedAge !== null ? getCategory(String(computedAge)) : '';
+
   return (
-    <div className="space-y-3">
-      <Field label="Full Name *"><input value={form.name} onChange={f('name')} className="input" /></Field>
-      <Field label="Date of Birth"><input type="date" value={form.dob} onChange={f('dob')} className="input" /></Field>
-      <Field label="Gender">
-        <select value={form.gender} onChange={f('gender')} className="input">
-          {['Female','Male','Non-binary','Prefer not to say'].map(o => <option key={o}>{o}</option>)}
-        </select>
-      </Field>
-      <Field label="Grade / School"><input value={form.grade} onChange={f('grade')} className="input" /></Field>
-      <Field label="Batch">
-        <select value={form.batch} onChange={f('batch')} className="input">
-          {['Beginner A','Beginner B','Intermediate','Advanced','Competitive'].map(o => <option key={o}>{o}</option>)}
-        </select>
-      </Field>
-      <Field label="Chess Level">
-        <select value={form.level} onChange={f('level')} className="input">
-          {['Beginner','Intermediate','Advanced','Competitive'].map(o => <option key={o}>{o}</option>)}
-        </select>
-      </Field>
-      <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input" /></Field>
-      <Field label="Status">
-        <select value={form.status} onChange={f('status')} className="input">
-          {['Active','On Hold','Inactive'].map(o => <option key={o}>{o}</option>)}
-        </select>
-      </Field>
-      <div className="border-t border-gray-100 pt-3">
-        <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2">Parent / Guardian</p>
-        <div className="space-y-3">
-          <Field label="Parent 1 Name"><input value={form.parent1Name} onChange={f('parent1Name')} className="input" /></Field>
-          <Field label="Phone"><input type="tel" value={form.parent1Phone} onChange={f('parent1Phone')} className="input" /></Field>
-          <Field label="WhatsApp"><input type="tel" value={form.parent1WhatsApp} onChange={f('parent1WhatsApp')} className="input" /></Field>
-          <Field label="Email"><input type="email" value={form.parent1Email} onChange={f('parent1Email')} className="input" /></Field>
-          <Field label="Parent 2 Name"><input value={form.parent2Name} onChange={f('parent2Name')} className="input" /></Field>
-          <Field label="Parent 2 Phone"><input type="tel" value={form.parent2Phone} onChange={f('parent2Phone')} className="input" /></Field>
+    <div className="space-y-4">
+      {/* Basic */}
+      <Section title="Personal Details">
+        <Field label="Full Name *"><input value={form.name} onChange={f('name')} className="input"/></Field>
+        <Field label="Date of Birth">
+          <input type="date" value={form.dob} onChange={f('dob')} className="input"/>
+          {computedAge !== null && (
+            <div className="flex gap-2 mt-1">
+              <span className="text-xs text-gray-500">Age: <strong>{computedAge}</strong></span>
+              {category && <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[category]??'badge-blue'}`}>🏆 {category}</span>}
+            </div>
+          )}
+        </Field>
+        <Field label="Gender">
+          <select value={form.gender} onChange={f('gender')} className="input">
+            {['Female','Male','Non-binary','Prefer not to say'].map(o=><option key={o}>{o}</option>)}
+          </select>
+        </Field>
+        <Field label="Status">
+          <select value={form.status} onChange={f('status')} className="input">
+            {['Active','On Hold','Inactive'].map(o=><option key={o}>{o}</option>)}
+          </select>
+        </Field>
+      </Section>
+
+      {/* Academic */}
+      <Section title="Academic">
+        <Field label="School Name"><input value={form.school} onChange={f('school')} className="input" placeholder="e.g. ABC Matriculation School"/></Field>
+        <Field label="Standard / Class">
+          <select value={form.standard} onChange={f('standard')} className="input">
+            <option value="">Select…</option>
+            {STANDARDS.map(o=><option key={o}>{o}</option>)}
+          </select>
+        </Field>
+        <Field label="Grade / School (combined)"><input value={form.grade} onChange={f('grade')} className="input" placeholder="e.g. 7th, ABC School"/></Field>
+      </Section>
+
+      {/* Chess Profile */}
+      <Section title="Chess Profile">
+        <Field label="Batch">
+          <select value={form.batch} onChange={f('batch')} className="input">
+            {BATCHES.map(o=><option key={o}>{o}</option>)}
+          </select>
+        </Field>
+        <Field label="Chess Level">
+          <select value={form.level} onChange={f('level')} className="input">
+            {LEVELS.map(o=><option key={o}>{o}</option>)}
+          </select>
+        </Field>
+        <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Classical Rating"><input type="number" value={form.ratingClassical} onChange={f('ratingClassical')} className="input" placeholder="e.g. 1200"/></Field>
+          <Field label="Rapid Rating"><input type="number" value={form.ratingRapid} onChange={f('ratingRapid')} className="input" placeholder="e.g. 1100"/></Field>
+          <Field label="Blitz Rating"><input type="number" value={form.ratingBlitz} onChange={f('ratingBlitz')} className="input" placeholder="e.g. 950"/></Field>
         </div>
-      </div>
-      <div className="border-t border-gray-100 pt-3">
-        <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2">Emergency Contact</p>
-        <div className="space-y-3">
-          <Field label="Name"><input value={form.emergencyContact} onChange={f('emergencyContact')} className="input" /></Field>
-          <Field label="Phone"><input type="tel" value={form.emergencyPhone} onChange={f('emergencyPhone')} className="input" /></Field>
-        </div>
-      </div>
-      <Field label="Home Address"><input value={form.address} onChange={f('address')} className="input" /></Field>
+        <Field label="TNSCA ID"><input value={form.tnscaId} onChange={f('tnscaId')} className="input" placeholder="TNSCA registration number"/></Field>
+        <Field label="FIDE ID"><input value={form.fideId} onChange={f('fideId')} className="input" placeholder="FIDE registration ID"/></Field>
+        <Field label="AICF ID"><input value={form.aicfId} onChange={f('aicfId')} className="input" placeholder="All India Chess Federation ID"/></Field>
+      </Section>
+
+      {/* Parents */}
+      <Section title="Parent / Guardian">
+        <Field label="Parent 1 Name"><input value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
+        <Field label="Phone"><input type="tel" value={form.parent1Phone} onChange={f('parent1Phone')} className="input"/></Field>
+        <Field label="WhatsApp"><input type="tel" value={form.parent1WhatsApp} onChange={f('parent1WhatsApp')} className="input"/></Field>
+        <Field label="Email"><input type="email" value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
+        <Field label="Parent 2 Name"><input value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
+        <Field label="Parent 2 Phone"><input type="tel" value={form.parent2Phone} onChange={f('parent2Phone')} className="input"/></Field>
+      </Section>
+
+      <Section title="Emergency Contact">
+        <Field label="Name"><input value={form.emergencyContact} onChange={f('emergencyContact')} className="input"/></Field>
+        <Field label="Phone"><input type="tel" value={form.emergencyPhone} onChange={f('emergencyPhone')} className="input"/></Field>
+      </Section>
+
+      <Field label="Home Address"><input value={form.address} onChange={f('address')} className="input"/></Field>
       <Field label="Photo Consent">
-        <select value={form.photoConsent} onChange={f('photoConsent')} className="input">
-          <option>Yes</option><option>No</option>
-        </select>
+        <select value={form.photoConsent} onChange={f('photoConsent')} className="input"><option>Yes</option><option>No</option></select>
       </Field>
-      <Field label="Notes"><textarea value={form.notes} onChange={f('notes')} className="input" rows={2} /></Field>
+      <Field label="Notes"><textarea value={form.notes} onChange={f('notes')} className="input" rows={2}/></Field>
     </div>
   );
 }
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">{title}</p>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>{children}</div>;
 }
@@ -334,10 +458,18 @@ function Row({ label, value, children }: { label: string; value?: string; childr
     </div>
   );
 }
+function RatingBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-gray-50 rounded-xl p-2 text-center border border-gray-100">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-bold text-navy text-lg">{value}</p>
+    </div>
+  );
+}
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div className="bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg text-navy">{title}</h2>
           <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>

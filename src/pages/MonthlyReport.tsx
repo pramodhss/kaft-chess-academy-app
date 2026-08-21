@@ -208,7 +208,7 @@ export function MonthlyReport() {
   };
 
   return (
-    <Layout title="Monthly Report" action={
+    <Layout title="Monthly Report" showBack action={
       loaded ? (
         <div className="flex gap-1 no-print">
           <button onClick={() => setShowEmailModal(true)} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">📧</button>

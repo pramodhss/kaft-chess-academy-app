@@ -3,6 +3,8 @@ import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { readSheet, appendRows, batchWrite } from '../lib/sheets';
+import { useToast } from '../context/ToastContext';
+import { EmptyState, ErrorState } from '../components/EmptyState';
 import { SHEET_ID, TABS } from '../config';
 import type { FeeEntry } from '../types';
 
@@ -51,6 +53,8 @@ export function Fees() {
   const [form, setForm]           = useState<FeeForm>({ ...EMPTY_F });
   const [saving, setSaving]       = useState(false);
   const [marking, setMarking]     = useState<number|null>(null);
+  const [feeSearch, setFeeSearch] = useState('');
+  const toast = useToast();
   const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
 
   const load = async () => {
@@ -88,8 +92,8 @@ export function Fees() {
         form.paymentMethod, form.paymentStatus, form.reference,
         form.notes ? `${form.notes} [by ${coachName}]` : `Added by ${coachName}`,
       ]]);
-      setShowAdd(false); setForm({...EMPTY_F}); await load();
-    } catch(e:any) { alert('Save failed: '+e.message); }
+      setShowAdd(false); setForm({...EMPTY_F}); await load(); toast.success('Payment added!');
+    } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
 
@@ -113,8 +117,8 @@ export function Fees() {
         {range:`'${tab}'!M${row}`,value:form.reference},
         {range:`'${tab}'!N${row}`,value:`${form.notes} [edited by ${coachName}]`.trim()},
       ]);
-      setEditTarget(null); await load();
-    } catch(e:any) { alert('Save failed: '+e.message); }
+      setEditTarget(null); await load(); toast.success('Payment updated!');
+    } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
 
@@ -132,8 +136,8 @@ export function Fees() {
         {range:`'${tab}'!L${fee.rowIndex}`,value:'Paid'},
         {range:`'${tab}'!N${fee.rowIndex}`,value:`Marked paid by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`},
       ]);
-      await load();
-    } catch(e:any) { alert('Failed: '+e.message); }
+      await load(); toast.success('Fee marked as Paid ✓');
+    } catch(e:any) { toast.error(e.message); }
     finally { setMarking(null); }
   };
 
@@ -147,7 +151,10 @@ export function Fees() {
     return `https://wa.me/${num}?text=${msg}`;
   };
 
-  const visible = filter ? fees.filter(f=>f.paymentStatus===filter) : fees;
+  const STATUS_SORT:{[k:string]:number}={'Overdue':0,'Partial':1,'Pending':2,'Paid':3,'Waived':4};
+  const visible = fees
+    .filter(f => (!filter || f.paymentStatus===filter) && (!feeSearch || f.studentName.toLowerCase().includes(feeSearch.toLowerCase())))
+    .sort((a,b) => (STATUS_SORT[a.paymentStatus]??5)-(STATUS_SORT[b.paymentStatus]??5));
   const totalCollected   = fees.reduce((s,f)=>s+(parseFloat(f.amountPaid)||0),0);
   const totalOutstanding = fees.reduce((s,f)=>s+Math.max(parseFloat(f.balance)||0,0),0);
 
@@ -174,6 +181,9 @@ export function Fees() {
         </div>
 
         {/* Status filter */}
+        <input value={feeSearch} onChange={e=>setFeeSearch(e.target.value)}
+          placeholder="Search by student name…"
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-chess-blue"/>
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {['','Pending','Overdue','Partial','Paid','Waived'].map(s=>(
             <button key={s} onClick={()=>setFilter(s)}

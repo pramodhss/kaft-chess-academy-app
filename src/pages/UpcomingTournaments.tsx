@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { EmptyState, ErrorState } from '../components/EmptyState';
 import { readSheet, appendRows, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 
@@ -16,6 +18,7 @@ interface UTEntry { name:string; type:string; date:string; deadline:string; venu
 
 export function UpcomingTournaments() {
   const { token, logout } = useAuth();
+  const toast = useToast();
   const [entries, setEntries] = useState<UTEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,17 +53,17 @@ export function UpcomingTournaments() {
         form.eligibility, form.link, form.notes, form.status,
         coachName, new Date().toLocaleDateString('en-IN'),
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY }); await load();
-    } catch(e:any) { alert('Save failed: ' + e.message); }
+      setShowAdd(false); setForm({ ...EMPTY }); await load(); toast.success('Tournament posted!');
+    } catch(e:any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
   };
 
   const u = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({...form,[k]:e.target.value});
 
-  if (loading) return <Layout title="Upcoming Tournaments"><Spinner /></Layout>;
+  if (loading) return <Layout title="Upcoming Tournaments" showBack><Spinner /></Layout>;
 
   return (
-    <Layout title="Upcoming Tournaments" action={
+    <Layout title="Upcoming Tournaments" showBack action={
       <button onClick={() => setShowAdd(true)} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
     }>
       <div className="p-4 space-y-3">

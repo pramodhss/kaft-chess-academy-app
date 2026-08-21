@@ -31,10 +31,10 @@ export function Timetable() {
     })();
   }, [token]);
 
-  if (loading) return <Layout title="Timetable"><Spinner /></Layout>;
+  if (loading) return <Layout title="Timetable" showBack><Spinner /></Layout>;
 
   return (
-    <Layout title="Timetable">
+    <Layout title="Timetable" showBack>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm">{error}</p>}
         {['Saturday', 'Sunday'].map(day => {

@@ -5,9 +5,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        navy: '#17365D',
-        'chess-blue': '#2F75B5',
-        'chess-light': '#D9EAF7',
+        // Dark like the KAFT logo background
+        navy:          '#0D0D1A',
+        // Deep professional gold for interactive elements and buttons
+        'chess-blue':  '#C9970A',
+        // Light gold for soft backgrounds and subtitle text
+        'chess-light': '#FFF3CC',
+        // Bright gold for accent decorations
+        gold:          '#FFD700',
       },
     },
   },
