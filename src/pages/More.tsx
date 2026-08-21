@@ -5,6 +5,7 @@ import { useCoachName } from '../hooks/useCoachName';
 import { SOCIAL } from '../config';
 
 const ITEMS = [
+  { to:'/progress',    icon:'📈', label:'Student Progress',    desc:'Attendance & skill rating trends per student'              },
   { to:'/leaderboard',    icon:'🏆', label:'Leaderboard',         desc:'Tournament rankings by medals & wins' },
   { to:'/monthly-report', icon:'📊', label:'Monthly Report',       desc:'Attendance + fees + achievements per student', hi:true as true },
   { to:'/upcoming',       icon:'📋', label:'Upcoming Tournaments', desc:'Post and view upcoming events'                        },
