@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useCoachName } from '../hooks/useCoachName';
+import { useTheme } from '../hooks/useTheme';
 import { SOCIAL } from '../config';
 
 const ITEMS = [
@@ -26,6 +27,7 @@ export function More() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { coachName, setShowPrompt } = useCoachName();
+  const { dark, toggle } = useTheme();
   return (
     <Layout title="More">
       <div className="p-4 space-y-3">
@@ -56,6 +58,13 @@ export function More() {
           <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2">Logged in as</p>
           <p className="font-semibold text-gray-900">{coachName || '—'}</p>
           <button onClick={() => setShowPrompt(true)} className="text-xs text-chess-blue mt-1">Change name</button>
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+            <span className="text-sm text-gray-600">{dark ? 'Dark mode' : 'Light mode'}</span>
+            <button onClick={toggle}
+              className={`w-14 h-7 rounded-full transition-colors relative flex items-center px-0.5 flex-shrink-0 ${dark ? 'bg-navy' : 'bg-gray-200'}`}>
+              <span className={`w-6 h-6 rounded-full bg-white shadow transition-transform flex items-center justify-center text-sm ${dark ? 'translate-x-7' : 'translate-x-0'}`}>{dark ? '🌙' : '☀️'}</span>
+            </button>
+          </div>
         </div>
         <button onClick={logout} className="w-full bg-gray-100 text-gray-600 rounded-xl p-4 text-sm font-medium flex items-center justify-center gap-2">
           🚪 Sign Out

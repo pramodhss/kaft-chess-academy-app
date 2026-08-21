@@ -33,10 +33,7 @@ export function Layout({ title, children, action, showBack }: LayoutProps) {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {action}
-          <button onClick={toggle}
-            className="w-8 h-8 flex items-center justify-center rounded-xl bg-white/10 text-base">
-            {dark ? '☀️' : '🌙'}
-          </button>
+
         </div>
       </header>
       {!online && (

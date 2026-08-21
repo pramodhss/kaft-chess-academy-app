@@ -54,3 +54,16 @@ export async function ensureSheet(token: string, sheetId: string, tabName: strin
     await writeRange(token, sheetId, `'${tabName}'!A1`, [headers]);
   }
 }
+
+/** Extend a sheet to at least `neededCols` columns (auto-detects current size). */
+export async function ensureSheetColumns(token: string, sheetId: string, tabName: string, neededCols: number) {
+  const info = await apiCall(token, `${API}/${sheetId}?fields=sheets.properties`);
+  const sheet = (info.sheets ?? []).find((s: any) => s.properties?.title === tabName);
+  if (!sheet) return;
+  const current = sheet.properties.gridProperties?.columnCount ?? 26;
+  if (current >= neededCols) return;
+  await apiCall(token, `${API}/${sheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests: [{ appendDimension: { sheetId: sheet.properties.sheetId, dimension: 'COLUMNS', length: neededCols - current } }] }),
+  });
+}

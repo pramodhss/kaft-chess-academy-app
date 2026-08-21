@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, appendRows, batchWrite } from '../lib/sheets';
+import { readSheet, appendRows, batchWrite, writeRange, ensureSheetColumns } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
 import { EmptyState, ErrorState } from '../components/EmptyState';
 import { SHEET_ID, TABS } from '../config';
@@ -135,35 +135,23 @@ export function Students() {
     setSaving(true);
     try {
       const row = selected.rowIndex; const tab = TABS.STUDENTS;
-      await batchWrite(token, SHEET_ID, [
-        {range:`'${tab}'!A${row}`,value:form.name},
-        {range:`'${tab}'!B${row}`,value:form.dob},
-        {range:`'${tab}'!D${row}`,value:form.gender},
-        {range:`'${tab}'!E${row}`,value:form.grade},
-        {range:`'${tab}'!F${row}`,value:form.batch},
-        {range:`'${tab}'!G${row}`,value:form.level},
-        {range:`'${tab}'!H${row}`,value:form.joiningDate},
-        {range:`'${tab}'!I${row}`,value:form.status},
-        {range:`'${tab}'!J${row}`,value:form.parent1Name},
-        {range:`'${tab}'!K${row}`,value:form.parent1Phone},
-        {range:`'${tab}'!L${row}`,value:form.parent1WhatsApp},
-        {range:`'${tab}'!M${row}`,value:form.parent1Email},
-        {range:`'${tab}'!N${row}`,value:form.parent2Name},
-        {range:`'${tab}'!O${row}`,value:form.parent2Phone},
-        {range:`'${tab}'!P${row}`,value:form.emergencyContact},
-        {range:`'${tab}'!Q${row}`,value:form.emergencyPhone},
-        {range:`'${tab}'!R${row}`,value:form.address},
-        {range:`'${tab}'!S${row}`,value:form.photoConsent},
-        {range:`'${tab}'!U${row}`,value:form.notes},
-        {range:`'${tab}'!V${row}`,value:form.school},
-        {range:`'${tab}'!W${row}`,value:form.standard},
-        {range:`'${tab}'!X${row}`,value:form.tnscaId},
-        {range:`'${tab}'!Y${row}`,value:form.fideId},
-        {range:`'${tab}'!Z${row}`,value:form.aicfId},
-        {range:`'${tab}'!AA${row}`,value:form.ratingClassical},
-        {range:`'${tab}'!AB${row}`,value:form.ratingRapid},
-        {range:`'${tab}'!AC${row}`,value:form.ratingBlitz},
-      ]);
+      // Extend sheet to 29 columns if needed before writing chess profile fields (V–AC)
+      await ensureSheetColumns(token, SHEET_ID, tab, 29);
+      await writeRange(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`, [[
+        form.name, form.dob,
+        `=IF(B${row}="","",DATEDIF(B${row},TODAY(),"Y"))`,
+        form.gender, form.grade, form.batch, form.level,
+        form.joiningDate, form.status,
+        form.parent1Name, form.parent1Phone, form.parent1WhatsApp, form.parent1Email,
+        form.parent2Name, form.parent2Phone,
+        form.emergencyContact, form.emergencyPhone,
+        form.address, form.photoConsent,
+        `=SUMIFS('Monthly Attendance'!$C:$C,'Monthly Attendance'!$A:$A,A${row},'Monthly Attendance'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))`,
+        form.notes,
+        form.school, form.standard,
+        form.tnscaId, form.fideId, form.aicfId,
+        form.ratingClassical, form.ratingRapid, form.ratingBlitz,
+      ]]);
       setEditMode(false); setSelected(null); await load(); toast.success('Student updated!');
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
