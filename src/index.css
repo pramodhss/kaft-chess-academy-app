@@ -40,7 +40,16 @@ html.dark body,
 html.dark .bg-gray-50   { background-color: #111827 !important; }
 html.dark .bg-white     { background-color: #1f2937 !important; }
 html.dark .bg-gray-100  { background-color: #374151 !important; }
-html.dark .bg-chess-light { background-color: #2d2000 !important; }
+html.dark .bg-chess-light   { background-color: #2d2200 !important; }   /* dark amber bg */
+html.dark .bg-chess-blue    { background-color: #6b4c00 !important; }   /* darker gold bg */
+html.dark .bg-navy          { /* keep dark — headers are intentionally dark */ }
+
+/* text-navy = near-black; swap to bright gold so section headers are readable */
+html.dark .text-navy        { color: #FFD700 !important; }
+/* chess-blue links and labels — use lighter amber for dark bg */
+html.dark .text-chess-blue  { color: #FCD34D !important; }
+/* chess-light (used in header subtitles) — already light, keep readable */
+html.dark .text-chess-light { color: #FFF3CC !important; }
 html.dark .bg-pink-50   { background-color: #2d1515 !important; }
 html.dark .bg-red-50    { background-color: #2d1515 !important; }
 html.dark .bg-green-50  { background-color: #0f2010 !important; }

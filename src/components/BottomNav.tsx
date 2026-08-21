@@ -18,7 +18,7 @@ export function BottomNav() {
           end={to === '/'}
           className={({ isActive }) =>
             `flex-1 flex flex-col items-center py-2 text-xs font-semibold transition-colors
-             ${isActive ? 'text-amber-500' : 'text-gray-400'}`
+             ${isActive ? 'text-amber-700' : 'text-gray-400'}`
           }
         >
           <span className="text-xl leading-none mb-0.5">{icon}</span>
