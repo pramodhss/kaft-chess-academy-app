@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Pencil, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
@@ -20,8 +20,8 @@ const CATEGORY_COLOR: Record<string,string> = {
 };
 
 function getCategory(age: string): string {
-  const a = parseInt(age);
-  if (!a || isNaN(a)) return '';
+  const a = Number.parseInt(age);
+  if (!a || Number.isNaN(a)) return '';
   if (a <= 6)  return 'Under 7';
   if (a <= 8)  return 'Under 9';
   if (a <= 10) return 'Under 11';
@@ -30,6 +30,10 @@ function getCategory(age: string): string {
   if (a <= 16) return 'Under 17';
   if (a <= 18) return 'Under 19';
   return 'Open';
+}
+
+function normalizedName(value: string): string {
+  return value.trim().toLocaleLowerCase();
 }
 
 type FormData = {
@@ -121,7 +125,7 @@ function mergeStudentEdits(baseline: FormData, proposed: FormData, current: Form
 
 function formToStudent(form: FormData, rowIndex: number, existing?: Student): Student {
   const dob = form.dob ? new Date(form.dob) : null;
-  const age = dob && !isNaN(dob.getTime())
+  const age = dob && !Number.isNaN(dob.getTime())
     ? String(Math.floor((Date.now() - dob.getTime()) / (365.25 * 86400000)))
     : '';
   return {
@@ -158,6 +162,93 @@ function formValidationError(form: FormData) {
   const phoneDigits = form.parent1Phone.replace(/\D/g, '');
   if (phoneDigits.length < 7 || phoneDigits.length > 15) return 'A valid parent or guardian phone number is required.';
   return '';
+}
+
+function studentDetailsText(student: Student): string {
+  const lines: string[] = ['*KAFT Chess Academy - Student Details*', `*Name:* ${student.name}`];
+  const add = (label: string, value: string) => { if (value.trim()) lines.push(`*${label}:* ${value.trim()}`); };
+  add('Status', student.status);
+  add('Date of Birth', student.dob);
+  add('Age', student.age ? `${student.age} years` : '');
+  add('Category', getCategory(student.age));
+  add('Batch', student.batch);
+  add('Chess Level', student.level);
+  add('Coach', student.coachName);
+  add('School', student.school || student.grade);
+  add('Standard', student.standard);
+  add('Joining Date', student.joiningDate);
+  add('Classical Rating', student.ratingClassical);
+  add('Rapid Rating', student.ratingRapid);
+  add('Blitz Rating', student.ratingBlitz);
+  add('TNSCA ID', student.tnscaId);
+  add('FIDE ID', student.fideId);
+  add('AICF ID', student.aicfId);
+  add('Parent / Guardian', student.parent1Name);
+  add('Parent Phone', student.parent1Phone);
+  add('Parent WhatsApp', student.parent1WhatsApp);
+  add('Parent Email', student.parent1Email);
+  add('Parent 2', student.parent2Name);
+  add('Parent 2 Phone', student.parent2Phone);
+  add('Emergency Contact', student.emergencyContact);
+  add('Emergency Phone', student.emergencyPhone);
+  add('Address', student.address);
+  add('Notes', student.notes);
+  return lines.join('\n');
+}
+
+async function confirmUniqueStudentAppend(
+  token: string,
+  studentName: string,
+  appendedRow: number,
+  onDuplicateRemoved: () => void,
+): Promise<void> {
+  const confirmedNames = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`);
+  const firstMatchingRow = confirmedNames.findIndex((nameRow, index) => index > 0
+    && normalizedName(nameRow[0] ?? '') === normalizedName(studentName));
+  if (firstMatchingRow >= 0 && firstMatchingRow + 1 !== appendedRow) {
+    await clearSheetRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A${appendedRow}:AD${appendedRow}`);
+    onDuplicateRemoved();
+    throw new Error('This student was added on another device at the same time. The duplicate row was removed.');
+  }
+}
+
+function copyStudentToClipboard(student: Student): Promise<void> {
+  return navigator.clipboard.writeText(studentDetailsText(student));
+}
+
+function StudentDetailActions({ student, onEdit, onBack }: Readonly<{
+  student: Student;
+  onEdit: () => void;
+  onBack: () => void;
+}>) {
+  const [copied, setCopied] = useState(false);
+  const toast = useToast();
+  const copy = () => {
+    void copyStudentToClipboard(student).then(() => {
+      setCopied(true);
+      toast.success('Student details copied. They are ready to paste into WhatsApp.');
+      window.setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      toast.error('Could not copy the student details. Check clipboard permission and try again.');
+    });
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={copy} aria-label="Copy student details" title="Copy student details"
+        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
+        {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
+      </button>
+      <button type="button" onClick={onEdit} aria-label="Edit student" title="Edit student"
+        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
+        <Pencil size={18} aria-hidden="true" />
+      </button>
+      <button type="button" onClick={onBack} aria-label="Back to students" title="Back to students"
+        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
+        <ArrowLeft size={19} aria-hidden="true" />
+      </button>
+    </div>
+  );
 }
 
 async function ensureStudentSchema(token: string) {
@@ -253,6 +344,7 @@ export function Students() {
         form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
         form.ratingClassical, form.ratingRapid, form.ratingBlitz, form.coachName,
       ]]);
+      await confirmUniqueStudentAppend(token, form.name, rowIndex, () => { rowIndex = null; });
       const savedRow = rowIndex;
       const values = studentRowValues(form, savedRow);
       const attendanceSynced = await syncStudentProfile(
@@ -375,7 +467,7 @@ export function Students() {
   if (selected && editMode) {
     return (
       <Layout title="Edit Student" action={
-        <button onClick={() => setEditMode(false)} className="text-white text-sm">Cancel</button>
+        <button type="button" onClick={() => setEditMode(false)} className="text-white text-sm">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
           <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} />
@@ -396,19 +488,25 @@ export function Students() {
     const category = getCategory(selected.age);
     return (
       <Layout title={selected.name} action={
-        <div className="flex items-center gap-2">
-          <button onClick={() => { setForm(studentToForm(selected)); setEditMode(true); }}
-            className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">✏️ Edit</button>
-          <button onClick={() => setSelected(null)} className="text-white text-sm">← Back</button>
-        </div>
+        <StudentDetailActions student={selected}
+          onEdit={() => { setForm(studentToForm(selected)); setEditMode(true); }}
+          onBack={() => setSelected(null)} />
       }>
         <div className="p-4 space-y-3">
           {/* Chess Profile */}
           <InfoSection title="Chess Profile">
-            <div className="flex flex-wrap gap-2 mb-2">
-              {category && <span className={`text-xs font-bold px-3 py-1 rounded-full ${CATEGORY_COLOR[category] ?? 'badge-blue'}`}>🏆 {category}</span>}
-              <span className="badge-blue">{selected.level}</span>
-              <span className="badge-gray">{selected.batch}</span>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {category && (
+                <span className={`min-h-9 px-2 py-2 rounded-lg text-xs font-bold leading-tight text-center flex items-center justify-center ${CATEGORY_COLOR[category] ?? 'badge-blue'}`}>
+                  {category}
+                </span>
+              )}
+              <span className="min-h-9 px-2 py-2 rounded-lg bg-blue-50 text-blue-800 text-xs font-semibold leading-tight text-center flex items-center justify-center">
+                {selected.level}
+              </span>
+              <span className="col-span-2 min-h-9 px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold leading-tight text-center flex items-center justify-center">
+                {selected.batch}
+              </span>
             </div>
             {(selected.ratingClassical||selected.ratingRapid||selected.ratingBlitz) && (
               <div className="grid grid-cols-3 gap-2 my-2">
@@ -447,7 +545,7 @@ export function Students() {
               {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
             </Row>
             <Row label="WhatsApp">
-              {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/[^0-9]/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
+              {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
             </Row>
             <Row label="Email" value={selected.parent1Email}/>
           </InfoSection>
@@ -467,6 +565,7 @@ export function Students() {
               </Row>
             </InfoSection>
           )}
+          {selected.address && <InfoSection title="Address"><p className="text-sm text-gray-700 break-words leading-5">{selected.address}</p></InfoSection>}
           {selected.notes && <InfoSection title="Notes"><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
           <button type="button" onClick={handleDelete} disabled={deleting}
             className="w-full border border-red-200 text-red-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
@@ -518,24 +617,24 @@ export function Students() {
                 || a.level.localeCompare(b.level);
             }
             if(sortKey==='status')     return a.status==='Active'?-1:1;
-            if(sortKey==='attendance') return parseInt(b.thisMonthAttended||'0')-parseInt(a.thisMonthAttended||'0');
+            if(sortKey==='attendance') return Number.parseInt(b.thisMonthAttended||'0')-Number.parseInt(a.thisMonthAttended||'0');
             return 0;
           }).map(s => {
           const cat = getCategory(s.age);
           return (
-            <button key={s.name+s.rowIndex} onClick={() => setSelected(s)}
-              className="w-full bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-left flex items-center justify-between active:bg-gray-50">
-              <div>
+            <button type="button" key={s.name+s.rowIndex} onClick={() => setSelected(s)}
+              className="w-full bg-white rounded-lg p-3.5 shadow-sm border border-gray-100 text-left grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center active:bg-gray-50">
+              <div className="min-w-0">
                 <p className="font-semibold text-gray-900">{s.name}</p>
-                <div className="flex gap-1 mt-0.5 flex-wrap">
-                  <span className="text-xs text-gray-500">{s.batch}</span>
-                  {cat && <span className={`text-xs font-medium px-1.5 py-0 rounded ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
-                  {s.fideId && <span className="text-xs text-gray-400">FIDE: {s.fideId}</span>}
+                <div className="flex gap-x-2 gap-y-1 mt-1 flex-wrap items-center">
+                  <span className="text-xs text-gray-600 break-words">{s.batch}</span>
+                  {cat && <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
+                  {s.fideId && <span className="text-xs text-gray-500 whitespace-nowrap">FIDE: {s.fideId}</span>}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span className={s.status==='Active'?'badge-green':'badge-gray'}>{s.status}</span>
-                <span className="text-gray-300">›</span>
+                <span className="text-gray-500" aria-hidden="true">›</span>
               </div>
             </button>
           );
@@ -568,7 +667,7 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
   
   // Compute auto values from DOB/age
   const dobDate = form.dob ? new Date(form.dob) : null;
-  const computedAge = dobDate && !isNaN(dobDate.getTime())
+  const computedAge = dobDate && !Number.isNaN(dobDate.getTime())
     ? Math.floor((Date.now() - dobDate.getTime()) / (365.25 * 86400000))
     : null;
   const category = computedAge !== null ? getCategory(String(computedAge)) : '';
@@ -661,7 +760,7 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) {
   return (
     <div>
       <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">{title}</p>
@@ -669,10 +768,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </div>
   );
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>{children}</div>;
+function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
+  return <label className="block"><span className="text-xs font-medium text-gray-500 mb-1 block">{label}</span>{children}</label>;
 }
-function InfoSection({ title, children }: { title: string; children: React.ReactNode }) {
+function InfoSection({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) {
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
       <h3 className="text-xs font-bold text-navy uppercase tracking-wider mb-3">{title}</h3>
@@ -680,16 +779,18 @@ function InfoSection({ title, children }: { title: string; children: React.React
     </div>
   );
 }
-function Row({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) {
+function Row({ label, value, children }: Readonly<{ label: string; value?: string; children?: React.ReactNode }>) {
   if (!value && !children) return null;
   return (
-    <div className="flex justify-between items-center text-sm">
-      <span className="text-gray-500 flex-shrink-0">{label}</span>
-      {children ? <div>{children}</div> : <span className="font-medium text-gray-900 text-right ml-4">{value}</span>}
+    <div className="grid grid-cols-[minmax(88px,0.45fr)_minmax(0,1fr)] gap-3 items-start text-sm">
+      <span className="text-gray-500 leading-5">{label}</span>
+      {children
+        ? <div className="min-w-0 text-right break-words leading-5">{children}</div>
+        : <span className="min-w-0 font-medium text-gray-900 text-right break-words leading-5">{value}</span>}
     </div>
   );
 }
-function RatingBox({ label, value }: { label: string; value: string }) {
+function RatingBox({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div className="bg-gray-50 rounded-xl p-2 text-center border border-gray-100">
       <p className="text-xs text-gray-500">{label}</p>
@@ -697,16 +798,17 @@ function RatingBox({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children }: Readonly<{ title: string; onClose: () => void; children: React.ReactNode }>) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={onClose}>
-      <div className="bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+    <div className="fixed inset-0 flex items-end z-50">
+      <button type="button" onClick={onClose} aria-label="Close student form" className="absolute inset-0 w-full h-full bg-black/50" />
+      <dialog open aria-labelledby="student-modal-title" className="relative m-0 border-0 bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-lg text-navy">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+          <h2 id="student-modal-title" className="font-bold text-lg text-navy">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 text-2xl leading-none">×</button>
         </div>
         {children}
-      </div>
+      </dialog>
     </div>
   );
 }

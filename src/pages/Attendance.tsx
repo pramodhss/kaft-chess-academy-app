@@ -280,7 +280,9 @@ export function Attendance() {
           {/* Date strip */}
           <div className="px-4 py-3 bg-white border-b border-gray-100">
             <div className="flex items-center justify-between gap-2 mb-2">
-              <p className="text-xs font-medium text-gray-500">Select Date</p>
+              <p className="text-xs font-medium text-gray-500">
+                Select Date <span className="font-bold text-navy">· {date.getFullYear()}</span>
+              </p>
               <div className="flex items-center gap-2">
                 {selectedDate && (
                   <button type="button" onClick={removeAttendanceDate} disabled={deletingDate || dirty.size > 0}
