@@ -52,8 +52,8 @@ const EMPTY: FormData = {
 
 function rowToStudent(row: string[], rowIndex: number): Student {
   return {
-    name:row[0]??'', dob:row[1]??'', age:row[2]??'', gender:row[3]??'', grade:row[4]??'',
-    batch:row[5]??'', level:row[6]??'', joiningDate:row[7]??'', status:row[8]??'',
+    name:row[0]??'', dob:normalizedDate(row[1]??''), age:row[2]??'', gender:row[3]??'', grade:row[4]??'',
+    batch:row[5]??'', level:row[6]??'', joiningDate:normalizedDate(row[7]??''), status:row[8]??'',
     parent1Name:row[9]??'', parent1Phone:row[10]??'', parent1WhatsApp:row[11]??'',
     parent1Email:row[12]??'', parent2Name:row[13]??'', parent2Phone:row[14]??'',
     emergencyContact:row[15]??'', emergencyPhone:row[16]??'', address:row[17]??'',
@@ -76,6 +76,47 @@ function studentToForm(s: Student): FormData {
     ratingClassical:s.ratingClassical, ratingRapid:s.ratingRapid, ratingBlitz:s.ratingBlitz,
     coachName:s.coachName,
   };
+}
+
+function normalizedDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const isoMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+  const localMatch = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  if (localMatch) return `${localMatch[3]}-${localMatch[2].padStart(2, '0')}-${localMatch[1].padStart(2, '0')}`;
+  return trimmed;
+}
+
+function normalizedStudentForm(form: FormData) {
+  return Object.fromEntries(Object.entries(form).map(([key, value]) => {
+    if (key === 'dob' || key === 'joiningDate') return [key, normalizedDate(value)];
+    return [key, value.trim()];
+  }));
+}
+
+function sameStudentForm(left: FormData, right: FormData) {
+  return JSON.stringify(normalizedStudentForm(left)) === JSON.stringify(normalizedStudentForm(right));
+}
+
+function mergeStudentEdits(baseline: FormData, proposed: FormData, current: FormData) {
+  const baselineNormalized = normalizedStudentForm(baseline);
+  const proposedNormalized = normalizedStudentForm(proposed);
+  const currentNormalized = normalizedStudentForm(current);
+  const merged = { ...current };
+  const conflictingFields: string[] = [];
+
+  (Object.keys(baseline) as (keyof FormData)[]).forEach(key => {
+    const proposedChanged = proposedNormalized[key] !== baselineNormalized[key];
+    const currentChanged = currentNormalized[key] !== baselineNormalized[key];
+    if (proposedChanged && currentChanged && proposedNormalized[key] !== currentNormalized[key]) {
+      conflictingFields.push(key);
+      return;
+    }
+    if (proposedChanged) merged[key] = proposed[key];
+  });
+
+  return { merged, conflictingFields };
 }
 
 function formToStudent(form: FormData, rowIndex: number, existing?: Student): Student {
@@ -254,17 +295,25 @@ export function Students() {
         readSheetLive(token, SHEET_ID, `'${tab}'!A:A`),
       ]);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
-      if (JSON.stringify(studentToForm(currentStudent)) !== JSON.stringify(studentToForm(selected))) {
-        toast.info('This student was changed on another device. Reload the list before editing again.');
+      const { merged: mergedForm, conflictingFields } = mergeStudentEdits(
+        studentToForm(selected),
+        form,
+        studentToForm(currentStudent),
+      );
+      if (conflictingFields.length > 0) {
+        toast.info('The same student fields were changed elsewhere. Latest values were loaded; review and try again.');
+        setForm(studentToForm(currentStudent));
+        setStudents(prev => prev.map(student => student.rowIndex === row ? currentStudent : student));
+        setSelected(currentStudent);
         return;
       }
       if (currentNames.slice(1).some((nameRow, index) => index + 2 !== row
-        && nameRow[0]?.trim().toLocaleLowerCase() === form.name.trim().toLocaleLowerCase())) {
+        && nameRow[0]?.trim().toLocaleLowerCase() === mergedForm.name.trim().toLocaleLowerCase())) {
         toast.error('A student with this name already exists. Use a distinct name before saving.');
         return;
       }
-      if (selected.name.trim().toLocaleLowerCase() !== form.name.trim().toLocaleLowerCase()
-        && await isStudentNameReserved(token, SHEET_ID, form.name)) {
+      if (currentStudent.name.trim().toLocaleLowerCase() !== mergedForm.name.trim().toLocaleLowerCase()
+        && await isStudentNameReserved(token, SHEET_ID, mergedForm.name)) {
         toast.error('This name belongs to retained student history. Use a distinct name before saving.');
         return;
       }
@@ -273,14 +322,14 @@ export function Students() {
         token,
         SHEET_ID,
         `'${tab}'!A${row}:AD${row}`,
-        studentRowValues(form, row),
-        { name: selected.name, batch: selected.batch, level: selected.level, parentName: selected.parent1Name },
-        { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
+        studentRowValues(mergedForm, row),
+        { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
+        { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
       );
-      const updated = formToStudent(form, row, selected);
+      const updated = formToStudent(mergedForm, row, currentStudent);
       const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
       const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
-      if (JSON.stringify(studentToForm(confirmed)) !== JSON.stringify(studentToForm(updated))) {
+      if (!sameStudentForm(studentToForm(confirmed), studentToForm(updated))) {
         setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
         setEditMode(false);
         setSelected(confirmed);
@@ -308,7 +357,7 @@ export function Students() {
       const tab = TABS.STUDENTS;
       const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
-      if (JSON.stringify(studentToForm(currentStudent)) !== JSON.stringify(studentToForm(selected))) {
+      if (!sameStudentForm(studentToForm(currentStudent), studentToForm(selected))) {
         toast.info('This student was changed on another device. Reload the list before removing it.');
         return;
       }
