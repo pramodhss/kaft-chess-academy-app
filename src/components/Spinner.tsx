@@ -1,12 +1,19 @@
-interface SpinnerProps { label?: string }
-export function Spinner({ label = 'Loading…' }: SpinnerProps) {
+interface SpinnerProps { readonly label?: string }
+
+export function Spinner({ label }: SpinnerProps) {
   return (
-    <div className="flex flex-col items-center justify-center h-full py-16 gap-4">
-      <div className="relative">
-        <span className="text-5xl animate-chess-float inline-block select-none">♞</span>
-        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-1.5 bg-black/10 rounded-full animate-chess-shadow inline-block"/>
+    <div className="flex flex-col items-center justify-center h-full min-h-[240px] px-8 py-16 gap-4" role="status" aria-live="polite">
+      <div className="chess-loader" aria-hidden="true">
+        {['♜', '♞', '♝', '♛'].map((piece, index) => (
+          <span key={piece} style={{ animationDelay: `${index * 140}ms` }}>{piece}</span>
+        ))}
       </div>
-      <p className="text-gray-400 text-sm animate-chess-pulse">{label}</p>
+      <div className="text-center">
+        <p className="text-navy font-semibold text-sm">{label ?? 'Loading academy data'}</p>
+        <div className="chess-loader-dots mt-2" aria-hidden="true">
+          <span /><span /><span />
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BookOpen, CalendarCheck, LayoutGrid, ReceiptIndianRupee, Trophy, Users } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
+import { parseSheetNumber } from '../lib/values';
 import { SHEET_ID, TABS } from '../config';
 
 const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -22,7 +24,7 @@ function upcomingBirthdays(studentRows: string[][]): { name: string; dob: string
     const name = r[0]?.trim(); const dobStr = r[1]?.trim();
     if (!name || !dobStr) return;
     const dob = new Date(dobStr);
-    if (isNaN(dob.getTime())) return;
+    if (Number.isNaN(dob.getTime())) return;
     const thisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
     if (thisYear < today) thisYear.setFullYear(today.getFullYear() + 1);
     const daysLeft = Math.round((thisYear.getTime() - today.getTime()) / 86400000);
@@ -32,12 +34,12 @@ function upcomingBirthdays(studentRows: string[][]): { name: string; dob: string
 }
 
 const QUICK_LINKS = [
-  { to: '/students',   icon: '👥', label: 'Students',   color: 'bg-blue-50  text-blue-800'   },
-  { to: '/attendance', icon: '✅', label: 'Attendance',  color: 'bg-green-50 text-green-800'  },
-  { to: '/fees',       icon: '💰', label: 'Fees',        color: 'bg-amber-50 text-amber-800'  },
-  { to: '/upcoming',   icon: '📋', label: 'Tournaments', color: 'bg-purple-50 text-purple-800'},
-  { to: '/resources',  icon: '📚', label: 'Resources',   color: 'bg-teal-50  text-teal-800'   },
-  { to: '/more',       icon: '☰',  label: 'More',        color: 'bg-gray-100 text-gray-700'   },
+  { to: '/students',   Icon: Users, label: 'Students' },
+  { to: '/attendance', Icon: CalendarCheck, label: 'Attendance' },
+  { to: '/fees',       Icon: ReceiptIndianRupee, label: 'Fees' },
+  { to: '/upcoming',   Icon: Trophy, label: 'Tournaments' },
+  { to: '/resources',  Icon: BookOpen, label: 'Resources' },
+  { to: '/more',       Icon: LayoutGrid, label: 'More' },
 ];
 
 export function Dashboard() {
@@ -61,8 +63,8 @@ export function Dashboard() {
         const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
         let collected = 0, outstanding = 0;
         feeRows.slice(1).forEach(r => {
-          collected   += parseFloat(r[6] ?? '0') || 0;
-          outstanding += parseFloat(r[7] ?? '0') || 0;
+          collected   += parseSheetNumber(r[5]);
+          outstanding += parseSheetNumber(r[6]);
         });
         setStats({ total: data.length, active, collected, outstanding });
         setBirthdays(upcomingBirthdays(studentRows));
@@ -73,55 +75,64 @@ export function Dashboard() {
     })();
   }, [token, logout]);
 
-  return (
-    <Layout title="Chess Academy">
-      {loading ? <Spinner /> : error ? (
-        <p className="p-4 text-red-600 text-sm">{error}</p>
-      ) : (
-        <div className="p-4 space-y-4">
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Active Students" value={stats!.active} sub={`of ${stats!.total} enrolled`} color="bg-navy text-white" />
-            <StatCard label="Next Session" value={`${DAYS_S[nextSession.getDay()]} ${nextSession.getDate()} ${MONTHS_S[nextSession.getMonth()]}`} color="bg-chess-blue text-white" />
-            <StatCard label="Fees Collected" value={`₹${stats!.collected.toLocaleString('en-IN')}`} color="bg-green-600 text-white" />
-            <StatCard label="Outstanding" value={`₹${stats!.outstanding.toLocaleString('en-IN')}`} color="bg-amber-500 text-white" />
-          </div>
+  let content: React.ReactNode;
+  if (loading) {
+    content = <Spinner />;
+  } else if (error) {
+    content = <p className="p-4 text-red-600 text-sm">{error}</p>;
+  } else if (stats) {
+    content = (
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="Active Students" value={stats.active} sub={`of ${stats.total} enrolled`} color="bg-navy text-white" />
+          <StatCard label="Next Session" value={`${DAYS_S[nextSession.getDay()]} ${nextSession.getDate()} ${MONTHS_S[nextSession.getMonth()]}`} color="bg-chess-blue text-white" />
+          <StatCard label="Fees Collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} color="bg-green-600 text-white" />
+          <StatCard label="Outstanding" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} color="bg-amber-500 text-white" />
+        </div>
 
-          {/* Birthday reminders */}
-          {birthdays.length > 0 && (
-            <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
-              <p className="text-pink-800 font-bold text-sm mb-2">🎂 Upcoming Birthdays</p>
-              {birthdays.map(b => (
+        {birthdays.length > 0 && (
+          <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
+            <p className="text-pink-800 font-bold text-sm mb-2">Upcoming Birthdays</p>
+            {birthdays.map(b => {
+              let timing = `in ${b.daysLeft} days`;
+              if (b.daysLeft === 0) timing = 'Today';
+              else if (b.daysLeft === 1) timing = 'in 1 day';
+              return (
                 <div key={b.name} className="flex justify-between items-center py-1">
                   <span className="text-sm text-pink-900 font-medium">{b.name}</span>
-                  <span className="text-xs text-pink-600 font-semibold">
-                    {b.daysLeft === 0 ? '🎉 Today!' : `in ${b.daysLeft} day${b.daysLeft > 1 ? 's' : ''}`}
-                  </span>
+                  <span className="text-xs text-pink-600 font-semibold">{timing}</span>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Quick links */}
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Quick Access</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {QUICK_LINKS.map(({ to, icon, label, color }) => (
-              <button key={to} onClick={() => navigate(to)}
-                className={`${color} flex flex-col items-center justify-center rounded-xl p-4 font-medium text-sm gap-1 active:scale-95 transition-transform`}>
-                <span className="text-2xl">{icon}</span>
-                <span>{label}</span>
-              </button>
-            ))}
+              );
+            })}
           </div>
+        )}
+
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Quick Access</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {QUICK_LINKS.map(({ to, Icon, label }) => (
+            <button type="button" key={to} onClick={() => navigate(to)}
+              className="quick-link bg-white text-gray-700 flex flex-col items-center justify-center rounded-xl p-4 font-medium text-sm gap-2">
+              <Icon size={24} strokeWidth={1.7} className="text-navy" aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
+    );
+  } else {
+    content = null;
+  }
+
+  return (
+    <Layout title="Chess Academy">
+      {content}
     </Layout>
   );
 }
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
+function StatCard({ label, value, sub, color }: Readonly<{ label: string; value: string | number; sub?: string; color: string }>) {
   return (
-    <div className={`${color} rounded-xl p-4`}>
+    <div className={`${color} stat-card rounded-xl p-4`}>
       <p className="text-xs opacity-80 mb-1">{label}</p>
       <p className="text-2xl font-bold leading-tight">{value}</p>
       {sub && <p className="text-xs opacity-70 mt-0.5">{sub}</p>}

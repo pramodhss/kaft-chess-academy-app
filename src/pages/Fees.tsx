@@ -6,6 +6,7 @@ import { readSheet, appendRows, batchWrite } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
 import { EmptyState, ErrorState } from '../components/EmptyState';
 import { SHEET_ID, TABS } from '../config';
+import { parseSheetNumber } from '../lib/values';
 import type { FeeEntry } from '../types';
 
 const FEE_TYPES   = ['Monthly Tuition','Admission','Tournament','Van','Materials','Other'];
@@ -81,43 +82,76 @@ export function Fees() {
 
   const handleAdd = async () => {
     if (!token||!form.studentName||!form.amountDue) return;
+    const amountDue = parseSheetNumber(form.amountDue);
+    const amountPaid = parseSheetNumber(form.amountPaid);
+    if (amountDue <= 0) { toast.error('Amount due must be greater than zero.'); return; }
+    if (amountPaid < 0 || amountPaid > amountDue) { toast.error('Amount paid must be between zero and the amount due.'); return; }
     setSaving(true);
     try {
       const receipt = `RCT-${Date.now().toString().slice(-6)}`;
-      const balance = parseFloat(form.amountDue)-(parseFloat(form.amountPaid||'0'));
-      await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
+      const balance = amountDue - amountPaid;
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
         receipt, form.studentName, '', form.feeMonth, form.feeType,
-        parseFloat(form.amountDue), parseFloat(form.amountPaid||'0'), balance,
+        amountDue, amountPaid, balance,
         form.dueDate, form.paymentDate||new Date().toLocaleDateString('en-IN'),
         form.paymentMethod, form.paymentStatus, form.reference,
         form.notes ? `${form.notes} [by ${coachName}]` : `Added by ${coachName}`,
       ]]);
-      setShowAdd(false); setForm({...EMPTY_F}); await load(); toast.success('Payment added!');
+      const added: FeeEntry = {
+        receiptNo: receipt, studentName: form.studentName, batch: '', feeMonth: form.feeMonth,
+        feeType: form.feeType, amountDue: form.amountDue, amountPaid: form.amountPaid || '0',
+        balance: String(balance), dueDate: form.dueDate,
+        paymentDate: form.paymentDate || new Date().toLocaleDateString('en-IN'),
+        paymentMethod: form.paymentMethod, paymentStatus: form.paymentStatus,
+        reference: form.reference, notes: form.notes, rowIndex,
+      };
+      setFees(prev => [...prev, added]);
+      setShowAdd(false);
+      setForm({...EMPTY_F});
+      toast.success(`Payment for ${added.studentName} was saved successfully.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
 
   const handleEdit = async () => {
     if (!token||!editTarget||!form.studentName) return;
+    const amountDue = parseSheetNumber(form.amountDue);
+    const amountPaid = parseSheetNumber(form.amountPaid);
+    if (amountDue <= 0) { toast.error('Amount due must be greater than zero.'); return; }
+    if (amountPaid < 0 || amountPaid > amountDue) { toast.error('Amount paid must be between zero and the amount due.'); return; }
     setSaving(true);
     try {
       const row=editTarget.rowIndex, tab=TABS.FEES;
-      const balance=parseFloat(form.amountDue)-(parseFloat(form.amountPaid||'0'));
+      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${row}:N${row}`);
+      const currentFee = rowToFee(currentRows[0] ?? [], row - 2);
+      if (currentFee.receiptNo !== editTarget.receiptNo || JSON.stringify(feeToForm(currentFee)) !== JSON.stringify(feeToForm(editTarget))) {
+        toast.info('This payment was changed on another device. Reload Fees before editing again.');
+        return;
+      }
+      const balance = amountDue - amountPaid;
+      const savedNotes = `${form.notes} [edited by ${coachName}]`.trim();
       await batchWrite(token, SHEET_ID, [
         {range:`'${tab}'!B${row}`,value:form.studentName},
         {range:`'${tab}'!D${row}`,value:form.feeMonth},
         {range:`'${tab}'!E${row}`,value:form.feeType},
-        {range:`'${tab}'!F${row}`,value:parseFloat(form.amountDue)||0},
-        {range:`'${tab}'!G${row}`,value:parseFloat(form.amountPaid||'0')||0},
+        {range:`'${tab}'!F${row}`,value:amountDue},
+        {range:`'${tab}'!G${row}`,value:amountPaid},
         {range:`'${tab}'!H${row}`,value:balance},
         {range:`'${tab}'!I${row}`,value:form.dueDate},
         {range:`'${tab}'!J${row}`,value:form.paymentDate},
         {range:`'${tab}'!K${row}`,value:form.paymentMethod},
         {range:`'${tab}'!L${row}`,value:form.paymentStatus},
         {range:`'${tab}'!M${row}`,value:form.reference},
-        {range:`'${tab}'!N${row}`,value:`${form.notes} [edited by ${coachName}]`.trim()},
+        {range:`'${tab}'!N${row}`,value:savedNotes},
       ]);
-      setEditTarget(null); await load(); toast.success('Payment updated!');
+      setFees(prev => prev.map(fee => fee.rowIndex === row ? {
+        ...fee, studentName: form.studentName, feeMonth: form.feeMonth, feeType: form.feeType,
+        amountDue: form.amountDue, amountPaid: form.amountPaid || '0', balance: String(balance),
+        dueDate: form.dueDate, paymentDate: form.paymentDate, paymentMethod: form.paymentMethod,
+        paymentStatus: form.paymentStatus, reference: form.reference, notes: savedNotes,
+      } : fee));
+      setEditTarget(null);
+      toast.success(`${form.studentName}'s payment details were updated.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
@@ -128,15 +162,26 @@ export function Fees() {
     setMarking(fee.rowIndex);
     try {
       const tab = TABS.FEES;
+      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
+      const currentFee = rowToFee(currentRows[0] ?? [], fee.rowIndex - 2);
+      if (currentFee.receiptNo !== fee.receiptNo || JSON.stringify(feeToForm(currentFee)) !== JSON.stringify(feeToForm(fee))) {
+        toast.info('This payment was changed on another device. Reload Fees before marking it paid.');
+        return;
+      }
       await batchWrite(token, SHEET_ID, [
-        {range:`'${tab}'!G${fee.rowIndex}`,value:parseFloat(fee.amountDue)||0},
+        {range:`'${tab}'!G${fee.rowIndex}`,value:parseSheetNumber(fee.amountDue)},
         {range:`'${tab}'!H${fee.rowIndex}`,value:0},
         {range:`'${tab}'!J${fee.rowIndex}`,value:new Date().toLocaleDateString('en-IN')},
-        {range:`'${tab}'!K${fee.rowIndex}`,value:'Cash'},
+        {range:`'${tab}'!K${fee.rowIndex}`,value:fee.paymentMethod || 'UPI'},
         {range:`'${tab}'!L${fee.rowIndex}`,value:'Paid'},
         {range:`'${tab}'!N${fee.rowIndex}`,value:`Marked paid by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`},
       ]);
-      await load(); toast.success('Fee marked as Paid ✓');
+      const paymentDate = new Date().toLocaleDateString('en-IN');
+      setFees(prev => prev.map(entry => entry.rowIndex === fee.rowIndex ? {
+        ...entry, amountPaid: entry.amountDue, balance: '0', paymentDate,
+        paymentMethod: entry.paymentMethod || 'UPI', paymentStatus: 'Paid',
+      } : entry));
+      toast.success(`${fee.studentName}'s fee was marked as paid.`);
     } catch(e:any) { toast.error(e.message); }
     finally { setMarking(null); }
   };
@@ -155,8 +200,8 @@ export function Fees() {
   const visible = fees
     .filter(f => (!filter || f.paymentStatus===filter) && (!feeSearch || f.studentName.toLowerCase().includes(feeSearch.toLowerCase())))
     .sort((a,b) => (STATUS_SORT[a.paymentStatus]??5)-(STATUS_SORT[b.paymentStatus]??5));
-  const totalCollected   = fees.reduce((s,f)=>s+(parseFloat(f.amountPaid)||0),0);
-  const totalOutstanding = fees.reduce((s,f)=>s+Math.max(parseFloat(f.balance)||0,0),0);
+  const totalCollected   = fees.reduce((sum, fee) => sum + parseSheetNumber(fee.amountPaid), 0);
+  const totalOutstanding = fees.reduce((sum, fee) => sum + Math.max(parseSheetNumber(fee.balance), 0), 0);
 
   if (loading) return <Layout title="Fees"><Spinner /></Layout>;
 
@@ -277,7 +322,10 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,disabled,co
           <p className="text-xs text-gray-400">Will be tracked to: <strong>{coachName}</strong></p>
         </div>
         <button onClick={onSave} disabled={saving||disabled} className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
-          {saving?'Saving…':'💾 Save'}
+          <span className="inline-flex items-center justify-center gap-2">
+            {saving && <span className="button-spinner" aria-hidden="true"/>}
+            {saving ? (title.startsWith('Edit') ? 'Updating payment…' : 'Saving payment…') : (title.startsWith('Edit') ? 'Update Payment' : 'Save Payment')}
+          </span>
         </button>
       </div>
     </div>

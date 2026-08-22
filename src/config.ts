@@ -17,14 +17,20 @@ export const TABS = {
 } as const;
 
 export const ATT_DATE_START = 2;
-export const ATT_STUDENT_ROWS = 100;
 
 export const SOCIAL = {
   facebook:  'https://www.facebook.com/',
-  instagram: 'https://www.instagram.com/',
+  instagram: 'https://www.instagram.com/kaft_chess_academy/',
   youtube:   'https://www.youtube.com/',
   whatsapp:  'https://wa.me/',
 };
+
+export const ACADEMY_LINKS = {
+  fideRatings: 'https://ratings.fide.com/',
+  tamilChess: 'https://tamilchess.com/',
+  easyPayChess: 'https://easypaychess.com/',
+  aicfEvents: 'https://aicf.in/all-events/',
+} as const;
 
 export const ACADEMY_NAME = 'Kaft Chess Academy';
 export const ACADEMY_PHONE = '919000000000'; // update with real WhatsApp number (country code + number, no +)

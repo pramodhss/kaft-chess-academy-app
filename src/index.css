@@ -22,6 +22,124 @@ html, body, #root {
 .input {
   @apply w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm
          focus:outline-none focus:border-chess-blue bg-white;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.input:focus {
+  box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.16);
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled) {
+  transition: transform 140ms ease, box-shadow 160ms ease, background-color 160ms ease, opacity 160ms ease;
+}
+
+button:not(:disabled):active {
+  transform: scale(0.975);
+}
+
+.page-content > * {
+  animation: page-enter 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 104px;
+  box-shadow: 0 8px 22px rgba(23, 54, 93, 0.12);
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  right: -18px;
+  bottom: -26px;
+  width: 72px;
+  height: 72px;
+  border: 12px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+}
+
+.quick-link {
+  min-height: 92px;
+  border: 1px solid rgba(23, 54, 93, 0.06);
+  box-shadow: 0 5px 16px rgba(23, 54, 93, 0.08);
+}
+
+.quick-link:not(:disabled):active {
+  box-shadow: 0 2px 6px rgba(23, 54, 93, 0.08);
+}
+
+.chess-loader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  min-width: 148px;
+  height: 52px;
+  padding-bottom: 5px;
+  border-bottom: 2px solid rgba(212, 160, 23, 0.45);
+}
+
+.chess-loader > span {
+  color: #17365d;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 38px;
+  line-height: 1;
+  opacity: 0.3;
+  transform-origin: bottom center;
+  animation: chess-piece-sequence 1.5s ease-in-out infinite;
+}
+
+.chess-loader-dots {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.chess-loader-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d4a017;
+  animation: chess-dot-sequence 1.1s ease-in-out infinite;
+}
+
+.chess-loader-dots span:nth-child(2) { animation-delay: 150ms; }
+.chess-loader-dots span:nth-child(3) { animation-delay: 300ms; }
+
+html.dark .chess-loader > span { color: #fcd34d; }
+html.dark .chess-loader { border-bottom-color: rgba(252, 211, 77, 0.4); }
+
+.toast-card {
+  @apply flex items-center gap-3 w-full max-w-md px-4 py-3 rounded-lg shadow-xl border;
+  animation: toast-enter 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  backdrop-filter: blur(12px);
+}
+
+.toast-success { @apply bg-green-50 text-green-900 border-green-200; }
+.toast-error { @apply bg-red-50 text-red-900 border-red-200; }
+.toast-info { @apply bg-white text-navy border-amber-200; }
+
+.toast-icon {
+  @apply flex h-9 w-9 flex-none items-center justify-center rounded-full text-lg font-bold;
+}
+
+.toast-success .toast-icon { @apply bg-green-600 text-white; }
+.toast-error .toast-icon { @apply bg-red-600 text-white; }
+.toast-info .toast-icon { @apply bg-navy text-white; }
+
+.button-spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: button-spin 650ms linear infinite;
 }
 
 @media print {
@@ -93,6 +211,25 @@ html.dark .badge-red    { background-color: #450a0a !important; color: #fca5a5 !
   from { transform: translateY(16px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+@keyframes chess-piece-sequence {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0) scale(0.94); }
+  24% { opacity: 1; transform: translateY(-4px) scale(1); }
+}
+@keyframes chess-dot-sequence {
+  0%, 70%, 100% { opacity: 0.25; transform: scale(0.8); }
+  35% { opacity: 1; transform: scale(1); }
+}
+@keyframes toast-enter {
+  from { transform: translateY(-14px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes button-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes page-enter {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
 @keyframes chess-slide-down {
   from { transform: translateY(-12px); opacity: 0; }
   to   { transform: translateY(0);     opacity: 1; }
@@ -114,3 +251,11 @@ html.dark .badge-red    { background-color: #450a0a !important; color: #fca5a5 !
 .animate-chess-slide-down { animation: chess-slide-down 0.3s ease-out; }
 .animate-chess-pop    { animation: chess-pop    0.25s ease-out; }
 .animate-knight-hop   { animation: knight-hop   1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

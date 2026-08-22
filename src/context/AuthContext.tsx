@@ -18,13 +18,14 @@ const AuthContext = createContext<AuthCtx>(null!);
 
 function loadStored(): AuthState {
   try {
-    const s = localStorage.getItem('chess_auth');
+    const s = sessionStorage.getItem('chess_auth');
     if (s) {
       const p: AuthState = JSON.parse(s);
       if (p.expiresAt && Date.now() < p.expiresAt) return p;
     }
   } catch { /* ignore parse errors */ }
   // clear any stale / scope-less token on load
+  sessionStorage.removeItem('chess_auth');
   localStorage.removeItem('chess_auth');
   return { token: null, email: null, expiresAt: null };
 }
@@ -44,14 +45,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         expiresAt: Date.now() + resp.expires_in * 1000,
       };
       setAuth(next);
-      localStorage.setItem('chess_auth', JSON.stringify(next));
+      sessionStorage.setItem('chess_auth', JSON.stringify(next));
     },
     onError: () => alert('Google login failed. Check your OAuth Client ID in config.ts.'),
   });
 
   const logout = useCallback(() => {
     googleLogout();
+    sessionStorage.removeItem('chess_auth');
     localStorage.removeItem('chess_auth');
+    localStorage.removeItem('chess_coach_name');
+    if ('caches' in window) void caches.delete('sheets-api');
     setAuth({ token: null, email: null, expiresAt: null });
   }, []);
 

@@ -75,6 +75,19 @@ function studentToForm(s: Student): FormData {
   };
 }
 
+function formToStudent(form: FormData, rowIndex: number, existing?: Student): Student {
+  const dob = form.dob ? new Date(form.dob) : null;
+  const age = dob && !isNaN(dob.getTime())
+    ? String(Math.floor((Date.now() - dob.getTime()) / (365.25 * 86400000)))
+    : '';
+  return {
+    ...form,
+    age,
+    thisMonthAttended: existing?.thisMonthAttended ?? '',
+    rowIndex,
+  };
+}
+
 export function Students() {
   const { token, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
@@ -117,7 +130,7 @@ export function Students() {
     if (!token || !form.name.trim()) return;
     setSaving(true);
     try {
-      await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`, [[
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`, [[
         form.name, form.dob, '', form.gender, form.grade, form.batch, form.level,
         form.joiningDate, form.status, form.parent1Name, form.parent1Phone,
         form.parent1WhatsApp, form.parent1Email, form.parent2Name, form.parent2Phone,
@@ -125,7 +138,10 @@ export function Students() {
         form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
         form.ratingClassical, form.ratingRapid, form.ratingBlitz,
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY }); await load(); toast.success('Student added successfully!');
+      setStudents(prev => [...prev, formToStudent(form, rowIndex)]);
+      setShowAdd(false);
+      setForm({ ...EMPTY });
+      toast.success('Student added successfully. The new profile is ready.');
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
@@ -135,6 +151,12 @@ export function Students() {
     setSaving(true);
     try {
       const row = selected.rowIndex; const tab = TABS.STUDENTS;
+      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`);
+      const currentStudent = rowToStudent(currentRows[0] ?? [], row);
+      if (JSON.stringify(studentToForm(currentStudent)) !== JSON.stringify(studentToForm(selected))) {
+        toast.info('This student was changed on another device. Reload the list before editing again.');
+        return;
+      }
       // Extend sheet to 29 columns if needed before writing chess profile fields (V–AC)
       await ensureSheetColumns(token, SHEET_ID, tab, 29);
       await writeRange(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`, [[
@@ -152,7 +174,11 @@ export function Students() {
         form.tnscaId, form.fideId, form.aicfId,
         form.ratingClassical, form.ratingRapid, form.ratingBlitz,
       ]]);
-      setEditMode(false); setSelected(null); await load(); toast.success('Student updated!');
+      const updated = formToStudent(form, row, selected);
+      setStudents(prev => prev.map(student => student.rowIndex === row ? updated : student));
+      setEditMode(false);
+      setSelected(updated);
+      toast.success(`${updated.name}'s changes were updated successfully.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
@@ -170,8 +196,9 @@ export function Students() {
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           <button onClick={handleEdit} disabled={saving || !form.name.trim()}
-            className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-50">
-            {saving ? 'Saving…' : '💾 Save Changes'}
+            className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
+            {saving && <span className="button-spinner" aria-hidden="true"/>}
+            {saving ? 'Saving changes…' : 'Save Changes'}
           </button>
         </div>
       </Layout>
@@ -313,8 +340,9 @@ export function Students() {
         <Modal title="Add Student" onClose={() => setShowAdd(false)}>
           <div className="max-h-[65vh] overflow-y-auto pr-1"><StudentForm form={form} setForm={setForm}/></div>
           <button onClick={handleAdd} disabled={saving||!form.name.trim()}
-            className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
-            {saving?'Saving…':'Add Student'}
+            className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+            {saving && <span className="button-spinner" aria-hidden="true"/>}
+            {saving?'Adding student…':'Add Student'}
           </button>
         </Modal>
       )}

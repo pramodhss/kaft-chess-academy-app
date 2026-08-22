@@ -26,7 +26,8 @@ function CoachNameModal({ onSave }: { onSave: (n: string) => void }) {
   return (
     <div className="fixed inset-0 bg-navy/95 flex items-center justify-center z-50 p-6">
       <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-        <p className="text-2xl text-center mb-2">♟</p>
+        <img src="logo.jpg" alt="Kaft Chess Academy"
+          className="w-16 h-16 rounded-xl mx-auto mb-3 object-cover shadow-md" />
         <h2 className="text-xl font-bold text-navy text-center mb-1">Welcome!</h2>
         <p className="text-sm text-gray-500 text-center mb-4">Enter your name so every update is tracked to you.</p>
         <input value={val} onChange={e => setVal(e.target.value)}

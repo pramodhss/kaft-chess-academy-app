@@ -11,7 +11,7 @@ interface LayoutProps {
 }
 
 export function Layout({ title, children, action, showBack }: LayoutProps) {
-  const { dark, toggle } = useTheme();
+  useTheme();
   const online = useOnline();
   const navigate = useNavigate();
   const coach = localStorage.getItem('chess_coach_name');
@@ -41,7 +41,7 @@ export function Layout({ title, children, action, showBack }: LayoutProps) {
           <span>📵</span> Offline — showing cached data
         </div>
       )}
-      <main className="flex-1 overflow-y-auto pb-20 no-scrollbar">{children}</main>
+      <main className="page-content flex-1 overflow-y-auto pb-20 no-scrollbar">{children}</main>
       <BottomNav />
     </div>
   );

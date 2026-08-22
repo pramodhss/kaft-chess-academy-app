@@ -53,7 +53,12 @@ export function UpcomingTournaments() {
         form.eligibility, form.link, form.notes, form.status,
         coachName, new Date().toLocaleDateString('en-IN'),
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY }); await load(); toast.success('Tournament posted!');
+      const addedOn = new Date().toLocaleDateString('en-IN');
+      const rowIndex = entries.reduce((max, entry) => Math.max(max, entry.rowIndex), 1) + 1;
+      setEntries(prev => [...prev, { ...form, addedBy: coachName, addedOn, rowIndex }]);
+      setShowAdd(false);
+      setForm({ ...EMPTY });
+      toast.success(`${form.name} was posted successfully.`);
     } catch(e:any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
   };
@@ -122,7 +127,10 @@ export function UpcomingTournaments() {
               <p className="text-xs text-gray-400">Will be added by: <strong>{coachName}</strong></p>
             </div>
             <button onClick={handleAdd} disabled={saving||!form.name.trim()} className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
-              {saving ? 'Saving…' : '💾 Add Tournament'}
+              <span className="inline-flex items-center justify-center gap-2">
+                {saving && <span className="button-spinner" aria-hidden="true"/>}
+                {saving ? 'Posting tournament…' : 'Post Tournament'}
+              </span>
             </button>
           </div>
         </div>

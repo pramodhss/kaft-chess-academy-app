@@ -49,7 +49,12 @@ export function Resources() {
       await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:F`, [[
         form.name, form.type, form.url, form.description, coachName, new Date().toLocaleDateString('en-IN'),
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY }); await load(); toast.success('Resource added!');
+      const dateAdded = new Date().toLocaleDateString('en-IN');
+      const rowIndex = items.reduce((max, item) => Math.max(max, item.rowIndex), 1) + 1;
+      setItems(prev => [...prev, { ...form, addedBy: coachName, dateAdded, rowIndex }]);
+      setShowAdd(false);
+      setForm({ ...EMPTY });
+      toast.success(`${form.name} was added to Resources.`);
     } catch(e:any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
   };
@@ -107,8 +112,9 @@ export function Resources() {
               <p className="text-xs text-gray-400">Will be added by: <strong>{coachName}</strong></p>
             </div>
             <button onClick={handleAdd} disabled={saving||!form.name.trim()||!form.url.trim()}
-              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
-              {saving ? 'Saving…' : '💾 Add Resource'}
+              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+              {saving && <span className="button-spinner" aria-hidden="true"/>}
+              {saving ? 'Adding resource…' : 'Add Resource'}
             </button>
           </div>
         </div>

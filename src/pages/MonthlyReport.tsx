@@ -3,15 +3,31 @@ import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
+import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
 import { SHEET_ID, TABS } from '../config';
 
-const MONTHS = [
-  { label: 'August 2026',    attKey: 'Aug',  feeKey: '2026-08' },
-  { label: 'September 2026', attKey: 'Sep',  feeKey: '2026-09' },
-  { label: 'October 2026',   attKey: 'Oct',  feeKey: '2026-10' },
-  { label: 'November 2026',  attKey: 'Nov',  feeKey: '2026-11' },
-  { label: 'December 2026',  attKey: 'Dec',  feeKey: '2026-12' },
-];
+function buildMonths(count: number) {
+  const current = new Date();
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(current.getFullYear(), current.getMonth() - count + index + 1, 1);
+    const shortMonth = date.toLocaleString('en-US', { month: 'short' });
+    const longMonth = date.toLocaleString('en-US', { month: 'long' });
+    const year = date.getFullYear();
+    return {
+      label: `${longMonth} ${year}`,
+      shortLabel: `${shortMonth} '${String(year).slice(-2)}`,
+      feeKey: `${year}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      matchKeys: [`${shortMonth}-${year}`, `${shortMonth} ${year}`, `${longMonth} ${year}`].map(key => key.toLowerCase()),
+    };
+  });
+}
+
+const MONTHS = buildMonths(24);
+
+function matchesMonth(value: string, month: typeof MONTHS[number]) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.includes(month.feeKey) || month.matchKeys.some(key => normalized.includes(key));
+}
 
 const MEDAL_ICON: Record<string, string> = {
   Gold: '🥇', Silver: '🥈', Bronze: '🥉', 'Best Game': '⭐', Participation: '🎖',
@@ -44,7 +60,7 @@ interface StudentReport {
 
 export function MonthlyReport() {
   const { token, logout } = useAuth();
-  const [selectedMonth, setSelectedMonth] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(MONTHS.length - 1);
   const [reports, setReports] = useState<StudentReport[]>([]);
   const reportRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
@@ -62,7 +78,7 @@ export function MonthlyReport() {
     const avgAtt = reports.length
       ? Math.round(reports.reduce((s, r) => s + r.attendancePct, 0) / reports.length * 100)
       : 0;
-    const atRisk = reports.filter(r => r.attendancePct < 0.5);
+    const atRisk = reports.filter(r => r.daysScheduled > 0 && r.attendancePct < 0.5);
     const pending = reports.filter(r => r.feeStatus && r.feeStatus !== 'Paid' && r.feeStatus !== 'Waived');
     let t = `KAFT Chess Academy — Monthly Report: ${month}\nGenerated: ${today} by ${coachName}\n`;
     t += `${'='.repeat(50)}\n\nSUMMARY\n${'─'.repeat(30)}\n`;
@@ -100,7 +116,8 @@ export function MonthlyReport() {
     setLoading(true); setError(''); setLoaded(false); setReports([]);
     const month = MONTHS[monthIdx];
     try {
-      const [attRows, feeRows, tornRows, metricsRows] = await Promise.all([
+      const [studentRows, attRows, feeRows, tornRows, metricsRows] = await Promise.all([
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:I`),
         readSheet(token, SHEET_ID, `'${TABS.MONTHLY_ATT}'!A:E`),
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!B:L`),
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:Q`),
@@ -112,11 +129,11 @@ export function MonthlyReport() {
       attRows.slice(1).forEach(r => {
         const name = r[0]?.trim();
         const rowMonth = r[1]?.trim() ?? '';
-        if (!name || !rowMonth.includes(month.attKey)) return;
+        if (!name || !matchesMonth(rowMonth, month)) return;
         attMap.set(name, {
-          days:      parseFloat(r[2] ?? '0') || 0,
-          scheduled: parseFloat(r[3] ?? '0') || 0,
-          pct:       parseFloat(r[4] ?? '0') || 0,
+          days:      parseSheetNumber(r[2]),
+          scheduled: parseSheetNumber(r[3]),
+          pct:       parseSheetPercentage(r[4]),
         });
       });
 
@@ -126,14 +143,17 @@ export function MonthlyReport() {
       feeRows.slice(1).forEach(r => {
         const name = r[0]?.trim();
         const rowMonth = r[2]?.trim() ?? ''; // D col = index 2
-        if (!name || !rowMonth.includes(month.feeKey)) return;
+        if (!name || !matchesMonth(rowMonth, month)) return;
         const existing = feeMap.get(name);
         const status = r[10]?.trim() ?? '';
         // worst status wins
         const priority = ['Overdue','Partial','Pending','Paid','Waived'];
-        if (!existing || priority.indexOf(status) < priority.indexOf(existing.status)) {
-          feeMap.set(name, { status, balance: r[6]?.trim() ?? '' });
-        }
+        const existingPriority = existing ? priority.indexOf(existing.status) : Number.MAX_SAFE_INTEGER;
+        const statusPriority = priority.indexOf(status);
+        feeMap.set(name, {
+          status: !existing || (statusPriority >= 0 && statusPriority < existingPriority) ? status : existing.status,
+          balance: String(parseSheetNumber(existing?.balance) + parseSheetNumber(r[6])),
+        });
       });
 
       // Tournament rows: A=Month(0), B=Name(1), Q=Medal(16)
@@ -142,7 +162,7 @@ export function MonthlyReport() {
         const name = r[1]?.trim();
         const rowMonth = r[0]?.trim() ?? '';
         const medal = r[16]?.trim() ?? '';
-        if (!name || !rowMonth.includes(month.attKey) || !medal || medal === 'None') return;
+        if (!name || !matchesMonth(rowMonth, month) || !medal || medal === 'None') return;
         if (!tornMap.has(name)) tornMap.set(name, []);
         tornMap.get(name)!.push(medal);
       });
@@ -154,7 +174,7 @@ export function MonthlyReport() {
       metricsRows.slice(1).forEach(r => {
         const name = r[0]?.trim();
         const rowMonth = r[1]?.trim() ?? '';
-        if (!name || !rowMonth.includes(month.attKey)) return;
+        if (!name || !matchesMonth(rowMonth, month)) return;
         metricsMap.set(name, {
           batch: r[2]??'', overall: r[9]??'', opening: r[4]??'', mid: r[5]??'',
           end: r[6]??'', tactics: r[7]??'', sport: r[8]??'',
@@ -162,14 +182,22 @@ export function MonthlyReport() {
         });
       });
 
-      // Build report per student from attendance (source of truth for enrolled students)
+      const studentMap = new Map<string, string>();
+      studentRows.slice(1).forEach(row => {
+        const name = row[0]?.trim();
+        if (name) studentMap.set(name, row[5]?.trim() ?? '');
+      });
+      attMap.forEach((_, name) => { if (!studentMap.has(name)) studentMap.set(name, ''); });
+
+      // Build the report from the roster and left-join monthly data.
       const result: StudentReport[] = [];
-      attMap.forEach((att, name) => {
+      studentMap.forEach((rosterBatch, name) => {
+        const att = attMap.get(name) ?? { days: 0, scheduled: 0, pct: 0 };
         const fee = feeMap.get(name);
         const medals = tornMap.get(name) ?? [];
         const m = metricsMap.get(name);
         result.push({
-          name, batch: m?.batch ?? '',
+          name, batch: m?.batch || rosterBatch,
           daysAttended: att.days, daysScheduled: att.scheduled,
           attendancePct: att.pct,
           feeStatus: fee?.status ?? '', feeBalance: fee?.balance ?? '',
@@ -226,7 +254,7 @@ export function MonthlyReport() {
               <button key={i} onClick={() => handleMonthChange(i)}
                 className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-colors
                   ${selectedMonth === i ? 'bg-navy text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {m.label.split(' ')[0]}
+                {m.shortLabel}
               </button>
             ))}
           </div>
@@ -250,10 +278,10 @@ export function MonthlyReport() {
             </div>
 
             {/* At-risk section */}
-            {reports.filter(r => r.attendancePct < 0.5).length > 0 && (
+            {reports.filter(r => r.daysScheduled > 0 && r.attendancePct < 0.5).length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-3">
                 <p className="text-red-700 text-xs font-bold mb-1">⚠️ Below 50% Attendance</p>
-                {reports.filter(r => r.attendancePct < 0.5).map(r => (
+                {reports.filter(r => r.daysScheduled > 0 && r.attendancePct < 0.5).map(r => (
                   <p key={r.name} className="text-red-600 text-sm">{r.name} — {Math.round(r.attendancePct * 100)}%</p>
                 ))}
               </div>

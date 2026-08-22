@@ -4,17 +4,31 @@ import { Spinner } from '../components/Spinner';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
+import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
 import { SHEET_ID, TABS } from '../config';
 
-const MONTHS_LABEL = ['Aug','Sep','Oct','Nov','Dec'];
-const MONTHS_KEYS  = ['Aug-2026','Sep-2026','Oct-2026','Nov-2026','Dec-2026'];
+const MONTHS = Array.from({ length: 12 }, (_, index) => {
+  const current = new Date();
+  const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
+  const shortMonth = date.toLocaleString('en-US', { month: 'short' });
+  const longMonth = date.toLocaleString('en-US', { month: 'long' });
+  const year = date.getFullYear();
+  return {
+    label: `${shortMonth} ${year}`,
+    chartLabel: `${shortMonth} '${String(year).slice(-2)}`,
+    feeKey: `${year}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+    matchKeys: [`${shortMonth}-${year}`, `${shortMonth} ${year}`, `${longMonth} ${year}`].map(key => key.toLowerCase()),
+  };
+});
+
+function matchesMonth(value: string | undefined, month: typeof MONTHS[number]) {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  return normalized.includes(month.feeKey) || month.matchKeys.some(key => normalized.includes(key));
+}
 
 interface MonthData {
   label: string;
   attendance: number;
-  classical: number;
-  rapid: number;
-  blitz: number;
   overall: number;
 }
 
@@ -53,7 +67,7 @@ function LineChart({ data, color, label, max: maxProp }: { data: number[]; color
         ))}
       </svg>
       <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-        {MONTHS_LABEL.map(m => <span key={m}>{m}</span>)}
+        {MONTHS.map(month => <span key={month.label}>{month.chartLabel}</span>)}
       </div>
     </div>
   );
@@ -84,16 +98,13 @@ export function StudentProgress() {
         readSheet(token, SHEET_ID, `'${TABS.MONTHLY_ATT}'!A:E`),
         readSheet(token, SHEET_ID, `'${TABS.METRICS}'!A:J`),
       ]);
-      const monthData: MonthData[] = MONTHS_KEYS.map((key, i) => {
-        const att = attRows.slice(1).find(r => r[0]?.trim() === name && r[1]?.includes(MONTHS_LABEL[i]));
-        const met = metricsRows.slice(1).find(r => r[0]?.trim() === name && r[1]?.includes(MONTHS_LABEL[i]));
+      const monthData: MonthData[] = MONTHS.map(month => {
+        const att = attRows.slice(1).find(row => row[0]?.trim() === name && matchesMonth(row[1], month));
+        const met = metricsRows.slice(1).find(row => row[0]?.trim() === name && matchesMonth(row[1], month));
         return {
-          label: MONTHS_LABEL[i],
-          attendance: att ? Math.round((parseFloat(att[4]) || 0) * 100) : 0,
-          classical:  met ? parseInt(met[4]) || 0 : 0,  // col E = Opening → we use ratingClassical from Monthly Metrics... actually Monthly Metrics doesn't store ratings, we need to check what col J is
-          rapid:      met ? parseInt(met[5]) || 0 : 0,
-          blitz:      met ? parseInt(met[6]) || 0 : 0,
-          overall:    met ? parseFloat(met[9]) || 0 : 0, // col J = Overall Rating (1-5)
+          label: month.label,
+          attendance: att ? Math.round(parseSheetPercentage(att[4]) * 100) : 0,
+          overall: met ? parseSheetNumber(met[9]) : 0,
         };
       });
       setData(monthData);
@@ -152,7 +163,7 @@ export function StudentProgress() {
                 <tbody>
                   {data.map(d => (
                     <tr key={d.label} className="border-t border-gray-50">
-                      <td className="px-4 py-2 font-medium text-gray-900">{d.label} 2026</td>
+                      <td className="px-4 py-2 font-medium text-gray-900">{d.label}</td>
                       <td className="px-2 py-2 text-center">
                         <span className={`badge ${d.attendance>=75?'badge-green':d.attendance>=50?'badge-amber':d.attendance>0?'badge-red':'badge-gray'}`}>
                           {d.attendance > 0 ? `${d.attendance}%` : '—'}
@@ -170,7 +181,7 @@ export function StudentProgress() {
         )}
 
         {!loading && !selected && (
-          <EmptyState icon="📈" title="Select a student" subtitle="Choose a student above to view their progress charts across all months"/>
+          <EmptyState title="Select a student" subtitle="Choose a student above to view their progress charts across all months"/>
         )}
       </div>
     </Layout>

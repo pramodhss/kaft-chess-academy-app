@@ -69,7 +69,18 @@ export function Tournaments() {
         form.position, form.ratingBefore, form.ratingAfter, ratingChange,
         form.medal, form.prize, '', form.coachNotes, '',
       ]]);
-      setShowAdd(false); setForm({ ...EMPTY_F }); await load(); toast.success('Tournament result added!');
+      const rowIndex = entries.reduce((max, entry) => Math.max(max, entry.rowIndex), 1) + 1;
+      setEntries(prev => [...prev, {
+        month: form.month, studentName: form.studentName, batch: '', level: '',
+        tournamentName: form.tournamentName, type: form.type, date: form.date, venue: form.venue,
+        roundsPlayed: form.rounds, wins: form.wins, draws: form.draws, losses: form.losses,
+        position: form.position, ratingBefore: form.ratingBefore, ratingAfter: form.ratingAfter,
+        ratingChange, medal: form.medal, prizeAmount: form.prize, certificate: '',
+        coachNotes: form.coachNotes, parentNotified: '', rowIndex,
+      }]);
+      setShowAdd(false);
+      setForm({ ...EMPTY_F });
+      toast.success(`${form.studentName}'s tournament result was saved.`);
     } catch (e: any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
   };
@@ -155,8 +166,9 @@ export function Tournaments() {
               <Field label="Coach Notes"><textarea value={form.coachNotes} onChange={upd('coachNotes')} className="input" rows={2} /></Field>
             </div>
             <button onClick={handleAdd} disabled={saving || !form.studentName || !form.tournamentName}
-              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
-              {saving ? 'Saving…' : 'Add Result'}
+              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+              {saving && <span className="button-spinner" aria-hidden="true"/>}
+              {saving ? 'Saving result…' : 'Save Result'}
             </button>
           </div>
         </div>
