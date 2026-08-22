@@ -59,6 +59,7 @@ export function Fees() {
   const [fees, setFees]           = useState<FeeEntry[]>([]);
   const [students, setStudents]   = useState<string[]>([]);
   const [waMap, setWaMap]         = useState<Map<string,string>>(new Map());
+  const [batchMap, setBatchMap]   = useState<Map<string,string>>(new Map());
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
   const [filter, setFilter]       = useState('');
@@ -84,8 +85,11 @@ export function Fees() {
       const names = studentRows.slice(1).map(r=>r[0]).filter(Boolean);
       setStudents(names);
       const wa = new Map<string,string>();
+      const batches = new Map<string,string>();
       studentRows.slice(1).forEach(r => { if(r[0]) wa.set(r[0], r[11]??''); }); // L=WhatsApp
+      studentRows.slice(1).forEach(r => { if(r[0]) batches.set(r[0], r[5]??''); });
       setWaMap(wa);
+      setBatchMap(batches);
     } catch(e:any) {
       if(e.message==='TOKEN_EXPIRED'){logout();return;}
       setError(e.message);
@@ -106,14 +110,14 @@ export function Fees() {
       const balance = amountDue - amountPaid;
       const paymentDate = form.paymentDate || localIsoDate();
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
-        receipt, form.studentName, '', form.feeMonth, form.feeType,
+        receipt, form.studentName, batchMap.get(form.studentName) ?? '', form.feeMonth, form.feeType,
         amountDue, amountPaid, balance,
         form.dueDate, paymentDate,
         form.paymentMethod, form.paymentStatus, form.reference,
         form.notes ? `${form.notes} [by ${coachName}]` : `Added by ${coachName}`,
       ]]);
       const added: FeeEntry = {
-        receiptNo: receipt, studentName: form.studentName, batch: '', feeMonth: form.feeMonth,
+        receiptNo: receipt, studentName: form.studentName, batch: batchMap.get(form.studentName) ?? '', feeMonth: form.feeMonth,
         feeType: form.feeType, amountDue: form.amountDue, amountPaid: form.amountPaid || '0',
         balance: String(balance), dueDate: form.dueDate,
         paymentDate,
@@ -147,6 +151,7 @@ export function Fees() {
       const savedNotes = `${form.notes} [edited by ${coachName}]`.trim();
       await batchWrite(token, SHEET_ID, [
         {range:`'${tab}'!B${row}`,value:form.studentName},
+        {range:`'${tab}'!C${row}`,value:batchMap.get(form.studentName) ?? ''},
         {range:`'${tab}'!D${row}`,value:form.feeMonth},
         {range:`'${tab}'!E${row}`,value:form.feeType},
         {range:`'${tab}'!F${row}`,value:amountDue},
@@ -160,7 +165,7 @@ export function Fees() {
         {range:`'${tab}'!N${row}`,value:savedNotes},
       ]);
       setFees(prev => prev.map(fee => fee.rowIndex === row ? {
-        ...fee, studentName: form.studentName, feeMonth: form.feeMonth, feeType: form.feeType,
+        ...fee, studentName: form.studentName, batch: batchMap.get(form.studentName) ?? '', feeMonth: form.feeMonth, feeType: form.feeType,
         amountDue: form.amountDue, amountPaid: form.amountPaid || '0', balance: String(balance),
         dueDate: form.dueDate, paymentDate: form.paymentDate, paymentMethod: form.paymentMethod,
         paymentStatus: form.paymentStatus, reference: form.reference, notes: savedNotes,

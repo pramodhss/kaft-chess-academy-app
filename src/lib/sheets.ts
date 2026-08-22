@@ -54,6 +54,11 @@ export async function readSheet(token: string, sheetId: string, range: string): 
   return (data.values ?? []) as string[][];
 }
 
+export async function readSheetLive(token: string, sheetId: string, range: string): Promise<string[][]> {
+  const data = await apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`);
+  return (data.values ?? []) as string[][];
+}
+
 export async function readSheetUnformatted(token: string, sheetId: string, range: string): Promise<SheetValue[][]> {
   const data = await readWithCache(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`);
   return (data.values ?? []) as SheetValue[][];
@@ -77,6 +82,20 @@ export async function batchWrite(token: string, sheetId: string, updates: { rang
   return apiCall(token, `${API}/${sheetId}/values:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates.map(u => ({ range: u.range, majorDimension: 'ROWS', values: [[u.value]] })) }),
+  });
+}
+
+export async function batchWriteRanges(
+  token: string,
+  sheetId: string,
+  updates: { range: string; values: SheetValue[][] }[],
+) {
+  return apiCall(token, `${API}/${sheetId}/values:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      valueInputOption: 'USER_ENTERED',
+      data: updates.map(update => ({ range: update.range, majorDimension: 'ROWS', values: update.values })),
+    }),
   });
 }
 
@@ -111,7 +130,7 @@ export async function deleteSheetColumn(token: string, sheetId: string, tabName:
 /** Create a new sheet tab if it doesn't exist. */
 export async function ensureSheet(token: string, sheetId: string, tabName: string, headers: string[]) {
   try {
-    const rows = await readSheet(token, sheetId, `'${tabName}'!A1:A1`);
+    const rows = await readSheetLive(token, sheetId, `'${tabName}'!A1:A1`);
     if (rows.length === 0) await writeRange(token, sheetId, `'${tabName}'!A1`, [headers]);
   } catch {
     await apiCall(token, `${API}/${sheetId}:batchUpdate`, {

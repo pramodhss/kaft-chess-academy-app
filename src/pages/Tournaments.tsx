@@ -30,6 +30,7 @@ export function Tournaments() {
   const toast = useToast();
   const [entries, setEntries] = useState<TournamentEntry[]>([]);
   const [students, setStudents] = useState<string[]>([]);
+  const [studentDetails, setStudentDetails] = useState<Map<string, { batch: string; level: string }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -43,10 +44,13 @@ export function Tournaments() {
     try {
       const [tRows, sRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:G`),
       ]);
       setEntries(tRows.slice(1).map((row, index) => rowToEntry(row, index)).filter(entry => entry.studentName.trim()));
       setStudents(sRows.slice(1).map(r => r[0]).filter(Boolean));
+      setStudentDetails(new Map(sRows.slice(1).filter(row => row[0]).map(row => [
+        row[0], { batch: row[5] ?? '', level: row[6] ?? '' },
+      ])));
     } catch (e: any) {
       if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
       setError(e.message);
@@ -64,14 +68,15 @@ export function Tournaments() {
     try {
       const ratingChange = form.ratingBefore && form.ratingAfter
         ? String(parseFloat(form.ratingAfter) - parseFloat(form.ratingBefore)) : '';
+      const details = studentDetails.get(form.studentName) ?? { batch: '', level: '' };
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:V`, [[
-        form.month, form.studentName, '', '', form.tournamentName, form.type,
+        form.month, form.studentName, details.batch, details.level, form.tournamentName, form.type,
         form.date, form.venue, form.rounds, form.wins, form.draws, form.losses,
         form.position, form.ratingBefore, form.ratingAfter, ratingChange,
         form.medal, form.prize, '', form.coachNotes, '',
       ]]);
       setEntries(prev => [...prev, {
-        month: form.month, studentName: form.studentName, batch: '', level: '',
+        month: form.month, studentName: form.studentName, batch: details.batch, level: details.level,
         tournamentName: form.tournamentName, type: form.type, date: form.date, venue: form.venue,
         roundsPlayed: form.rounds, wins: form.wins, draws: form.draws, losses: form.losses,
         position: form.position, ratingBefore: form.ratingBefore, ratingAfter: form.ratingAfter,

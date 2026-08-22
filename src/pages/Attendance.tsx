@@ -5,6 +5,7 @@ import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetUnformatted, batchWrite, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
+import { reconcileAttendanceRoster } from '../lib/studentSync';
 import type { SheetValue } from '../lib/sheets';
 import { SHEET_ID, TABS, ATT_DATE_START } from '../config';
 
@@ -82,8 +83,10 @@ export function Attendance() {
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`)
-      .then(headerRows => {
+    (async () => {
+      try {
+        if (navigator.onLine) await reconcileAttendanceRoster(token, SHEET_ID);
+        const headerRows = await readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`);
         const headerCells = headerRows[0] ?? [];
         const parsed = headerCells.flatMap((value, index) => {
           const date = parseSheetDate(value ?? '');
@@ -97,12 +100,12 @@ export function Attendance() {
         setNextDateColumn(ATT_DATE_START + Math.max(headerCells.length, WEEKEND_DATES.length));
         setAttendanceDates(dates);
         setSelectedIdx(nearestDateIdx(dates));
-      })
-      .catch((e: any) => {
+      } catch (e: any) {
         if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
         setError(e.message);
         setLoading(false);
-      });
+      }
+    })();
   }, [token, logout]);
 
   const loadDate = useCallback(async (attendanceDate: AttendanceDate) => {

@@ -28,6 +28,7 @@ export interface Student {
   ratingClassical: string;
   ratingRapid: string;
   ratingBlitz: string;
+  coachName: string;
   rowIndex: number;
 }
 

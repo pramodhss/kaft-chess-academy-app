@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   BookOpenCheck, Bus, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
   ExternalLink, FileChartColumn, Gauge, Library, LogOut, Medal,
-  Moon, ReceiptText, Sun, Trophy,
+  Moon, ReceiptText, Settings, Sun, Trophy,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import { useTheme } from '../hooks/useTheme';
 import { ACADEMY_LINKS, SOCIAL } from '../config';
 
 const ITEMS = [
+  { to:'/admin-settings', Icon:Settings, label:'Admin Settings', desc:'Manage student types and chess levels' },
   { to:'/progress',       Icon:ChartNoAxesCombined, label:'Student Progress', desc:'Attendance and skill rating trends' },
   { to:'/leaderboard',    Icon:Medal, label:'Leaderboard', desc:'Tournament rankings by medals and wins' },
   { to:'/monthly-report', Icon:FileChartColumn, label:'Monthly Report', desc:'Attendance, fees and achievements', hi:true },

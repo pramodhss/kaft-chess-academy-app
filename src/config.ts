@@ -14,6 +14,7 @@ export const TABS = {
   TOURNAMENTS: "Tournament Achievements",
   UPCOMING:    "Upcoming Tournaments",
   RESOURCES:   "Resources",
+  SETTINGS:    "App Settings",
 } as const;
 
 export const ATT_DATE_START = 2;

@@ -3,13 +3,14 @@ import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, appendRows, clearSheetRange, writeRange, ensureSheetColumns } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheetColumns, writeRange } from '../lib/sheets';
+import { isStudentNameReserved, syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
+import { useCoachName } from '../hooks/useCoachName';
+import { DEFAULT_BATCHES, DEFAULT_LEVELS, loadStudentOptions } from '../lib/studentOptions';
 import { SHEET_ID, TABS } from '../config';
 import type { Student } from '../types';
 
-const BATCHES    = ['Beginner A','Beginner B','Intermediate','Advanced','Competitive'];
-const LEVELS     = ['Beginner','Intermediate','Advanced','Competitive'];
 const STANDARDS  = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th','Graduate'];
 const CATEGORY_COLOR: Record<string,string> = {
   'Under 7':'bg-blue-100 text-blue-800','Under 9':'bg-cyan-100 text-cyan-800',
@@ -37,7 +38,7 @@ type FormData = {
   parent1WhatsApp:string; parent1Email:string; parent2Name:string; parent2Phone:string;
   emergencyContact:string; emergencyPhone:string; address:string; photoConsent:string; notes:string;
   school:string; standard:string; tnscaId:string; fideId:string; aicfId:string;
-  ratingClassical:string; ratingRapid:string; ratingBlitz:string;
+  ratingClassical:string; ratingRapid:string; ratingBlitz:string; coachName:string;
 };
 
 const EMPTY: FormData = {
@@ -46,7 +47,7 @@ const EMPTY: FormData = {
   parent1Email:'', parent2Name:'', parent2Phone:'', emergencyContact:'', emergencyPhone:'',
   address:'', photoConsent:'Yes', notes:'',
   school:'', standard:'', tnscaId:'', fideId:'', aicfId:'',
-  ratingClassical:'', ratingRapid:'', ratingBlitz:'',
+  ratingClassical:'', ratingRapid:'', ratingBlitz:'', coachName:'',
 };
 
 function rowToStudent(row: string[], rowIndex: number): Student {
@@ -59,6 +60,7 @@ function rowToStudent(row: string[], rowIndex: number): Student {
     photoConsent:row[18]??'', thisMonthAttended:row[19]??'', notes:row[20]??'',
     school:row[21]??'', standard:row[22]??'', tnscaId:row[23]??'', fideId:row[24]??'',
     aicfId:row[25]??'', ratingClassical:row[26]??'', ratingRapid:row[27]??'', ratingBlitz:row[28]??'',
+    coachName:row[29]??'',
     rowIndex,
   };
 }
@@ -72,6 +74,7 @@ function studentToForm(s: Student): FormData {
     emergencyPhone:s.emergencyPhone, address:s.address, photoConsent:s.photoConsent, notes:s.notes,
     school:s.school, standard:s.standard, tnscaId:s.tnscaId, fideId:s.fideId, aicfId:s.aicfId,
     ratingClassical:s.ratingClassical, ratingRapid:s.ratingRapid, ratingBlitz:s.ratingBlitz,
+    coachName:s.coachName,
   };
 }
 
@@ -88,8 +91,54 @@ function formToStudent(form: FormData, rowIndex: number, existing?: Student): St
   };
 }
 
+function studentRowValues(form: FormData, row: number) {
+  return [
+    form.name, form.dob,
+    `=IF(B${row}="","",DATEDIF(B${row},TODAY(),"Y"))`,
+    form.gender, form.grade, form.batch, form.level,
+    form.joiningDate, form.status,
+    form.parent1Name, form.parent1Phone, form.parent1WhatsApp, form.parent1Email,
+    form.parent2Name, form.parent2Phone,
+    form.emergencyContact, form.emergencyPhone,
+    form.address, form.photoConsent,
+    `=SUMIFS('Monthly Attendance'!$C:$C,'Monthly Attendance'!$A:$A,A${row},'Monthly Attendance'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))`,
+    form.notes, form.school, form.standard,
+    form.tnscaId, form.fideId, form.aicfId,
+    form.ratingClassical, form.ratingRapid, form.ratingBlitz,
+    form.coachName,
+  ];
+}
+
+function formValidationError(form: FormData) {
+  if (!form.name.trim()) return 'Student name is required.';
+  if (!form.dob || Number.isNaN(new Date(form.dob).getTime())) return 'A valid date of birth is required so age can be calculated.';
+  if (new Date(form.dob).getTime() > Date.now()) return 'Date of birth cannot be in the future.';
+  if (!form.parent1Name.trim()) return 'At least one parent or guardian name is required.';
+  const phoneDigits = form.parent1Phone.replace(/\D/g, '');
+  if (phoneDigits.length < 7 || phoneDigits.length > 15) return 'A valid parent or guardian phone number is required.';
+  return '';
+}
+
+async function ensureStudentSchema(token: string) {
+  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, 30);
+  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1`);
+  if (!header[0]?.[0]?.trim()) {
+    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1`, [['Coach Name']]);
+  }
+}
+
+async function loadStudentRows(token: string) {
+  try {
+    return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`);
+  } catch (readError) {
+    if (navigator.onLine) throw readError;
+    return readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
+  }
+}
+
 export function Students() {
   const { token, logout } = useAuth();
+  const { coachName } = useCoachName();
   const [students, setStudents] = useState<Student[]>([]);
   const [filtered, setFiltered] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +150,8 @@ export function Students() {
   const [form, setForm] = useState<FormData>({ ...EMPTY });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
+  const [levels, setLevels] = useState([...DEFAULT_LEVELS]);
   const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
   const toast = useToast();
 
@@ -108,9 +159,15 @@ export function Students() {
     if (!token) return;
     setLoading(true); setError('');
     try {
-      const rows = await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
+      if (navigator.onLine) await ensureStudentSchema(token);
+      const [rows, options] = await Promise.all([
+        loadStudentRows(token),
+        loadStudentOptions(token, SHEET_ID),
+      ]);
       const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(student => student.name.trim());
       setStudents(data); setFiltered(data);
+      setBatches(options.batches.values);
+      setLevels(options.levels.values);
     } catch(e:any) {
       if(e.message==='TOKEN_EXPIRED'){logout();return;}
       setError(e.message);
@@ -128,58 +185,113 @@ export function Students() {
   }, [search, students]);
 
   const handleAdd = async () => {
-    if (!token || !form.name.trim()) return;
+    if (!token) return;
+    const validationError = formValidationError(form);
+    if (validationError) { toast.error(validationError); return; }
     setSaving(true);
+    let rowIndex: number | null = null;
     try {
-      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`, [[
-        form.name, form.dob, '', form.gender, form.grade, form.batch, form.level,
+      const currentNames = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`);
+      if (currentNames.slice(1).some(row => row[0]?.trim().toLocaleLowerCase() === form.name.trim().toLocaleLowerCase())) {
+        toast.error('A student with this name already exists. Use a distinct name before saving.');
+        return;
+      }
+      if (await isStudentNameReserved(token, SHEET_ID, form.name)) {
+        toast.error('This name belongs to retained student history. Use a distinct name before saving.');
+        return;
+      }
+      await ensureStudentSchema(token);
+      rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`, [[
+        form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
+        form.gender, form.grade, form.batch, form.level,
         form.joiningDate, form.status, form.parent1Name, form.parent1Phone,
         form.parent1WhatsApp, form.parent1Email, form.parent2Name, form.parent2Phone,
-        form.emergencyContact, form.emergencyPhone, form.address, form.photoConsent, '', form.notes,
+        form.emergencyContact, form.emergencyPhone, form.address, form.photoConsent,
+        '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
+        form.notes,
         form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
-        form.ratingClassical, form.ratingRapid, form.ratingBlitz,
+        form.ratingClassical, form.ratingRapid, form.ratingBlitz, form.coachName,
       ]]);
-      setStudents(prev => [...prev, formToStudent(form, rowIndex)]);
+      const savedRow = rowIndex;
+      const values = studentRowValues(form, savedRow);
+      const attendanceSynced = await syncStudentProfile(
+        token,
+        SHEET_ID,
+        `'${TABS.STUDENTS}'!A${savedRow}:AD${savedRow}`,
+        values,
+        { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
+        { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
+      );
+      setStudents(prev => [...prev, formToStudent(form, savedRow)]);
       setShowAdd(false);
       setForm({ ...EMPTY });
-      toast.success('Student added successfully. The new profile is ready.');
-    } catch(e:any) { toast.error('Save failed: '+e.message); }
+      if (attendanceSynced) toast.success('Student added successfully. The new profile is ready.');
+      else toast.error('Student was saved, but Attendance could not update. Open Attendance while online to retry.');
+    } catch(e:any) {
+      if (rowIndex !== null) {
+        setStudents(prev => prev.some(student => student.rowIndex === rowIndex)
+          ? prev
+          : [...prev, formToStudent(form, rowIndex!)]);
+        setShowAdd(false);
+        setForm({ ...EMPTY });
+        toast.error('Student was saved, but some linked sheets could not update. Open Attendance while online to retry.');
+        return;
+      }
+      toast.error('Save failed: '+e.message);
+    }
     finally { setSaving(false); }
   };
 
   const handleEdit = async () => {
-    if (!token || !selected || !form.name.trim()) return;
+    if (!token || !selected) return;
+    const validationError = formValidationError(form);
+    if (validationError) { toast.error(validationError); return; }
     setSaving(true);
     try {
       const row = selected.rowIndex; const tab = TABS.STUDENTS;
-      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`);
+      const [currentRows, currentNames] = await Promise.all([
+        readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`),
+        readSheetLive(token, SHEET_ID, `'${tab}'!A:A`),
+      ]);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
       if (JSON.stringify(studentToForm(currentStudent)) !== JSON.stringify(studentToForm(selected))) {
         toast.info('This student was changed on another device. Reload the list before editing again.');
         return;
       }
-      // Extend sheet to 29 columns if needed before writing chess profile fields (V–AC)
-      await ensureSheetColumns(token, SHEET_ID, tab, 29);
-      await writeRange(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`, [[
-        form.name, form.dob,
-        `=IF(B${row}="","",DATEDIF(B${row},TODAY(),"Y"))`,
-        form.gender, form.grade, form.batch, form.level,
-        form.joiningDate, form.status,
-        form.parent1Name, form.parent1Phone, form.parent1WhatsApp, form.parent1Email,
-        form.parent2Name, form.parent2Phone,
-        form.emergencyContact, form.emergencyPhone,
-        form.address, form.photoConsent,
-        `=SUMIFS('Monthly Attendance'!$C:$C,'Monthly Attendance'!$A:$A,A${row},'Monthly Attendance'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))`,
-        form.notes,
-        form.school, form.standard,
-        form.tnscaId, form.fideId, form.aicfId,
-        form.ratingClassical, form.ratingRapid, form.ratingBlitz,
-      ]]);
+      if (currentNames.slice(1).some((nameRow, index) => index + 2 !== row
+        && nameRow[0]?.trim().toLocaleLowerCase() === form.name.trim().toLocaleLowerCase())) {
+        toast.error('A student with this name already exists. Use a distinct name before saving.');
+        return;
+      }
+      if (selected.name.trim().toLocaleLowerCase() !== form.name.trim().toLocaleLowerCase()
+        && await isStudentNameReserved(token, SHEET_ID, form.name)) {
+        toast.error('This name belongs to retained student history. Use a distinct name before saving.');
+        return;
+      }
+      await ensureStudentSchema(token);
+      const attendanceSynced = await syncStudentProfile(
+        token,
+        SHEET_ID,
+        `'${tab}'!A${row}:AD${row}`,
+        studentRowValues(form, row),
+        { name: selected.name, batch: selected.batch, level: selected.level, parentName: selected.parent1Name },
+        { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
+      );
       const updated = formToStudent(form, row, selected);
+      const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
+      const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
+      if (JSON.stringify(studentToForm(confirmed)) !== JSON.stringify(studentToForm(updated))) {
+        setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
+        setEditMode(false);
+        setSelected(confirmed);
+        toast.error('Another update changed this student at the same time. The latest Sheet values were loaded; review before editing again.');
+        return;
+      }
       setStudents(prev => prev.map(student => student.rowIndex === row ? updated : student));
       setEditMode(false);
       setSelected(updated);
-      toast.success(`${updated.name}'s changes were updated successfully.`);
+      if (attendanceSynced) toast.success(`${updated.name}'s changes were updated successfully.`);
+      else toast.error(`${updated.name}'s profile was updated, but Attendance could not update. Open Attendance while online to retry.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
   };
@@ -194,13 +306,13 @@ export function Students() {
     try {
       const row = selected.rowIndex;
       const tab = TABS.STUDENTS;
-      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`);
+      const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
       if (JSON.stringify(studentToForm(currentStudent)) !== JSON.stringify(studentToForm(selected))) {
         toast.info('This student was changed on another device. Reload the list before removing it.');
         return;
       }
-      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`);
+      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
       setStudents(prev => prev.filter(student => student.rowIndex !== row));
       setSelected(null);
       toast.success(`${selected.name} was removed from Students.`);
@@ -217,10 +329,10 @@ export function Students() {
         <button onClick={() => setEditMode(false)} className="text-white text-sm">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} />
+          <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
-          <button onClick={handleEdit} disabled={saving || !form.name.trim()}
+          <button type="button" onClick={handleEdit} disabled={saving || Boolean(formValidationError(form))}
             className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving ? 'Saving changes…' : 'Save Changes'}
@@ -260,6 +372,7 @@ export function Students() {
             <Row label="FIDE ID"  value={selected.fideId}/>
             <Row label="AICF ID"  value={selected.aicfId}/>
             <Row label="Joined"   value={selected.joiningDate}/>
+            <Row label="Coach"    value={selected.coachName}/>
             <Row label="This Month" value={`${selected.thisMonthAttended||0} days`}/>
           </InfoSection>
 
@@ -319,7 +432,15 @@ export function Students() {
   // List view
   return (
     <Layout title="Students" action={
-      <button onClick={() => { setForm({ ...EMPTY }); setShowAdd(true); }}
+      <button type="button" onClick={() => {
+        setForm({
+          ...EMPTY,
+          batch: batches[0] ?? '',
+          level: levels[0] ?? '',
+          coachName,
+        });
+        setShowAdd(true);
+      }}
         className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
     }>
       <div className="p-4 space-y-3">
@@ -341,7 +462,12 @@ export function Students() {
         {[...filtered].sort((a,b)=>{
             if(sortKey==='name')       return a.name.localeCompare(b.name);
             if(sortKey==='batch')      return a.batch.localeCompare(b.batch);
-            if(sortKey==='level')      { const o=['Beginner','Intermediate','Advanced','Competitive']; return o.indexOf(a.level)-o.indexOf(b.level); }
+            if(sortKey==='level')      {
+              const aIndex = levels.indexOf(a.level);
+              const bIndex = levels.indexOf(b.level);
+              return (aIndex < 0 ? levels.length : aIndex) - (bIndex < 0 ? levels.length : bIndex)
+                || a.level.localeCompare(b.level);
+            }
             if(sortKey==='status')     return a.status==='Active'?-1:1;
             if(sortKey==='attendance') return parseInt(b.thisMonthAttended||'0')-parseInt(a.thisMonthAttended||'0');
             return 0;
@@ -368,8 +494,10 @@ export function Students() {
       </div>
       {showAdd && (
         <Modal title="Add Student" onClose={() => setShowAdd(false)}>
-          <div className="max-h-[65vh] overflow-y-auto pr-1"><StudentForm form={form} setForm={setForm}/></div>
-          <button onClick={handleAdd} disabled={saving||!form.name.trim()}
+          <div className="max-h-[65vh] overflow-y-auto pr-1">
+            <StudentForm form={form} setForm={setForm} batches={batches} levels={levels}/>
+          </div>
+          <button type="button" onClick={handleAdd} disabled={saving || Boolean(formValidationError(form))}
             className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving?'Adding student…':'Add Student'}
@@ -380,7 +508,12 @@ export function Students() {
   );
 }
 
-function StudentForm({ form, setForm }: { form: FormData; setForm: (f: FormData) => void }) {
+function StudentForm({ form, setForm, batches, levels }: Readonly<{
+  form: FormData;
+  setForm: (form: FormData) => void;
+  batches: string[];
+  levels: string[];
+}>) {
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
   
@@ -395,9 +528,9 @@ function StudentForm({ form, setForm }: { form: FormData; setForm: (f: FormData)
     <div className="space-y-4">
       {/* Basic */}
       <Section title="Personal Details">
-        <Field label="Full Name *"><input value={form.name} onChange={f('name')} className="input"/></Field>
-        <Field label="Date of Birth">
-          <input type="date" value={form.dob} onChange={f('dob')} className="input"/>
+        <Field label="Full Name *"><input required value={form.name} onChange={f('name')} className="input"/></Field>
+        <Field label="Date of Birth *">
+          <input required type="date" value={form.dob} onChange={f('dob')} className="input"/>
           {computedAge !== null && (
             <div className="flex gap-2 mt-1">
               <span className="text-xs text-gray-500">Age: <strong>{computedAge}</strong></span>
@@ -433,14 +566,17 @@ function StudentForm({ form, setForm }: { form: FormData; setForm: (f: FormData)
       <Section title="Chess Profile">
         <Field label="Batch">
           <select value={form.batch} onChange={f('batch')} className="input">
-            {BATCHES.map(o=><option key={o}>{o}</option>)}
+            {!batches.includes(form.batch) && form.batch && <option>{form.batch}</option>}
+            {batches.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
         <Field label="Chess Level">
           <select value={form.level} onChange={f('level')} className="input">
-            {LEVELS.map(o=><option key={o}>{o}</option>)}
+            {!levels.includes(form.level) && form.level && <option>{form.level}</option>}
+            {levels.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
+        <Field label="Assigned Coach"><input value={form.coachName} onChange={f('coachName')} className="input" placeholder="Coach name"/></Field>
         <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
         <div className="grid grid-cols-3 gap-2">
           <Field label="Classical Rating"><input type="number" value={form.ratingClassical} onChange={f('ratingClassical')} className="input" placeholder="e.g. 1200"/></Field>
@@ -454,8 +590,8 @@ function StudentForm({ form, setForm }: { form: FormData; setForm: (f: FormData)
 
       {/* Parents */}
       <Section title="Parent / Guardian">
-        <Field label="Parent 1 Name"><input value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
-        <Field label="Phone"><input type="tel" value={form.parent1Phone} onChange={f('parent1Phone')} className="input"/></Field>
+        <Field label="Parent / Guardian Name *"><input required value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
+        <Field label="Phone *"><input required type="tel" value={form.parent1Phone} onChange={f('parent1Phone')} className="input"/></Field>
         <Field label="WhatsApp"><input type="tel" value={form.parent1WhatsApp} onChange={f('parent1WhatsApp')} className="input"/></Field>
         <Field label="Email"><input type="email" value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
         <Field label="Parent 2 Name"><input value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
