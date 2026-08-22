@@ -44,7 +44,7 @@ export function Tournaments() {
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
       ]);
-      setEntries(tRows.slice(1).filter(r => r[1]?.trim()).map(rowToEntry));
+      setEntries(tRows.slice(1).map(rowToEntry).filter(entry => entry.studentName.trim()));
       setStudents(sRows.slice(1).map(r => r[0]).filter(Boolean));
     } catch (e: any) {
       if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
@@ -63,13 +63,12 @@ export function Tournaments() {
     try {
       const ratingChange = form.ratingBefore && form.ratingAfter
         ? String(parseFloat(form.ratingAfter) - parseFloat(form.ratingBefore)) : '';
-      await appendRows(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:V`, [[
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:V`, [[
         form.month, form.studentName, '', '', form.tournamentName, form.type,
         form.date, form.venue, form.rounds, form.wins, form.draws, form.losses,
         form.position, form.ratingBefore, form.ratingAfter, ratingChange,
         form.medal, form.prize, '', form.coachNotes, '',
       ]]);
-      const rowIndex = entries.reduce((max, entry) => Math.max(max, entry.rowIndex), 1) + 1;
       setEntries(prev => [...prev, {
         month: form.month, studentName: form.studentName, batch: '', level: '',
         tournamentName: form.tournamentName, type: form.type, date: form.date, venue: form.venue,

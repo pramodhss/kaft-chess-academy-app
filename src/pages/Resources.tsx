@@ -12,6 +12,10 @@ const TYPES = ['eBook','PDF','Video','Article','Link','Other'];
 const TYPE_ICON: Record<string,string> = { eBook:'📖', PDF:'📄', Video:'🎥', Article:'📰', Link:'🔗', Other:'📎' };
 const EMPTY = { name:'', type:'PDF', url:'', description:'' };
 
+function isWebUrl(value: string): boolean {
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
+
 interface Resource { name:string; type:string; url:string; description:string; addedBy:string; dateAdded:string; rowIndex:number }
 
 export function Resources() {
@@ -32,10 +36,10 @@ export function Resources() {
     try {
       await ensureSheet(token, SHEET_ID, TABS.RESOURCES, HEADERS);
       const rows = await readSheet(token, SHEET_ID, `'${TABS.RESOURCES}'!A:F`);
-      setItems(rows.slice(1).filter(r=>r[0]?.trim()).map((r,i) => ({
+      setItems(rows.slice(1).map((r,i) => ({
         name:r[0]??'', type:r[1]??'', url:r[2]??'', description:r[3]??'',
         addedBy:r[4]??'', dateAdded:r[5]??'', rowIndex:i+2,
-      })));
+      })).filter(item => item.name.trim()));
     } catch(e:any) { if(e.message==='TOKEN_EXPIRED'){logout();return;} setError(e.message); }
     finally { setLoading(false); }
   };
@@ -44,13 +48,13 @@ export function Resources() {
 
   const handleAdd = async () => {
     if (!token || !form.name.trim() || !form.url.trim()) return;
+    if (!isWebUrl(form.url.trim())) { toast.error('Enter a valid http:// or https:// resource URL.'); return; }
     setSaving(true);
     try {
-      await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:F`, [[
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:F`, [[
         form.name, form.type, form.url, form.description, coachName, new Date().toLocaleDateString('en-IN'),
       ]]);
       const dateAdded = new Date().toLocaleDateString('en-IN');
-      const rowIndex = items.reduce((max, item) => Math.max(max, item.rowIndex), 1) + 1;
       setItems(prev => [...prev, { ...form, addedBy: coachName, dateAdded, rowIndex }]);
       setShowAdd(false);
       setForm({ ...EMPTY });

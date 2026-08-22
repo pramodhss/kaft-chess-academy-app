@@ -137,8 +137,14 @@ export function Attendance() {
   const changeDate = (idx: number) => { setSelectedIdx(idx); };
 
   const toggle = (sheetRow: number, current: boolean) => {
-    setRows(prev => prev.map(r => r.sheetRow === sheetRow ? { ...r, present: !current } : r));
-    setDirty(prev => { const m = new Map(prev); m.set(sheetRow, !current); return m; });
+    const desired = !current;
+    const original = rows.find(row => row.sheetRow === sheetRow)?.present ?? false;
+    setDirty(prev => {
+      const next = new Map(prev);
+      if (desired === original) next.delete(sheetRow);
+      else next.set(sheetRow, desired);
+      return next;
+    });
   };
 
   const save = async () => {
@@ -168,6 +174,9 @@ export function Attendance() {
         range: `'${TABS.ATTENDANCE}'!${dateCol}${row}`, value: val,
       }));
       await batchWrite(token, SHEET_ID, updates);
+      setRows(prev => prev.map(row => dirty.has(row.sheetRow)
+        ? { ...row, present: dirty.get(row.sheetRow) ?? row.present }
+        : row));
       setDirty(new Map());
       toast.success(`Attendance saved for ${DAYS[date.getDay()]}, ${date.getDate()} ${MONTHS[date.getMonth()]}.`);
     } catch (e: any) { toast.error('Save failed: ' + e.message); }
@@ -209,13 +218,13 @@ export function Attendance() {
   const visibleRows = rows.filter(r => r.name && (batchFilter === 'All' || r.batch === batchFilter));
 
   const markAllPresent = () => {
-    setRows(prev => prev.map(r =>
-      visibleRows.some(v => v.sheetRow === r.sheetRow) ? { ...r, present: true } : r
-    ));
     setDirty(prev => {
-      const m = new Map(prev);
-      visibleRows.forEach(r => m.set(r.sheetRow, true));
-      return m;
+      const next = new Map(prev);
+      visibleRows.forEach(row => {
+        if (row.present) next.delete(row.sheetRow);
+        else next.set(row.sheetRow, true);
+      });
+      return next;
     });
   };
 

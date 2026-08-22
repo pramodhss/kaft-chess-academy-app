@@ -38,7 +38,7 @@ export function Layout({ title, children, action, showBack }: LayoutProps) {
       </header>
       {!online && (
         <div className="bg-amber-500 text-white text-xs font-semibold text-center py-1.5 flex items-center justify-center gap-1">
-          <span>📵</span> Offline — showing cached data
+          <span>📵</span> Offline — changes are unavailable until you reconnect
         </div>
       )}
       <main className="page-content flex-1 overflow-y-auto pb-20 no-scrollbar">{children}</main>

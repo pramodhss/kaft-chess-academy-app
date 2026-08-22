@@ -14,6 +14,10 @@ const ELIGIBILITY = ['All Levels','Beginner','Intermediate','Advanced','Competit
 const STATUS_COLOR: Record<string,string> = { Open:'badge-green', Upcoming:'badge-blue', Full:'badge-amber', Closed:'badge-gray' };
 const EMPTY = { name:'', type:'Internal', date:'', deadline:'', venue:'', fee:'', eligibility:'All Levels', link:'', notes:'', status:'Upcoming' };
 
+function isWebUrl(value: string): boolean {
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
+
 interface UTEntry { name:string; type:string; date:string; deadline:string; venue:string; fee:string; eligibility:string; link:string; notes:string; status:string; addedBy:string; addedOn:string; rowIndex:number }
 
 export function UpcomingTournaments() {
@@ -33,11 +37,11 @@ export function UpcomingTournaments() {
     try {
       await ensureSheet(token, SHEET_ID, TABS.UPCOMING, HEADERS);
       const rows = await readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:L`);
-      setEntries(rows.slice(1).filter(r => r[0]?.trim()).map((r,i) => ({
+      setEntries(rows.slice(1).map((r,i) => ({
         name:r[0]??'', type:r[1]??'', date:r[2]??'', deadline:r[3]??'', venue:r[4]??'',
         fee:r[5]??'', eligibility:r[6]??'', link:r[7]??'', notes:r[8]??'',
         status:r[9]??'', addedBy:r[10]??'', addedOn:r[11]??'', rowIndex:i+2,
-      })));
+      })).filter(entry => entry.name.trim()));
     } catch(e:any) { if(e.message==='TOKEN_EXPIRED'){logout();return;} setError(e.message); }
     finally { setLoading(false); }
   };
@@ -46,15 +50,15 @@ export function UpcomingTournaments() {
 
   const handleAdd = async () => {
     if (!token || !form.name.trim()) return;
+    if (form.link.trim() && !isWebUrl(form.link.trim())) { toast.error('Enter a valid http:// or https:// registration URL.'); return; }
     setSaving(true);
     try {
-      await appendRows(token, SHEET_ID, `'${TABS.UPCOMING}'!A:L`, [[
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.UPCOMING}'!A:L`, [[
         form.name, form.type, form.date, form.deadline, form.venue, form.fee,
         form.eligibility, form.link, form.notes, form.status,
         coachName, new Date().toLocaleDateString('en-IN'),
       ]]);
       const addedOn = new Date().toLocaleDateString('en-IN');
-      const rowIndex = entries.reduce((max, entry) => Math.max(max, entry.rowIndex), 1) + 1;
       setEntries(prev => [...prev, { ...form, addedBy: coachName, addedOn, rowIndex }]);
       setShowAdd(false);
       setForm({ ...EMPTY });

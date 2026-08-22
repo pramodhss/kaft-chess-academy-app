@@ -1,6 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
@@ -38,7 +37,7 @@ const FEE_COLOR: Record<string, string> = {
   Overdue: 'badge-red', Waived: 'badge-gray',
 };
 
-interface StudentReport {
+export interface StudentReport {
   name: string;
   batch: string;
   daysAttended: number;
@@ -62,7 +61,6 @@ export function MonthlyReport() {
   const { token, logout } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS.length - 1);
   const [reports, setReports] = useState<StudentReport[]>([]);
-  const reportRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -70,19 +68,22 @@ export function MonthlyReport() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailTo, setEmailTo] = useState('');
   const [emailCc, setEmailCc] = useState('');
+  const [emailError, setEmailError] = useState('');
   const coachName = localStorage.getItem('chess_coach_name') ?? 'Admin';
+  const attendanceReports = reports.filter(report => report.daysScheduled > 0);
+  const avgAttendance = attendanceReports.length
+    ? Math.round(attendanceReports.reduce((sum, report) => sum + report.attendancePct, 0) / attendanceReports.length * 100)
+    : null;
+  const avgAttendanceLabel = avgAttendance === null ? 'N/A' : `${avgAttendance}%`;
 
   const generateReportText = () => {
     const month = MONTHS[selectedMonth].label;
     const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-    const avgAtt = reports.length
-      ? Math.round(reports.reduce((s, r) => s + r.attendancePct, 0) / reports.length * 100)
-      : 0;
     const atRisk = reports.filter(r => r.daysScheduled > 0 && r.attendancePct < 0.5);
     const pending = reports.filter(r => r.feeStatus && r.feeStatus !== 'Paid' && r.feeStatus !== 'Waived');
     let t = `KAFT Chess Academy — Monthly Report: ${month}\nGenerated: ${today} by ${coachName}\n`;
     t += `${'='.repeat(50)}\n\nSUMMARY\n${'─'.repeat(30)}\n`;
-    t += `Total Students : ${reports.length}\nAvg Attendance : ${avgAtt}%\n\n`;
+    t += `Total Students : ${reports.length}\nAvg Attendance : ${avgAttendanceLabel}\n\n`;
     if (atRisk.length) {
       t += `⚠️  LOW ATTENDANCE (below 50%)\n${'─'.repeat(30)}\n`;
       atRisk.forEach(r => { t += `${r.name} — ${r.daysAttended}/${r.daysScheduled} days (${Math.round(r.attendancePct*100)}%)\n`; });
@@ -104,6 +105,18 @@ export function MonthlyReport() {
 
   const handleSendEmail = () => {
     if (!emailTo.trim()) return;
+    const addresses = [emailTo.trim(), emailCc.trim()].filter(Boolean);
+    const isEmail = (address: string) => {
+      const at = address.indexOf('@');
+      const dot = address.lastIndexOf('.');
+      return address.trim() === address && !address.includes(' ') && at > 0
+        && at === address.lastIndexOf('@') && dot > at + 1 && dot < address.length - 1;
+    };
+    if (addresses.some(address => !isEmail(address))) {
+      setEmailError('Enter valid email addresses before opening the report.');
+      return;
+    }
+    setEmailError('');
     const subject = `KAFT Chess Academy — Monthly Report: ${MONTHS[selectedMonth].label}`;
     const body = generateReportText();
     const url = `mailto:${emailTo.trim()}${emailCc.trim() ? `?cc=${emailCc.trim()}&` : '?'}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -224,28 +237,25 @@ export function MonthlyReport() {
   };
 
   const downloadPdf = async () => {
-    if (!reportRef.current) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const html2pdf = ((await import('html2pdf.js')) as any).default;
-    html2pdf().from(reportRef.current).set({
-      margin: 8,
-      filename: `Chess_Academy_${MONTHS[selectedMonth].label}.pdf`,
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#f9fafb' },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    }).save();
+    const { downloadMonthlyPerformancePdf } = await import('../lib/monthlyReportPdf');
+    downloadMonthlyPerformancePdf({
+      month: MONTHS[selectedMonth].label,
+      coachName,
+      reports,
+    });
   };
 
   return (
     <Layout title="Monthly Report" showBack action={
       loaded ? (
         <div className="flex gap-1 no-print">
-          <button onClick={() => setShowEmailModal(true)} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">📧</button>
+          <button onClick={() => { setEmailError(''); setShowEmailModal(true); }} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">📧</button>
           <button onClick={downloadPdf} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">⬇ PDF</button>
           <button onClick={() => window.print()} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">🖨️</button>
         </div>
       ) : undefined
     }>
-      <div className="p-4 space-y-3" ref={reportRef}>
+      <div className="p-4 space-y-3">
         {/* Month selector */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <p className="text-xs font-medium text-gray-500 mb-2">Select Month</p>
@@ -272,7 +282,7 @@ export function MonthlyReport() {
             <div className="grid grid-cols-3 gap-2">
               <SumCard label="Students" value={reports.length} color="bg-navy text-white" />
               <SumCard label="Avg Attendance"
-                value={reports.length ? `${Math.round(reports.reduce((s,r)=>s+r.attendancePct,0)/reports.length*100)}%` : '—'}
+                value={avgAttendance === null ? '—' : avgAttendanceLabel}
                 color="bg-chess-blue text-white" />
               <SumCard label="Achievements" value={reports.reduce((s,r)=>s+r.medals.length,0)} color="bg-purple-600 text-white" />
             </div>
@@ -390,6 +400,7 @@ export function MonthlyReport() {
             <p className="text-xs text-gray-500 mb-3">
               Opens your Gmail app with the full {MONTHS[selectedMonth].label} report pre-filled. Just tap Send.
             </p>
+            {emailError && <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3 mb-3">{emailError}</p>}
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">To (required) *</label>
@@ -405,7 +416,7 @@ export function MonthlyReport() {
               </div>
               <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500">
                 <p className="font-semibold mb-1">Report includes:</p>
-                <p>• Attendance summary ({reports.length} students, avg {reports.length ? Math.round(reports.reduce((s,r)=>s+r.attendancePct,0)/reports.length*100) : 0}%)</p>
+                <p>• Attendance summary ({reports.length} students, avg {avgAttendanceLabel})</p>
                 <p>• Students below 50% attendance</p>
                 <p>• Pending / overdue fees</p>
                 <p>• Full student-by-student breakdown</p>

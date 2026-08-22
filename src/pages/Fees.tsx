@@ -25,6 +25,19 @@ const STATUS_COLOR: Record<string,string> = {
   Paid:'badge-green', Partial:'badge-amber', Pending:'badge-amber', Overdue:'badge-red', Waived:'badge-gray'
 };
 
+function localIsoDate(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function dateInputValue(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parts = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+  if (!parts) return '';
+  return `${parts[3]}-${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+}
+
 function rowToFee(row: string[], idx: number): FeeEntry {
   return {
     receiptNo:row[0]??'', studentName:row[1]??'', batch:row[2]??'',
@@ -37,7 +50,7 @@ function rowToFee(row: string[], idx: number): FeeEntry {
 function feeToForm(f: FeeEntry): FeeForm {
   return { studentName:f.studentName, feeMonth:f.feeMonth, feeType:f.feeType,
     amountDue:f.amountDue, amountPaid:f.amountPaid, paymentMethod:f.paymentMethod,
-    paymentStatus:f.paymentStatus, dueDate:f.dueDate, paymentDate:f.paymentDate,
+    paymentStatus:f.paymentStatus, dueDate:dateInputValue(f.dueDate), paymentDate:dateInputValue(f.paymentDate),
     reference:f.reference, notes:f.notes };
 }
 
@@ -66,7 +79,7 @@ export function Fees() {
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:L`),
       ]);
-      setFees(feeRows.slice(1).filter(r=>r[1]?.trim()).map(rowToFee));
+      setFees(feeRows.slice(1).map(rowToFee).filter(fee => fee.studentName.trim()));
       const names = studentRows.slice(1).map(r=>r[0]).filter(Boolean);
       setStudents(names);
       const wa = new Map<string,string>();
@@ -90,10 +103,11 @@ export function Fees() {
     try {
       const receipt = `RCT-${Date.now().toString().slice(-6)}`;
       const balance = amountDue - amountPaid;
+      const paymentDate = form.paymentDate || localIsoDate();
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
         receipt, form.studentName, '', form.feeMonth, form.feeType,
         amountDue, amountPaid, balance,
-        form.dueDate, form.paymentDate||new Date().toLocaleDateString('en-IN'),
+        form.dueDate, paymentDate,
         form.paymentMethod, form.paymentStatus, form.reference,
         form.notes ? `${form.notes} [by ${coachName}]` : `Added by ${coachName}`,
       ]]);
@@ -101,7 +115,7 @@ export function Fees() {
         receiptNo: receipt, studentName: form.studentName, batch: '', feeMonth: form.feeMonth,
         feeType: form.feeType, amountDue: form.amountDue, amountPaid: form.amountPaid || '0',
         balance: String(balance), dueDate: form.dueDate,
-        paymentDate: form.paymentDate || new Date().toLocaleDateString('en-IN'),
+        paymentDate,
         paymentMethod: form.paymentMethod, paymentStatus: form.paymentStatus,
         reference: form.reference, notes: form.notes, rowIndex,
       };
@@ -171,12 +185,12 @@ export function Fees() {
       await batchWrite(token, SHEET_ID, [
         {range:`'${tab}'!G${fee.rowIndex}`,value:parseSheetNumber(fee.amountDue)},
         {range:`'${tab}'!H${fee.rowIndex}`,value:0},
-        {range:`'${tab}'!J${fee.rowIndex}`,value:new Date().toLocaleDateString('en-IN')},
+        {range:`'${tab}'!J${fee.rowIndex}`,value:localIsoDate()},
         {range:`'${tab}'!K${fee.rowIndex}`,value:fee.paymentMethod || 'UPI'},
         {range:`'${tab}'!L${fee.rowIndex}`,value:'Paid'},
         {range:`'${tab}'!N${fee.rowIndex}`,value:`Marked paid by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`},
       ]);
-      const paymentDate = new Date().toLocaleDateString('en-IN');
+      const paymentDate = localIsoDate();
       setFees(prev => prev.map(entry => entry.rowIndex === fee.rowIndex ? {
         ...entry, amountPaid: entry.amountDue, balance: '0', paymentDate,
         paymentMethod: entry.paymentMethod || 'UPI', paymentStatus: 'Paid',

@@ -108,7 +108,7 @@ export function Students() {
     setLoading(true); setError('');
     try {
       const rows = await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
-      const data = rows.slice(1).filter(r => r[0]?.trim()).map((r,i) => rowToStudent(r, i+2));
+      const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(student => student.name.trim());
       setStudents(data); setFiltered(data);
     } catch(e:any) {
       if(e.message==='TOKEN_EXPIRED'){logout();return;}

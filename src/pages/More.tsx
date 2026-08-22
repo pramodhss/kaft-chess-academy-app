@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  Bus, CalendarDays, Camera, ChartNoAxesCombined, ChevronRight, CircleUserRound,
+  BookOpenCheck, Bus, CalendarDays, Camera, ChartNoAxesCombined, ChevronRight, CircleUserRound,
   ExternalLink, FileChartColumn, Gauge, Library, LogOut, Medal,
   MessageCircle, Moon, Play, ReceiptText, Share2, Sun, Trophy,
 } from 'lucide-react';
@@ -16,6 +16,7 @@ const ITEMS = [
   { to:'/monthly-report', Icon:FileChartColumn, label:'Monthly Report', desc:'Attendance, fees and achievements', hi:true },
   { to:'/upcoming',       Icon:CalendarDays, label:'Upcoming Tournaments', desc:'Post and view upcoming events' },
   { to:'/resources',      Icon:Library, label:'Resources & eBooks', desc:'Share study material and links' },
+  { to:'/curriculum',     Icon:BookOpenCheck, label:'Curriculum', desc:'Beginner to advanced chess syllabus' },
   { to:'/tournaments',    Icon:Trophy, label:'Tournament Results', desc:'Past results, ratings and medals' },
   { to:'/van',            Icon:Bus, label:'Van Allotment', desc:'Transport and route details' },
   { to:'/timetable',      Icon:CalendarDays, label:'Timetable', desc:'Weekend class schedule' },
@@ -26,7 +27,10 @@ const SOCIALS = [
   { key:'facebook',  label:'Facebook', Icon:Share2, url:SOCIAL.facebook  },
   { key:'instagram', label:'Instagram',Icon:Camera, url:SOCIAL.instagram },
   { key:'youtube',   label:'YouTube',  Icon:Play, url:SOCIAL.youtube   },
-];
+].filter(({ key, url }) => {
+  if (key === 'whatsapp') return /^https:\/\/wa\.me\/\d+/.test(url);
+  try { return new URL(url).pathname !== '/'; } catch { return false; }
+});
 
 const USEFUL_LINKS = [
   { key:'fide', label:'FIDE Ratings', desc:'Official player profiles and ratings', Icon:Gauge, url:ACADEMY_LINKS.fideRatings },
@@ -75,17 +79,19 @@ export function More() {
             ))}
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs font-bold text-navy uppercase tracking-wider mb-3">Academy Social Media</p>
-          <div className="grid grid-cols-2 gap-2">
-            {SOCIALS.map(({ key, label, Icon, url }) => (
-              <a key={key} href={url} target="_blank" rel="noopener noreferrer"
-                className="bg-gray-50 text-gray-700 border border-gray-100 rounded-xl p-3 flex items-center gap-2 font-medium text-sm">
-                <Icon size={18} strokeWidth={1.8} className="text-navy" aria-hidden="true" />{label}
-              </a>
-            ))}
+        {SOCIALS.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p className="text-xs font-bold text-navy uppercase tracking-wider mb-3">Academy Social Media</p>
+            <div className="grid grid-cols-2 gap-2">
+              {SOCIALS.map(({ key, label, Icon, url }) => (
+                <a key={key} href={url} target="_blank" rel="noopener noreferrer"
+                  className="bg-gray-50 text-gray-700 border border-gray-100 rounded-xl p-3 flex items-center gap-2 font-medium text-sm">
+                  <Icon size={18} strokeWidth={1.8} className="text-navy" aria-hidden="true" />{label}
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2">Logged in as</p>
           <p className="font-semibold text-gray-900 flex items-center gap-2"><CircleUserRound size={18} />{coachName || '—'}</p>

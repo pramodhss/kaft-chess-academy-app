@@ -18,10 +18,14 @@ const AuthContext = createContext<AuthCtx>(null!);
 
 function loadStored(): AuthState {
   try {
-    const s = sessionStorage.getItem('chess_auth');
+    const s = localStorage.getItem('chess_auth') ?? sessionStorage.getItem('chess_auth');
     if (s) {
       const p: AuthState = JSON.parse(s);
-      if (p.expiresAt && Date.now() < p.expiresAt) return p;
+      if (p.expiresAt && Date.now() < p.expiresAt) {
+        localStorage.setItem('chess_auth', s);
+        sessionStorage.removeItem('chess_auth');
+        return p;
+      }
     }
   } catch { /* ignore parse errors */ }
   // clear any stale / scope-less token on load
@@ -45,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         expiresAt: Date.now() + resp.expires_in * 1000,
       };
       setAuth(next);
-      sessionStorage.setItem('chess_auth', JSON.stringify(next));
+      localStorage.setItem('chess_auth', JSON.stringify(next));
     },
     onError: () => alert('Google login failed. Check your OAuth Client ID in config.ts.'),
   });

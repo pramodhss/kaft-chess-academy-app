@@ -18,6 +18,7 @@ import { UpcomingTournaments }  from './pages/UpcomingTournaments';
 import { Resources }            from './pages/Resources';
 import { Leaderboard }          from './pages/Leaderboard';
 import { StudentProgress }      from './pages/StudentProgress';
+import { Curriculum }           from './pages/Curriculum';
 import { ErrorBoundary }         from './components/ErrorBoundary';
 import { ToastProvider }         from './context/ToastContext';
 
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="/van"               element={<Van />} />
         <Route path="/timetable"         element={<Timetable />} />
         <Route path="/resources"         element={<Resources />} />
+        <Route path="/curriculum"        element={<Curriculum />} />
         <Route path="/monthly-report"    element={<MonthlyReport />} />        <Route path="/leaderboard"      element={<Leaderboard />} />
         <Route path="/progress"         element={<StudentProgress />} />        <Route path="/more"              element={<More />} />
         <Route path="*"                  element={<Navigate to="/" replace />} />
