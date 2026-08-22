@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import { SCOPES } from '../config';
+import { SHEETS_READ_CACHE } from '../lib/sheets';
 
 interface AuthState {
   token: string | null;
@@ -59,7 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.removeItem('chess_auth');
     localStorage.removeItem('chess_auth');
     localStorage.removeItem('chess_coach_name');
-    if ('caches' in window) void caches.delete('sheets-api');
+    window.dispatchEvent(new Event('chess-coach-name-reset'));
+    if ('caches' in window) void Promise.all([
+      caches.delete('sheets-api'),
+      caches.delete(SHEETS_READ_CACHE),
+    ]);
     setAuth({ token: null, email: null, expiresAt: null });
   }, []);
 

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { EmptyState, ErrorState } from '../components/EmptyState';
-import { readSheet, appendRows, ensureSheet } from '../lib/sheets';
+import { readSheet, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 
 const HEADERS = ['Tournament Name','Type','Date','Reg Deadline','Venue','Entry Fee','Eligibility','Link','Notes','Status','Added By','Added On'];
@@ -20,6 +20,14 @@ function isWebUrl(value: string): boolean {
 
 interface UTEntry { name:string; type:string; date:string; deadline:string; venue:string; fee:string; eligibility:string; link:string; notes:string; status:string; addedBy:string; addedOn:string; rowIndex:number }
 
+function rowToEntry(row: string[], rowIndex: number): UTEntry {
+  return {
+    name:row[0]??'', type:row[1]??'', date:row[2]??'', deadline:row[3]??'', venue:row[4]??'',
+    fee:row[5]??'', eligibility:row[6]??'', link:row[7]??'', notes:row[8]??'',
+    status:row[9]??'', addedBy:row[10]??'', addedOn:row[11]??'', rowIndex,
+  };
+}
+
 export function UpcomingTournaments() {
   const { token, logout } = useAuth();
   const toast = useToast();
@@ -29,6 +37,7 @@ export function UpcomingTournaments() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ ...EMPTY });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
   const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
 
   const load = async () => {
@@ -37,11 +46,7 @@ export function UpcomingTournaments() {
     try {
       await ensureSheet(token, SHEET_ID, TABS.UPCOMING, HEADERS);
       const rows = await readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:L`);
-      setEntries(rows.slice(1).map((r,i) => ({
-        name:r[0]??'', type:r[1]??'', date:r[2]??'', deadline:r[3]??'', venue:r[4]??'',
-        fee:r[5]??'', eligibility:r[6]??'', link:r[7]??'', notes:r[8]??'',
-        status:r[9]??'', addedBy:r[10]??'', addedOn:r[11]??'', rowIndex:i+2,
-      })).filter(entry => entry.name.trim()));
+      setEntries(rows.slice(1).map((row, index) => rowToEntry(row, index + 2)).filter(entry => entry.name.trim()));
     } catch(e:any) { if(e.message==='TOKEN_EXPIRED'){logout();return;} setError(e.message); }
     finally { setLoading(false); }
   };
@@ -67,6 +72,23 @@ export function UpcomingTournaments() {
     finally { setSaving(false); }
   };
 
+  const removeEntry = async (entry: UTEntry) => {
+    if (!token || !window.confirm(`Remove the upcoming tournament ${entry.name}? This cannot be undone.`)) return;
+    setDeleting(entry.rowIndex);
+    try {
+      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A${entry.rowIndex}:L${entry.rowIndex}`);
+      const currentEntry = rowToEntry(currentRows[0] ?? [], entry.rowIndex);
+      if (JSON.stringify(currentEntry) !== JSON.stringify(entry)) {
+        toast.info('This tournament was changed on another device. Reload before removing it.');
+        return;
+      }
+      await clearSheetRange(token, SHEET_ID, `'${TABS.UPCOMING}'!A${entry.rowIndex}:L${entry.rowIndex}`);
+      setEntries(prev => prev.filter(item => item.rowIndex !== entry.rowIndex));
+      toast.success(`${entry.name} was removed.`);
+    } catch (e: any) { toast.error('Remove failed: ' + e.message); }
+    finally { setDeleting(null); }
+  };
+
   const u = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({...form,[k]:e.target.value});
 
   if (loading) return <Layout title="Upcoming Tournaments" showBack><Spinner /></Layout>;
@@ -78,8 +100,8 @@ export function UpcomingTournaments() {
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         {entries.length === 0 && <div className="text-center py-12 text-gray-400"><p className="text-4xl mb-2">📋</p><p>No upcoming tournaments yet. Tap + Add to post one.</p></div>}
-        {entries.map((e,i) => (
-          <div key={i} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        {entries.map(e => (
+          <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">{e.name}</p>
@@ -100,7 +122,14 @@ export function UpcomingTournaments() {
                 🔗 Register / More Info
               </a>
             )}
-            <p className="text-xs text-gray-300 mt-2">Added by {e.addedBy} on {e.addedOn}</p>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-300">Added by {e.addedBy} on {e.addedOn}</p>
+              <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
+                aria-label={`Remove ${e.name}`} title="Remove tournament"
+                className="p-2 rounded-lg bg-red-50 text-red-700 disabled:opacity-50">
+                <Trash2 size={17} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         ))}
       </div>

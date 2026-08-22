@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { readSheet, readSheetUnformatted, batchWrite, colLetter, insertSheetColumnHeader } from '../lib/sheets';
+import { readSheet, readSheetUnformatted, batchWrite, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
 import type { SheetValue } from '../lib/sheets';
 import { SHEET_ID, TABS, ATT_DATE_START } from '../config';
 
@@ -74,6 +75,7 @@ export function Attendance() {
   const [showAddDate, setShowAddDate] = useState(false);
   const [newDate, setNewDate] = useState('');
   const [addingDate, setAddingDate] = useState(false);
+  const [deletingDate, setDeletingDate] = useState(false);
   const [error, setError] = useState('');
   const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
 
@@ -210,6 +212,37 @@ export function Attendance() {
     finally { setAddingDate(false); }
   };
 
+  const removeAttendanceDate = async () => {
+    if (!token || !selectedDate) return;
+    const label = `${DAYS[selectedDate.date.getDay()]}, ${selectedDate.date.getDate()} ${MONTHS[selectedDate.date.getMonth()]} ${selectedDate.date.getFullYear()}`;
+    if (!window.confirm(`Remove ${label}? All attendance marks saved for this class date will also be permanently removed.`)) return;
+    setDeletingDate(true);
+    try {
+      const headerRows = await readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`);
+      const currentHeaderIndex = (headerRows[0] ?? []).findIndex(value => {
+        const parsed = parseSheetDate(value);
+        return parsed ? dateKey(parsed) === dateKey(selectedDate.date) : false;
+      });
+      if (currentHeaderIndex < 0) {
+        toast.info('This class date was already removed on another device. Reload Attendance.');
+        return;
+      }
+      await deleteSheetColumn(token, SHEET_ID, TABS.ATTENDANCE, ATT_DATE_START + currentHeaderIndex);
+      const updatedHeaderRows = await readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`);
+      const headerCells = updatedHeaderRows[0] ?? [];
+      const dates = headerCells.flatMap((value, index) => {
+        const parsed = parseSheetDate(value);
+        return parsed ? [{ date: parsed, columnIndex: ATT_DATE_START + index }] : [];
+      }).sort((a, b) => a.date.getTime() - b.date.getTime());
+      setAttendanceDates(dates);
+      setSelectedIdx(nearestDateIdx(dates));
+      setNextDateColumn(ATT_DATE_START + Math.max(headerCells.length, WEEKEND_DATES.length));
+      setDirty(new Map());
+      toast.success(`${label} was removed from Attendance.`);
+    } catch (e: any) { toast.error('Could not remove date: ' + e.message); }
+    finally { setDeletingDate(false); }
+  };
+
   const presentCount = rows.filter(r => dirty.get(r.sheetRow) ?? r.present).length;
   const selectedDate = attendanceDates[selectedIdx];
   const date = selectedDate?.date ?? new Date();
@@ -243,12 +276,21 @@ export function Attendance() {
 
           {/* Date strip */}
           <div className="px-4 py-3 bg-white border-b border-gray-100">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between gap-2 mb-2">
               <p className="text-xs font-medium text-gray-500">Select Date</p>
-              <button type="button" onClick={() => setShowAddDate(true)}
-                className="text-xs font-bold text-chess-blue flex items-center gap-1 px-2 py-1 rounded-lg bg-chess-light">
-                <span className="text-base leading-none">+</span> Add Date
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedDate && (
+                  <button type="button" onClick={removeAttendanceDate} disabled={deletingDate || dirty.size > 0}
+                    aria-label="Remove selected class date" title={dirty.size > 0 ? 'Save or discard attendance changes first' : 'Remove selected class date'}
+                    className="text-xs font-bold text-red-700 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 disabled:opacity-40">
+                    <Trash2 size={14} aria-hidden="true" /> Remove
+                  </button>
+                )}
+                <button type="button" onClick={() => setShowAddDate(true)}
+                  className="text-xs font-bold text-chess-blue flex items-center gap-1 px-2 py-1 rounded-lg bg-chess-light">
+                  <span className="text-base leading-none">+</span> Add Date
+                </button>
+              </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
               {attendanceDates.map(({ date: d, columnIndex }, i) => (

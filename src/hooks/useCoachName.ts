@@ -1,41 +1,58 @@
-import { useEffect, useState } from 'react';
+import { createContext, createElement, useContext, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 const KEY = 'chess_coach_name';
-const EVENT = 'chess-coach-name-change';
+const RESET_EVENT = 'chess-coach-name-reset';
 
-interface CoachNameChange {
-  name: string;
+interface CoachNameContextValue {
+  coachName: string;
   showPrompt: boolean;
+  saveCoachName: (name: string) => void;
+  clearCoachName: () => void;
+  setShowPrompt: (show: boolean) => void;
 }
 
-function notify(change: CoachNameChange) {
-  window.dispatchEvent(new CustomEvent<CoachNameChange>(EVENT, { detail: change }));
-}
+const CoachNameContext = createContext<CoachNameContextValue | null>(null);
 
-export function useCoachName() {
+export function CoachNameProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [name, setName] = useState(() => localStorage.getItem(KEY) ?? '');
   const [showPrompt, setShowPrompt] = useState(() => !localStorage.getItem(KEY));
 
   useEffect(() => {
-    const sync = (event: Event) => {
-      const change = (event as CustomEvent<CoachNameChange>).detail;
-      setName(change.name);
-      setShowPrompt(change.showPrompt);
+    const syncStorage = (event: StorageEvent) => {
+      if (event.key !== KEY) return;
+      setName(event.newValue ?? '');
+      setShowPrompt(!event.newValue);
     };
-    window.addEventListener(EVENT, sync);
-    return () => window.removeEventListener(EVENT, sync);
+    const reset = () => {
+      setName('');
+      setShowPrompt(true);
+    };
+    window.addEventListener('storage', syncStorage);
+    window.addEventListener(RESET_EVENT, reset);
+    return () => {
+      window.removeEventListener('storage', syncStorage);
+      window.removeEventListener(RESET_EVENT, reset);
+    };
   }, []);
 
-  const save = (newName: string) => {
+  const saveCoachName = (newName: string) => {
     const trimmedName = newName.trim();
     localStorage.setItem(KEY, trimmedName);
-    notify({ name: trimmedName, showPrompt: false });
+    setName(trimmedName);
+    setShowPrompt(false);
   };
-  const clear = () => {
+  const clearCoachName = () => {
     localStorage.removeItem(KEY);
-    notify({ name: '', showPrompt: true });
+    setName('');
+    setShowPrompt(true);
   };
-  const requestPrompt = (nextShowPrompt: boolean) => {
-    notify({ name: localStorage.getItem(KEY) ?? '', showPrompt: nextShowPrompt });
-  };
-  return { coachName: name, showPrompt, saveCoachName: save, clearCoachName: clear, setShowPrompt: requestPrompt };
+  return createElement(CoachNameContext.Provider, {
+    value: { coachName: name, showPrompt, saveCoachName, clearCoachName, setShowPrompt },
+  }, children);
+}
+
+export function useCoachName() {
+  const context = useContext(CoachNameContext);
+  if (!context) throw new Error('useCoachName must be used within CoachNameProvider.');
+  return context;
 }

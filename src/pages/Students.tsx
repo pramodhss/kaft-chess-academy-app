@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, appendRows, batchWrite, writeRange, ensureSheetColumns } from '../lib/sheets';
+import { readSheet, appendRows, clearSheetRange, writeRange, ensureSheetColumns } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
-import { EmptyState, ErrorState } from '../components/EmptyState';
 import { SHEET_ID, TABS } from '../config';
 import type { Student } from '../types';
 
@@ -100,6 +100,7 @@ export function Students() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<FormData>({ ...EMPTY });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
   const toast = useToast();
 
@@ -181,6 +182,30 @@ export function Students() {
       toast.success(`${updated.name}'s changes were updated successfully.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!token || !selected) return;
+    const confirmed = window.confirm(
+      `Remove ${selected.name}? Their student profile will be removed, but historical fees, attendance, and tournament records will be retained.`,
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    try {
+      const row = selected.rowIndex;
+      const tab = TABS.STUDENTS;
+      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`);
+      const currentStudent = rowToStudent(currentRows[0] ?? [], row);
+      if (JSON.stringify(studentToForm(currentStudent)) !== JSON.stringify(studentToForm(selected))) {
+        toast.info('This student was changed on another device. Reload the list before removing it.');
+        return;
+      }
+      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AC${row}`);
+      setStudents(prev => prev.filter(student => student.rowIndex !== row));
+      setSelected(null);
+      toast.success(`${selected.name} was removed from Students.`);
+    } catch (e: any) { toast.error('Remove failed: ' + e.message); }
+    finally { setDeleting(false); }
   };
 
   if (loading) return <Layout title="Students"><Spinner /></Layout>;
@@ -281,6 +306,11 @@ export function Students() {
             </InfoSection>
           )}
           {selected.notes && <InfoSection title="Notes"><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
+          <button type="button" onClick={handleDelete} disabled={deleting}
+            className="w-full border border-red-200 text-red-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+            <Trash2 size={18} aria-hidden="true" />
+            {deleting ? 'Removing student…' : 'Remove Student'}
+          </button>
         </div>
       </Layout>
     );

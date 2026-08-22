@@ -1,4 +1,5 @@
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
+export const SHEETS_READ_CACHE = 'sheets-read-cache-v1';
 export type SheetValue = string | number | boolean;
 
 export function colLetter(index: number): string {
@@ -8,6 +9,10 @@ export function colLetter(index: number): string {
 }
 
 async function apiCall(token: string, url: string, options?: RequestInit) {
+  const method = (options?.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('You are offline. Reconnect before saving changes.');
+  }
   const res = await fetch(url, {
     ...options,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...options?.headers },
@@ -21,13 +26,36 @@ async function apiCall(token: string, url: string, options?: RequestInit) {
   return res.json();
 }
 
+async function readWithCache(token: string, url: string) {
+  try {
+    const data = await apiCall(token, url);
+    if ('caches' in globalThis) {
+      try {
+        const cache = await caches.open(SHEETS_READ_CACHE);
+        await cache.put(url, new Response(JSON.stringify(data), {
+          headers: { 'Content-Type': 'application/json' },
+        }));
+      } catch { /* online data remains usable when browser caching is unavailable */ }
+    }
+    return data;
+  } catch (error) {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (!isOffline && !(error instanceof TypeError)) throw error;
+    if ('caches' in globalThis) {
+      const cached = await (await caches.open(SHEETS_READ_CACHE)).match(url);
+      if (cached) return cached.json();
+    }
+    throw new Error('No cached data is available. Reconnect to load this page.');
+  }
+}
+
 export async function readSheet(token: string, sheetId: string, range: string): Promise<string[][]> {
-  const data = await apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`);
+  const data = await readWithCache(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`);
   return (data.values ?? []) as string[][];
 }
 
 export async function readSheetUnformatted(token: string, sheetId: string, range: string): Promise<SheetValue[][]> {
-  const data = await apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`);
+  const data = await readWithCache(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`);
   return (data.values ?? []) as SheetValue[][];
 }
 
@@ -49,6 +77,34 @@ export async function batchWrite(token: string, sheetId: string, updates: { rang
   return apiCall(token, `${API}/${sheetId}/values:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates.map(u => ({ range: u.range, majorDimension: 'ROWS', values: [[u.value]] })) }),
+  });
+}
+
+export async function clearSheetRange(token: string, sheetId: string, range: string) {
+  return apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}:clear`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function deleteSheetColumn(token: string, sheetId: string, tabName: string, columnIndex: number) {
+  const info = await apiCall(token, `${API}/${sheetId}?fields=sheets.properties`);
+  const sheet = (info.sheets ?? []).find((item: any) => item.properties?.title === tabName);
+  if (!sheet) throw new Error(`Sheet tab not found: ${tabName}`);
+  return apiCall(token, `${API}/${sheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: sheet.properties.sheetId,
+            dimension: 'COLUMNS',
+            startIndex: columnIndex,
+            endIndex: columnIndex + 1,
+          },
+        },
+      }],
+    }),
   });
 }
 
@@ -89,16 +145,26 @@ export async function insertSheetColumnHeader(
   const sheet = (info.sheets ?? []).find((item: any) => item.properties?.title === tabName);
   if (!sheet) throw new Error(`Sheet tab not found: ${tabName}`);
   const tabId = sheet.properties.sheetId;
+  const columnCount = sheet.properties.gridProperties?.columnCount ?? 0;
+  const dimensionRequest = columnIndex >= columnCount
+    ? {
+        appendDimension: {
+          sheetId: tabId,
+          dimension: 'COLUMNS',
+          length: columnIndex - columnCount + 1,
+        },
+      }
+    : {
+        insertDimension: {
+          range: { sheetId: tabId, dimension: 'COLUMNS', startIndex: columnIndex, endIndex: columnIndex + 1 },
+          inheritFromBefore: false,
+        },
+      };
   return apiCall(token, `${API}/${sheetId}:batchUpdate`, {
     method: 'POST',
     body: JSON.stringify({
       requests: [
-        {
-          insertDimension: {
-            range: { sheetId: tabId, dimension: 'COLUMNS', startIndex: columnIndex, endIndex: columnIndex + 1 },
-            inheritFromBefore: false,
-          },
-        },
+        dimensionRequest,
         {
           updateCells: {
             start: { sheetId: tabId, rowIndex: 0, columnIndex },

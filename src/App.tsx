@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { GOOGLE_CLIENT_ID } from './config';
-import { useCoachName } from './hooks/useCoachName';
+import { CoachNameProvider, useCoachName } from './hooks/useCoachName';
 import { Login }                from './pages/Login';
 import { Dashboard }            from './pages/Dashboard';
 import { Students }             from './pages/Students';
@@ -22,7 +22,7 @@ import { Curriculum }           from './pages/Curriculum';
 import { ErrorBoundary }         from './components/ErrorBoundary';
 import { ToastProvider }         from './context/ToastContext';
 
-function CoachNameModal({ onSave }: { onSave: (n: string) => void }) {
+function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
   const [val, setVal] = useState('');
   return (
     <div className="fixed inset-0 bg-navy/95 flex items-center justify-center z-50 p-6">
@@ -34,7 +34,7 @@ function CoachNameModal({ onSave }: { onSave: (n: string) => void }) {
         <input value={val} onChange={e => setVal(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && val.trim() && onSave(val)}
           className="input w-full mb-4" placeholder="Your name (e.g. Coach Pramodh)" autoFocus />
-        <button onClick={() => val.trim() && onSave(val)} disabled={!val.trim()}
+        <button type="button" onClick={() => val.trim() && onSave(val)} disabled={!val.trim()}
           className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-50">
           Continue
         </button>
@@ -75,9 +75,11 @@ export default function App() {
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <AuthProvider>
           <ToastProvider>
-            <HashRouter>
-              <AppRoutes />
-            </HashRouter>
+            <CoachNameProvider>
+              <HashRouter>
+                <AppRoutes />
+              </HashRouter>
+            </CoachNameProvider>
           </ToastProvider>
         </AuthProvider>
       </GoogleOAuthProvider>

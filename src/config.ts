@@ -26,7 +26,7 @@ export const SOCIAL = {
 };
 
 export const ACADEMY_LINKS = {
-  fideRatings: 'https://ratings.fide.com/',
+  fideRatings: 'https://ratings.fide.com/index.phtml',
   tamilChess: 'https://tamilchess.com/',
   easyPayChess: 'https://easypaychess.com/',
   aicfEvents: 'https://aicf.in/all-events/',

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, appendRows, batchWrite } from '../lib/sheets';
+import { readSheet, appendRows, batchWrite, clearSheetRange } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
-import { EmptyState, ErrorState } from '../components/EmptyState';
 import { SHEET_ID, TABS } from '../config';
 import { parseSheetNumber } from '../lib/values';
 import type { FeeEntry } from '../types';
@@ -67,6 +67,7 @@ export function Fees() {
   const [form, setForm]           = useState<FeeForm>({ ...EMPTY_F });
   const [saving, setSaving]       = useState(false);
   const [marking, setMarking]     = useState<number|null>(null);
+  const [deleting, setDeleting]   = useState<number|null>(null);
   const [feeSearch, setFeeSearch] = useState('');
   const toast = useToast();
   const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
@@ -79,7 +80,7 @@ export function Fees() {
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:L`),
       ]);
-      setFees(feeRows.slice(1).map(rowToFee).filter(fee => fee.studentName.trim()));
+      setFees(feeRows.slice(1).map((row, index) => rowToFee(row, index)).filter(fee => fee.studentName.trim()));
       const names = studentRows.slice(1).map(r=>r[0]).filter(Boolean);
       setStudents(names);
       const wa = new Map<string,string>();
@@ -200,6 +201,24 @@ export function Fees() {
     finally { setMarking(null); }
   };
 
+  const removeFee = async (fee: FeeEntry) => {
+    if (!token || !window.confirm(`Remove receipt ${fee.receiptNo} for ${fee.studentName}? This cannot be undone.`)) return;
+    setDeleting(fee.rowIndex);
+    try {
+      const tab = TABS.FEES;
+      const currentRows = await readSheet(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
+      const currentFee = rowToFee(currentRows[0] ?? [], fee.rowIndex - 2);
+      if (currentFee.receiptNo !== fee.receiptNo || JSON.stringify(feeToForm(currentFee)) !== JSON.stringify(feeToForm(fee))) {
+        toast.info('This payment was changed on another device. Reload Fees before removing it.');
+        return;
+      }
+      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
+      setFees(prev => prev.filter(entry => entry.rowIndex !== fee.rowIndex));
+      toast.success(`Receipt ${fee.receiptNo} was removed.`);
+    } catch (e: any) { toast.error('Remove failed: ' + e.message); }
+    finally { setDeleting(null); }
+  };
+
   const waLink = (studentName: string, fee: FeeEntry) => {
     const phone = waMap.get(studentName)?.replace(/[^0-9]/g,'') ?? '';
     if (!phone) return null;
@@ -294,6 +313,11 @@ export function Fees() {
                   <button onClick={()=>{setEditTarget(f);setForm(feeToForm(f));}}
                     className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm">
                     ✏️
+                  </button>
+                  <button type="button" onClick={() => removeFee(f)} disabled={deleting === f.rowIndex}
+                    aria-label={`Remove fee for ${f.studentName}`} title="Remove fee"
+                    className="px-3 py-2 bg-red-50 text-red-700 rounded-xl disabled:opacity-50">
+                    <Trash2 size={17} aria-hidden="true" />
                   </button>
                 </div>
               </div>

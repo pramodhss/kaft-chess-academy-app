@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  BookOpenCheck, Bus, CalendarDays, Camera, ChartNoAxesCombined, ChevronRight, CircleUserRound,
+  BookOpenCheck, Bus, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
   ExternalLink, FileChartColumn, Gauge, Library, LogOut, Medal,
-  MessageCircle, Moon, Play, ReceiptText, Share2, Sun, Trophy,
+  Moon, ReceiptText, Sun, Trophy,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -23,10 +23,10 @@ const ITEMS = [
 ];
 
 const SOCIALS = [
-  { key:'whatsapp',  label:'WhatsApp', Icon:MessageCircle, url:SOCIAL.whatsapp  },
-  { key:'facebook',  label:'Facebook', Icon:Share2, url:SOCIAL.facebook  },
-  { key:'instagram', label:'Instagram',Icon:Camera, url:SOCIAL.instagram },
-  { key:'youtube',   label:'YouTube',  Icon:Play, url:SOCIAL.youtube   },
+  { key:'whatsapp',  label:'WhatsApp', url:SOCIAL.whatsapp  },
+  { key:'facebook',  label:'Facebook', url:SOCIAL.facebook  },
+  { key:'instagram', label:'Instagram',url:SOCIAL.instagram },
+  { key:'youtube',   label:'YouTube',  url:SOCIAL.youtube   },
 ].filter(({ key, url }) => {
   if (key === 'whatsapp') return /^https:\/\/wa\.me\/\d+/.test(url);
   try { return new URL(url).pathname !== '/'; } catch { return false; }
@@ -83,10 +83,10 @@ export function More() {
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
             <p className="text-xs font-bold text-navy uppercase tracking-wider mb-3">Academy Social Media</p>
             <div className="grid grid-cols-2 gap-2">
-              {SOCIALS.map(({ key, label, Icon, url }) => (
+              {SOCIALS.map(({ key, label, url }) => (
                 <a key={key} href={url} target="_blank" rel="noopener noreferrer"
                   className="bg-gray-50 text-gray-700 border border-gray-100 rounded-xl p-3 flex items-center gap-2 font-medium text-sm">
-                  <Icon size={18} strokeWidth={1.8} className="text-navy" aria-hidden="true" />{label}
+                  <ExternalLink size={18} strokeWidth={1.8} className="text-navy" aria-hidden="true" />{label}
                 </a>
               ))}
             </div>

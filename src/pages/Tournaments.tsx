@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { EmptyState, ErrorState } from '../components/EmptyState';
-import { readSheet, appendRows } from '../lib/sheets';
+import { readSheet, appendRows, clearSheetRange } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import type { TournamentEntry } from '../types';
 
@@ -35,6 +35,7 @@ export function Tournaments() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_F });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<number | null>(null);
 
   const load = async () => {
     if (!token) return;
@@ -44,7 +45,7 @@ export function Tournaments() {
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
       ]);
-      setEntries(tRows.slice(1).map(rowToEntry).filter(entry => entry.studentName.trim()));
+      setEntries(tRows.slice(1).map((row, index) => rowToEntry(row, index)).filter(entry => entry.studentName.trim()));
       setStudents(sRows.slice(1).map(r => r[0]).filter(Boolean));
     } catch (e: any) {
       if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
@@ -84,6 +85,23 @@ export function Tournaments() {
     finally { setSaving(false); }
   };
 
+  const removeEntry = async (entry: TournamentEntry) => {
+    if (!token || !window.confirm(`Remove ${entry.studentName}'s result for ${entry.tournamentName}? This cannot be undone.`)) return;
+    setDeleting(entry.rowIndex);
+    try {
+      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A${entry.rowIndex}:V${entry.rowIndex}`);
+      const currentEntry = rowToEntry(currentRows[0] ?? [], entry.rowIndex - 2);
+      if (JSON.stringify(currentEntry) !== JSON.stringify(entry)) {
+        toast.info('This tournament result was changed on another device. Reload before removing it.');
+        return;
+      }
+      await clearSheetRange(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A${entry.rowIndex}:V${entry.rowIndex}`);
+      setEntries(prev => prev.filter(item => item.rowIndex !== entry.rowIndex));
+      toast.success(`${entry.tournamentName} was removed from ${entry.studentName}'s results.`);
+    } catch (e: any) { toast.error('Remove failed: ' + e.message); }
+    finally { setDeleting(null); }
+  };
+
   if (loading) return <Layout title="Tournaments" showBack><Spinner /></Layout>;
 
   return (
@@ -100,8 +118,8 @@ export function Tournaments() {
           </div>
         )}
 
-        {entries.map((e, i) => (
-          <div key={i} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        {entries.map(e => (
+          <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">{e.studentName}</p>
@@ -120,6 +138,13 @@ export function Tournaments() {
                   Rating: {parseFloat(e.ratingChange) >= 0 ? '+' : ''}{e.ratingChange}
                 </span>
               )}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
+                aria-label={`Remove ${e.tournamentName} result`} title="Remove tournament result"
+                className="p-2 rounded-lg bg-red-50 text-red-700 disabled:opacity-50">
+                <Trash2 size={17} aria-hidden="true" />
+              </button>
             </div>
           </div>
         ))}

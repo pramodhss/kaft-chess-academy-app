@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { EmptyState, ErrorState } from '../components/EmptyState';
-import { readSheet } from '../lib/sheets';
+import { clearSheetRange, readSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import type { VanEntry } from '../types';
 
@@ -24,13 +24,14 @@ export function Van() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState<number | null>(null);
 
   useEffect(() => {
     if (!token) return;
     (async () => {
       try {
         const rows = await readSheet(token, SHEET_ID, `'${TABS.VAN}'!A:M`);
-        setEntries(rows.slice(1).filter(r => r[1]?.trim()).map(rowToVan));
+        setEntries(rows.slice(1).map((row, index) => rowToVan(row, index)).filter(entry => entry.studentName.trim()));
       } catch (e: any) {
         if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
         setError(e.message);
@@ -42,6 +43,23 @@ export function Van() {
     ? entries.filter(e => e.studentName.toLowerCase().includes(search.toLowerCase()) || (e.vanId ?? '').toLowerCase().includes(search.toLowerCase()))
     : entries;
 
+  const removeEntry = async (entry: VanEntry) => {
+    if (!token || !window.confirm(`Remove ${entry.studentName}'s van allotment? This cannot be undone.`)) return;
+    setDeleting(entry.rowIndex);
+    try {
+      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.VAN}'!A${entry.rowIndex}:M${entry.rowIndex}`);
+      const currentEntry = rowToVan(currentRows[0] ?? [], entry.rowIndex - 2);
+      if (JSON.stringify(currentEntry) !== JSON.stringify(entry)) {
+        toast.info('This van allotment was changed on another device. Reload before removing it.');
+        return;
+      }
+      await clearSheetRange(token, SHEET_ID, `'${TABS.VAN}'!A${entry.rowIndex}:M${entry.rowIndex}`);
+      setEntries(prev => prev.filter(item => item.rowIndex !== entry.rowIndex));
+      toast.success(`${entry.studentName}'s van allotment was removed.`);
+    } catch (e: any) { toast.error('Remove failed: ' + e.message); }
+    finally { setDeleting(null); }
+  };
+
   if (loading) return <Layout title="Van Allotment" showBack><Spinner /></Layout>;
 
   return (
@@ -52,8 +70,8 @@ export function Van() {
           placeholder="Search by student or van ID…"
           className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-chess-blue" />
 
-        {filtered.map((e, i) => (
-          <div key={i} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        {filtered.map(e => (
+          <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-semibold text-gray-900">{e.studentName}</p>
@@ -66,6 +84,13 @@ export function Van() {
               {e.dropLocation && <span>🏁 {e.dropLocation} {e.dropTime && `@ ${e.dropTime}`}</span>}
               {e.driverName && <span>🚗 {e.driverName}</span>}
               {e.vanFee && <span>💰 ₹{e.vanFee}/mo</span>}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
+                aria-label={`Remove van allotment for ${e.studentName}`} title="Remove van allotment"
+                className="p-2 rounded-lg bg-red-50 text-red-700 disabled:opacity-50">
+                <Trash2 size={17} aria-hidden="true" />
+              </button>
             </div>
           </div>
         ))}
