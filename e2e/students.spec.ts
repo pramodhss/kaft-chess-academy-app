@@ -44,3 +44,38 @@ test('blocks duplicate student names before writing', async ({ page, sheets }) =
   await expect(page.getByText(/student with this name already exists/i)).toBeVisible();
   expect(sheets.writes).toHaveLength(writesBefore);
 });
+
+test('updates an existing student phone without a false conflict', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+  await page.getByRole('button', { name: /Aarav Kumar/ }).click();
+  await page.getByRole('button', { name: 'Edit student' }).click();
+
+  const phone = page.getByLabel('Phone *', { exact: true });
+  await phone.fill('9988776655');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+
+  await expect(page.getByText(/changes were updated successfully/i)).toBeVisible();
+  await expect(page.getByText('9988776655', { exact: true })).toBeVisible();
+  expect(sheets.workbook['Students & Parents'][1][10]).toBe('9988776655');
+  await expect(page.getByText(/changed this student at the same time/i)).toHaveCount(0);
+});
+
+test('filters phone input and validates email and ratings', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+
+  await dialog.getByLabel('Full Name *').fill('Validation Student');
+  await dialog.getByLabel('Date of Birth *').fill('2015-04-12');
+  await dialog.getByLabel('Parent / Guardian Name *').fill('Validation Parent');
+  const phone = dialog.getByLabel('Phone *', { exact: true });
+  await phone.fill('98ab-76543210');
+  await expect(phone).toHaveValue('9876543210');
+
+  await dialog.getByLabel('Email').fill('invalid@example');
+  await expect(dialog.getByRole('alert')).toContainText('valid parent email');
+  await dialog.getByLabel('Email').fill('parent@example.com');
+  await dialog.getByLabel('Classical Rating').fill('1200.5');
+  await expect(dialog.getByRole('alert')).toContainText('whole number');
+  expect(sheets.writes).toHaveLength(0);
+});

@@ -33,3 +33,24 @@ test('student progress joins monthly attendance and skill metrics', async ({ pag
   await expect(page.getByText('75%', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('4.2/5', { exact: true })).toBeVisible();
 });
+
+test('dashboard and progress clamp invalid Sheet metrics', async ({ page, sheets }) => {
+  sheets.workbook['Fee Register'][1][6] = '-100';
+  sheets.workbook['Fee Register'][1][7] = '-500';
+  sheets.workbook['Monthly Attendance'][1][4] = '175%';
+  sheets.workbook['Monthly Metrics'][1][9] = '9';
+
+  await openApp(page);
+  await expect(page.getByText('₹2,000', { exact: true })).toBeVisible();
+  await expect(page.getByText('₹0', { exact: true })).toBeVisible();
+  await openApp(page, '#/progress');
+  await page.locator('select').selectOption({ label: 'Aarav Kumar' });
+  await expect(page.getByText('100%', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('5.0/5', { exact: true })).toBeVisible();
+});
+
+test('van flags malformed imported phone data', async ({ page, sheets }) => {
+  sheets.workbook['Van Allotment'][1][9] = 'driver-phone';
+  await openApp(page, '#/van');
+  await expect(page.getByRole('alert')).toContainText('Driver phone must contain numbers only');
+});

@@ -42,6 +42,13 @@ function trimRow(row: string[]): string[] {
   return copy;
 }
 
+function userEnteredValue(value: string | number | boolean | null | undefined): string {
+  const text = value == null ? '' : String(value);
+  if (text.startsWith("'")) return text.slice(1);
+  if (/^\d{10,}$/.test(text)) return Number(text).toLocaleString('en-US');
+  return text;
+}
+
 function readRange(workbook: Workbook, range: string): string[][] {
   const { sheet, start, end } = parseRange(range);
   const rows = workbook[sheet] ?? [];
@@ -61,7 +68,7 @@ function writeRange(workbook: Workbook, range: string, values: string[][]) {
     const targetRow = start.row + rowOffset;
     rows[targetRow] ??= [];
     sourceRow.forEach((value, columnOffset) => {
-      rows[targetRow][start.column + columnOffset] = String(value ?? '');
+      rows[targetRow][start.column + columnOffset] = userEnteredValue(value);
     });
   });
 }
@@ -168,9 +175,9 @@ async function fulfillSheetsRequest(route: Route, mock: SheetsMock) {
 function defaultWorkbook(): Workbook {
   return {
     'Students & Parents': [
-      ['Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status', 'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone', 'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'Notes', 'FIDE ID', 'TNSCA ID', 'Classical Rating', 'Rapid Rating', 'Blitz Rating', 'Attendance %', 'This Month Attended', 'This Month Total', 'School', 'Standard', 'Coach Name'],
-      ['Aarav Kumar', '10/05/2014', '11', 'Male', '6th, Sunrise School', 'Beginner A', 'Beginner', '01/01/2026', 'Active', 'Priya Kumar', '9876543210', '9876543210', 'priya@example.com', '', '', '', '', 'Chennai', 'Yes', '', '1234567', 'TN100', '1200', '1100', '1000', '75%', '3', '4', 'Sunrise School', '6th', 'Coach Meera'],
-      ['Diya Shah', '20/08/2013', '12', 'Female', '7th, Valley School', 'Intermediate', 'Intermediate', '01/02/2026', 'Active', 'Ravi Shah', '9123456780', '9123456780', '', '', '', '', '', '', 'Yes', '', '', '', '1150', '1080', '990', '100%', '4', '4', 'Valley School', '7th', 'Coach Meera'],
+      ['Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status', 'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone', 'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'This Month Attended', 'Notes', 'School', 'Standard', 'TNSCA ID', 'FIDE ID', 'AICF ID', 'Classical Rating', 'Rapid Rating', 'Blitz Rating', 'Coach Name'],
+      ['Aarav Kumar', '10/05/2014', '11', 'Male', '6th, Sunrise School', 'Beginner A', 'Beginner', '01/01/2026', 'Active', 'Priya Kumar', '9876543210', '9876543210', 'priya@example.com', '', '', '', '', 'Chennai', 'Yes', '3', '', 'Sunrise School', '6th', 'TN100', '1234567', '', '1200', '1100', '1000', 'Coach Meera'],
+      ['Diya Shah', '20/08/2013', '12', 'Female', '7th, Valley School', 'Intermediate', 'Intermediate', '01/02/2026', 'Active', 'Ravi Shah', '9123456780', '9123456780', '', '', '', '', '', '', 'Yes', '4', '', 'Valley School', '7th', '', '', '', '1150', '1080', '990', 'Coach Meera'],
     ],
     'Weekend Attendance': [
       ['Student Name', 'Batch', '2026-08-02'],
@@ -188,8 +195,8 @@ function defaultWorkbook(): Workbook {
       ['RCP-002', 'Diya Shah', 'Intermediate', '2026-08', 'Monthly Tuition', '2,000', '2,000', '0', '05/08/2026', '02/08/2026', 'Cash', 'Paid', '', ''],
     ],
     'Van Allotment': [
-      ['Student Name', 'Route', 'Pickup Point', 'Driver', 'Phone', 'Status'],
-      ['Aarav Kumar', 'Route A', 'Central Park', 'Kumar', '9000000000', 'Active'],
+      ['Van ID', 'Student Name', 'Batch', 'Parent', 'Pickup Location', 'Pickup Time', 'Drop Location', 'Drop Time', 'Driver Name', 'Driver Phone', 'Van Fee', 'Fee Status', 'Notes'],
+      ['VAN-001', 'Aarav Kumar', 'Beginner A', 'Priya Kumar', 'Central Park', '08:00', 'Central Park', '17:00', 'Kumar', '9000000000', '1,500', 'Paid', ''],
     ],
     'Monthly Metrics': [
       ['Student Name', 'Month', 'Batch', 'Attendance %', 'Fees Paid', 'Tournaments', 'Rating Change', 'Notes', 'Coach', 'Overall Rating'],

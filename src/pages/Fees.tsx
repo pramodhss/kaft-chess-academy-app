@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { SHEET_ID, TABS } from '../config';
 import { parseSheetNumber } from '../lib/values';
 import { calculateFeeBalance, calculateRosterPayment, normalizeFeeMonth } from '../lib/feeRules';
+import { dateValidationError, moneyValidationError } from '../lib/validation';
 import type { FeeDraft } from '../lib/feeRules';
 import { useCoachName } from '../hooks/useCoachName';
 import type { FeeEntry } from '../types';
@@ -21,10 +22,47 @@ const EMPTY_F: FeeForm = { studentName:'', feeMonth:'', feeType:'Monthly Tuition
   dueDate:'', paymentDate:'', reference:'', notes:'' };
 
 function rosterValidationError(amountDue: number, amountPaid: number): string {
+  if (!Number.isFinite(amountDue) || !Number.isFinite(amountPaid)) return 'Enter valid numeric fee amounts.';
+  if (amountDue > 10_000_000 || amountPaid > 10_000_000) return 'Fee amounts cannot exceed ₹1,00,00,000.';
   if (amountPaid < 0 || (amountDue > 0 && amountPaid > amountDue)) {
     return `Paid amount must be between ₹0 and ₹${amountDue}.`;
   }
   if (amountDue <= 0) return 'Enter a monthly fee amount greater than zero.';
+  return '';
+}
+
+function feeAmountValidationError(form: FeeForm): string {
+  const dueError = moneyValidationError(form.amountDue, 'Amount due', true);
+  if (dueError) return dueError;
+  const paidError = moneyValidationError(form.amountPaid, 'Amount paid');
+  if (paidError) return paidError;
+  const amountDue = Number(form.amountDue);
+  const amountPaid = form.amountPaid.trim() ? Number(form.amountPaid) : 0;
+  if (amountDue <= 0) return 'Amount due must be greater than zero.';
+  if (amountDue > 10_000_000 || amountPaid > 10_000_000) return 'Fee amounts cannot exceed ₹1,00,00,000.';
+  if (amountPaid > amountDue) return 'Amount paid cannot be greater than amount due.';
+  return paymentStatusValidationError(form.paymentStatus, amountDue, amountPaid);
+}
+
+function paymentStatusValidationError(status: string, amountDue: number, amountPaid: number): string {
+  if (status === 'Paid' && amountPaid !== amountDue) return 'Paid status requires the full amount to be paid.';
+  if (status === 'Partial' && (amountPaid <= 0 || amountPaid >= amountDue)) return 'Partial status requires an amount between zero and the amount due.';
+  if (status === 'Pending' && amountPaid !== 0) return 'Pending status requires amount paid to be zero.';
+  return '';
+}
+
+function feeFormValidationError(form: FeeForm): string {
+  if (!form.studentName.trim()) return 'Select a student.';
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(form.feeMonth)) return 'Select a valid fee month.';
+  if (!form.feeType.trim()) return 'Select a fee type.';
+  const fieldError = [
+    feeAmountValidationError(form),
+    dateValidationError(form.dueDate, 'Due date'),
+    dateValidationError(form.paymentDate, 'Payment date'),
+  ].find(Boolean);
+  if (fieldError) return fieldError;
+  if (form.reference.trim().length > 100) return 'Reference must be 100 characters or fewer.';
+  if (form.notes.trim().length > 500) return 'Notes must be 500 characters or fewer.';
   return '';
 }
 
@@ -170,7 +208,9 @@ export function Fees() {
   useEffect(() => { load(); }, [token]);
 
   const handleAdd = async () => {
-    if (!token||!form.studentName||!form.amountDue) return;
+    if (!token) return;
+    const validationError = feeFormValidationError(form);
+    if (validationError) { toast.error(validationError); return; }
     const amountDue = parseSheetNumber(form.amountDue);
     const amountPaid = parseSheetNumber(form.amountPaid);
     if (amountDue <= 0) { toast.error('Amount due must be greater than zero.'); return; }
@@ -218,7 +258,9 @@ export function Fees() {
   };
 
   const handleEdit = async () => {
-    if (!token||!editTarget||!form.studentName) return;
+    if (!token||!editTarget) return;
+    const validationError = feeFormValidationError(form);
+    if (validationError) { toast.error(validationError); return; }
     const amountDue = parseSheetNumber(form.amountDue);
     const amountPaid = parseSheetNumber(form.amountPaid);
     if (amountDue <= 0) { toast.error('Amount due must be greater than zero.'); return; }
@@ -562,14 +604,16 @@ export function Fees() {
         </div>}
       </div>
 
-      {showAdd&&<FeeModal title="Add Payment" onClose={()=>setShowAdd(false)} form={form} setForm={setForm} students={students} onSave={handleAdd} saving={saving} disabled={!form.studentName||!form.amountDue} coachName={coachName}/>}
-      {editTarget&&<FeeModal title="Edit Payment" onClose={()=>setEditTarget(null)} form={form} setForm={setForm} students={students} onSave={handleEdit} saving={saving} disabled={!form.studentName} coachName={coachName}/>}
+      {showAdd && <FeeModal title="Add Payment" onClose={() => setShowAdd(false)} form={form} setForm={setForm}
+        students={students} onSave={handleAdd} saving={saving} coachName={coachName} />}
+      {editTarget && <FeeModal title="Edit Payment" onClose={() => setEditTarget(null)} form={form} setForm={setForm}
+        students={students} onSave={handleEdit} saving={saving} coachName={coachName} />}
     </Layout>
   );
 }
 
-function FeeModal({title,onClose,form,setForm,students,onSave,saving,disabled,coachName}:
-  Readonly<{title:string;onClose:()=>void;form:FeeForm;setForm:(f:FeeForm)=>void;students:string[];onSave:()=>void;saving:boolean;disabled:boolean;coachName:string}>) {
+function FeeModal({title,onClose,form,setForm,students,onSave,saving,coachName}:
+  Readonly<{title:string;onClose:()=>void;form:FeeForm;setForm:(f:FeeForm)=>void;students:string[];onSave:()=>void;saving:boolean;coachName:string}>) {
   const u=(k:keyof FeeForm)=>(e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement>)=>setForm({...form,[k]:e.target.value});
   const isEdit = title.startsWith('Edit');
   const buttonLabel = paymentButtonLabel(isEdit, saving);
@@ -586,8 +630,8 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,disabled,co
           <F label="Fee Month"><input type="month" value={form.feeMonth} onChange={u('feeMonth')} className="input"/></F>
           <F label="Fee Type"><select value={form.feeType} onChange={u('feeType')} className="input">{['Monthly Tuition','Admission','Tournament','Van','Materials','Other'].map(o=><option key={o}>{o}</option>)}</select></F>
           <div className="grid grid-cols-2 gap-2">
-            <F label="Amount Due *"><input type="number" value={form.amountDue} onChange={u('amountDue')} className="input" placeholder="₹"/></F>
-            <F label="Amount Paid"><input type="number" value={form.amountPaid} onChange={u('amountPaid')} className="input" placeholder="₹"/></F>
+            <F label="Amount Due *"><input type="number" min="0.01" max="10000000" step="0.01" value={form.amountDue} onChange={u('amountDue')} className="input" placeholder="₹"/></F>
+            <F label="Amount Paid"><input type="number" min="0" max="10000000" step="0.01" value={form.amountPaid} onChange={u('amountPaid')} className="input" placeholder="₹"/></F>
           </div>
           <F label="Payment Method"><select value={form.paymentMethod} onChange={u('paymentMethod')} className="input">{['Cash','UPI','Bank Transfer','Card','Cheque'].map(o=><option key={o}>{o}</option>)}</select></F>
           <F label="Payment Status"><select value={form.paymentStatus} onChange={u('paymentStatus')} className="input">{['Paid','Partial','Pending','Overdue','Waived'].map(o=><option key={o}>{o}</option>)}</select></F>
@@ -595,10 +639,11 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,disabled,co
             <F label="Due Date"><input type="date" value={form.dueDate} onChange={u('dueDate')} className="input"/></F>
             <F label="Payment Date"><input type="date" value={form.paymentDate} onChange={u('paymentDate')} className="input"/></F>
           </div>
-          <F label="Reference / Receipt No."><input value={form.reference} onChange={u('reference')} className="input"/></F>
+          <F label="Reference / Receipt No."><input maxLength={100} value={form.reference} onChange={u('reference')} className="input"/></F>
           <p className="text-xs text-gray-400">Will be tracked to: <strong>{coachName}</strong></p>
+          {feeFormValidationError(form) && <p role="alert" className="text-xs text-red-600">{feeFormValidationError(form)}</p>}
         </div>
-        <button type="button" onClick={onSave} disabled={saving||disabled} className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
+        <button type="button" onClick={onSave} disabled={saving} className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
           <span className="inline-flex items-center justify-center gap-2">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {buttonLabel}

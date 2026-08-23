@@ -17,14 +17,32 @@ function nextWeekendDate(): Date {
   return d;
 }
 
+function parseStudentDate(value: string): Date | null {
+  const trimmed = value.trim();
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
+  const local = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
+  let parts: number[] | null = null;
+  if (iso) parts = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (local) parts = [Number(local[3]), Number(local[2]), Number(local[1])];
+  if (!parts) return null;
+  const [year, month, day] = parts;
+  const parsed = new Date(year, month - 1, day);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day ? parsed : null;
+}
+
+function nonNegativeSheetNumber(value: string): number {
+  const parsed = parseSheetNumber(value);
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+}
+
 function upcomingBirthdays(studentRows: string[][]): { name: string; dob: string; daysLeft: number }[] {
   const today = new Date(); today.setHours(0,0,0,0);
   const result: { name: string; dob: string; daysLeft: number }[] = [];
   studentRows.slice(1).forEach(r => {
     const name = r[0]?.trim(); const dobStr = r[1]?.trim();
     if (!name || !dobStr) return;
-    const dob = new Date(dobStr);
-    if (Number.isNaN(dob.getTime())) return;
+    const dob = parseStudentDate(dobStr);
+    if (!dob) return;
     const thisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
     if (thisYear < today) thisYear.setFullYear(today.getFullYear() + 1);
     const daysLeft = Math.round((thisYear.getTime() - today.getTime()) / 86400000);
@@ -63,8 +81,8 @@ export function Dashboard() {
         const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
         let collected = 0, outstanding = 0;
         feeRows.slice(1).forEach(r => {
-          collected   += parseSheetNumber(r[5]);
-          outstanding += parseSheetNumber(r[6]);
+          collected   += nonNegativeSheetNumber(r[5] ?? '');
+          outstanding += nonNegativeSheetNumber(r[6] ?? '');
         });
         setStats({ total: data.length, active, collected, outstanding });
         setBirthdays(upcomingBirthdays(studentRows));

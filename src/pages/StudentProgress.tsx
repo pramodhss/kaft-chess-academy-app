@@ -32,8 +32,15 @@ interface MonthData {
   overall: number;
 }
 
+function attendanceBadge(attendance: number): string {
+  if (attendance >= 75) return 'badge-green';
+  if (attendance >= 50) return 'badge-amber';
+  if (attendance > 0) return 'badge-red';
+  return 'badge-gray';
+}
+
 // Lightweight SVG line chart — zero dependencies
-function LineChart({ data, color, label, max: maxProp }: { data: number[]; color: string; label: string; max?: number }) {
+function LineChart({ data, color, label, max: maxProp }: Readonly<{ data: number[]; color: string; label: string; max?: number }>) {
   const nonZero = data.filter(v => v > 0);
   if (nonZero.length === 0) return <p className="text-xs text-gray-400 text-center py-2">No data yet</p>;
   const W = 280, H = 60, PAD = 8;
@@ -59,8 +66,8 @@ function LineChart({ data, color, label, max: maxProp }: { data: number[]; color
         </defs>
         <path d={area} fill={`url(#grad-${label})`}/>
         <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        {pts.map((p, i) => (
-          <g key={i}>
+        {pts.map(p => (
+          <g key={`${p.x}-${p.y}-${p.v}`}>
             <circle cx={p.x} cy={p.y} r="4" fill={color} stroke="white" strokeWidth="1.5"/>
             {p.v > 0 && <text x={p.x} y={p.y - 7} textAnchor="middle" fontSize="9" fill={color} fontWeight="bold">{p.v}</text>}
           </g>
@@ -103,8 +110,8 @@ export function StudentProgress() {
         const met = metricsRows.slice(1).find(row => row[0]?.trim() === name && matchesMonth(row[1], month));
         return {
           label: month.label,
-          attendance: att ? Math.round(parseSheetPercentage(att[4]) * 100) : 0,
-          overall: met ? parseSheetNumber(met[9]) : 0,
+          attendance: att ? Math.min(100, Math.max(0, Math.round(parseSheetPercentage(att[4]) * 100))) : 0,
+          overall: met ? Math.min(5, Math.max(0, parseSheetNumber(met[9]))) : 0,
         };
       });
       setData(monthData);
@@ -117,11 +124,11 @@ export function StudentProgress() {
       <div className="p-4 space-y-4">
         {/* Student selector */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <label className="text-xs font-medium text-gray-500 mb-2 block">Select Student</label>
+          <label htmlFor="progress-student" className="text-xs font-medium text-gray-500 mb-2 block">Select Student</label>
           {loadingStudents ? (
             <p className="text-sm text-gray-400">Loading students…</p>
           ) : (
-            <select value={selected} onChange={e => { setSelected(e.target.value); load(e.target.value); }}
+            <select id="progress-student" value={selected} onChange={e => { setSelected(e.target.value); load(e.target.value); }}
               className="input w-full">
               <option value="">Choose a student…</option>
               {students.map(s => <option key={s}>{s}</option>)}
@@ -165,7 +172,7 @@ export function StudentProgress() {
                     <tr key={d.label} className="border-t border-gray-50">
                       <td className="px-4 py-2 font-medium text-gray-900">{d.label}</td>
                       <td className="px-2 py-2 text-center">
-                        <span className={`badge ${d.attendance>=75?'badge-green':d.attendance>=50?'badge-amber':d.attendance>0?'badge-red':'badge-gray'}`}>
+                        <span className={`badge ${attendanceBadge(d.attendance)}`}>
                           {d.attendance > 0 ? `${d.attendance}%` : '—'}
                         </span>
                       </td>

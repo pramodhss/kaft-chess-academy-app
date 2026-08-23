@@ -8,6 +8,13 @@ import { isStudentNameReserved, syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { DEFAULT_BATCHES, DEFAULT_LEVELS, loadStudentOptions } from '../lib/studentOptions';
+import {
+  dateValidationError,
+  digitsOnly,
+  emailValidationError,
+  integerRangeValidationError,
+  phoneValidationError,
+} from '../lib/validation';
 import { SHEET_ID, TABS } from '../config';
 import type { Student } from '../types';
 
@@ -34,6 +41,11 @@ function getCategory(age: string): string {
 
 function normalizedName(value: string): string {
   return value.trim().toLocaleLowerCase();
+}
+
+function phoneForSheet(value: string): string {
+  const trimmed = value.trim();
+  return trimmed ? `'${trimmed}` : '';
 }
 
 type FormData = {
@@ -142,9 +154,9 @@ function studentRowValues(form: FormData, row: number) {
     `=IF(B${row}="","",DATEDIF(B${row},TODAY(),"Y"))`,
     form.gender, form.grade, form.batch, form.level,
     form.joiningDate, form.status,
-    form.parent1Name, form.parent1Phone, form.parent1WhatsApp, form.parent1Email,
-    form.parent2Name, form.parent2Phone,
-    form.emergencyContact, form.emergencyPhone,
+    form.parent1Name, phoneForSheet(form.parent1Phone), phoneForSheet(form.parent1WhatsApp), form.parent1Email,
+    form.parent2Name, phoneForSheet(form.parent2Phone),
+    form.emergencyContact, phoneForSheet(form.emergencyPhone),
     form.address, form.photoConsent,
     `=SUMIFS('Monthly Attendance'!$C:$C,'Monthly Attendance'!$A:$A,A${row},'Monthly Attendance'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))`,
     form.notes, form.school, form.standard,
@@ -156,11 +168,33 @@ function studentRowValues(form: FormData, row: number) {
 
 function formValidationError(form: FormData) {
   if (!form.name.trim()) return 'Student name is required.';
-  if (!form.dob || Number.isNaN(new Date(form.dob).getTime())) return 'A valid date of birth is required so age can be calculated.';
+  if (form.name.trim().length < 2 || form.name.trim().length > 100) return 'Student name must contain 2 to 100 characters.';
+  if (!form.dob) return 'Date of birth is required so age can be calculated.';
+  const dobError = dateValidationError(form.dob, 'Date of birth');
+  if (dobError) return dobError;
   if (new Date(form.dob).getTime() > Date.now()) return 'Date of birth cannot be in the future.';
   if (!form.parent1Name.trim()) return 'At least one parent or guardian name is required.';
-  const phoneDigits = form.parent1Phone.replace(/\D/g, '');
-  if (phoneDigits.length < 7 || phoneDigits.length > 15) return 'A valid parent or guardian phone number is required.';
+  if (form.parent1Name.trim().length > 100) return 'Parent or guardian name must be 100 characters or fewer.';
+  const phoneErrors = [
+    phoneValidationError(form.parent1Phone, 'Parent or guardian phone', true),
+    phoneValidationError(form.parent1WhatsApp, 'WhatsApp number'),
+    phoneValidationError(form.parent2Phone, 'Parent 2 phone'),
+    phoneValidationError(form.emergencyPhone, 'Emergency phone'),
+  ];
+  const phoneError = phoneErrors.find(Boolean);
+  if (phoneError) return phoneError;
+  const emailError = emailValidationError(form.parent1Email, 'Parent email');
+  if (emailError) return emailError;
+  const ratingErrors = [
+    integerRangeValidationError(form.ratingClassical, 'Classical rating', 0, 4000),
+    integerRangeValidationError(form.ratingRapid, 'Rapid rating', 0, 4000),
+    integerRangeValidationError(form.ratingBlitz, 'Blitz rating', 0, 4000),
+  ];
+  const ratingError = ratingErrors.find(Boolean);
+  if (ratingError) return ratingError;
+  const joiningDateError = dateValidationError(form.joiningDate, 'Joining date');
+  if (joiningDateError) return joiningDateError;
+  if (form.joiningDate && form.joiningDate < form.dob) return 'Joining date cannot be before the student’s date of birth.';
   return '';
 }
 
@@ -336,9 +370,9 @@ export function Students() {
       rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`, [[
         form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
         form.gender, form.grade, form.batch, form.level,
-        form.joiningDate, form.status, form.parent1Name, form.parent1Phone,
-        form.parent1WhatsApp, form.parent1Email, form.parent2Name, form.parent2Phone,
-        form.emergencyContact, form.emergencyPhone, form.address, form.photoConsent,
+        form.joiningDate, form.status, form.parent1Name, phoneForSheet(form.parent1Phone),
+        phoneForSheet(form.parent1WhatsApp), form.parent1Email, form.parent2Name, phoneForSheet(form.parent2Phone),
+        form.emergencyContact, phoneForSheet(form.emergencyPhone), form.address, form.photoConsent,
         '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
         form.notes,
         form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
@@ -473,7 +507,8 @@ export function Students() {
           <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
-          <button type="button" onClick={handleEdit} disabled={saving || Boolean(formValidationError(form))}
+          {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
+          <button type="button" onClick={handleEdit} disabled={saving}
             className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving ? 'Saving changes…' : 'Save Changes'}
@@ -645,7 +680,8 @@ export function Students() {
           <div className="max-h-[65vh] overflow-y-auto pr-1">
             <StudentForm form={form} setForm={setForm} batches={batches} levels={levels}/>
           </div>
-          <button type="button" onClick={handleAdd} disabled={saving || Boolean(formValidationError(form))}
+          {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mt-3">{formValidationError(form)}</p>}
+          <button type="button" onClick={handleAdd} disabled={saving}
             className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving?'Adding student…':'Add Student'}
@@ -664,6 +700,8 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
 }>) {
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
+  const phone = (key: 'parent1Phone' | 'parent1WhatsApp' | 'parent2Phone' | 'emergencyPhone') =>
+    (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: digitsOnly(event.target.value).slice(0, 15) });
   
   // Compute auto values from DOB/age
   const dobDate = form.dob ? new Date(form.dob) : null;
@@ -676,7 +714,7 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
     <div className="space-y-4">
       {/* Basic */}
       <Section title="Personal Details">
-        <Field label="Full Name *"><input required value={form.name} onChange={f('name')} className="input"/></Field>
+        <Field label="Full Name *"><input required maxLength={100} value={form.name} onChange={f('name')} className="input"/></Field>
         <Field label="Date of Birth *">
           <input required type="date" value={form.dob} onChange={f('dob')} className="input"/>
           {computedAge !== null && (
@@ -724,12 +762,12 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
             {levels.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
-        <Field label="Assigned Coach"><input value={form.coachName} onChange={f('coachName')} className="input" placeholder="Coach name"/></Field>
+        <Field label="Assigned Coach"><input maxLength={100} value={form.coachName} onChange={f('coachName')} className="input" placeholder="Coach name"/></Field>
         <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
         <div className="grid grid-cols-3 gap-2">
-          <Field label="Classical Rating"><input type="number" value={form.ratingClassical} onChange={f('ratingClassical')} className="input" placeholder="e.g. 1200"/></Field>
-          <Field label="Rapid Rating"><input type="number" value={form.ratingRapid} onChange={f('ratingRapid')} className="input" placeholder="e.g. 1100"/></Field>
-          <Field label="Blitz Rating"><input type="number" value={form.ratingBlitz} onChange={f('ratingBlitz')} className="input" placeholder="e.g. 950"/></Field>
+          <Field label="Classical Rating"><input type="number" min="0" max="4000" step="1" value={form.ratingClassical} onChange={f('ratingClassical')} className="input" placeholder="e.g. 1200"/></Field>
+          <Field label="Rapid Rating"><input type="number" min="0" max="4000" step="1" value={form.ratingRapid} onChange={f('ratingRapid')} className="input" placeholder="e.g. 1100"/></Field>
+          <Field label="Blitz Rating"><input type="number" min="0" max="4000" step="1" value={form.ratingBlitz} onChange={f('ratingBlitz')} className="input" placeholder="e.g. 950"/></Field>
         </div>
         <Field label="TNSCA ID"><input value={form.tnscaId} onChange={f('tnscaId')} className="input" placeholder="TNSCA registration number"/></Field>
         <Field label="FIDE ID"><input value={form.fideId} onChange={f('fideId')} className="input" placeholder="FIDE registration ID"/></Field>
@@ -738,17 +776,17 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
 
       {/* Parents */}
       <Section title="Parent / Guardian">
-        <Field label="Parent / Guardian Name *"><input required value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
-        <Field label="Phone *"><input required type="tel" value={form.parent1Phone} onChange={f('parent1Phone')} className="input"/></Field>
-        <Field label="WhatsApp"><input type="tel" value={form.parent1WhatsApp} onChange={f('parent1WhatsApp')} className="input"/></Field>
-        <Field label="Email"><input type="email" value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
-        <Field label="Parent 2 Name"><input value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
-        <Field label="Parent 2 Phone"><input type="tel" value={form.parent2Phone} onChange={f('parent2Phone')} className="input"/></Field>
+        <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
+        <Field label="Phone *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={phone('parent1Phone')} className="input"/></Field>
+        <Field label="WhatsApp"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1WhatsApp} onChange={phone('parent1WhatsApp')} className="input"/></Field>
+        <Field label="Email"><input type="email" maxLength={254} value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
+        <Field label="Parent 2 Name"><input maxLength={100} value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
+        <Field label="Parent 2 Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent2Phone} onChange={phone('parent2Phone')} className="input"/></Field>
       </Section>
 
       <Section title="Emergency Contact">
-        <Field label="Name"><input value={form.emergencyContact} onChange={f('emergencyContact')} className="input"/></Field>
-        <Field label="Phone"><input type="tel" value={form.emergencyPhone} onChange={f('emergencyPhone')} className="input"/></Field>
+        <Field label="Name"><input maxLength={100} value={form.emergencyContact} onChange={f('emergencyContact')} className="input"/></Field>
+        <Field label="Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.emergencyPhone} onChange={phone('emergencyPhone')} className="input"/></Field>
       </Section>
 
       <Field label="Home Address"><input value={form.address} onChange={f('address')} className="input"/></Field>

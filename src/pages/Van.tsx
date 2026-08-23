@@ -4,7 +4,9 @@ import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { clearSheetRange, readSheet } from '../lib/sheets';
+import { clearSheetRange, readSheet, readSheetLive } from '../lib/sheets';
+import { parseSheetNumber } from '../lib/values';
+import { phoneValidationError } from '../lib/validation';
 import { SHEET_ID, TABS } from '../config';
 import type { VanEntry } from '../types';
 
@@ -15,6 +17,14 @@ function rowToVan(row: string[], idx: number): VanEntry {
     dropTime: row[7]??'', driverName: row[8]??'', driverPhone: row[9]??'',
     vanFee: row[10]??'', vanFeeStatus: row[11]??'', notes: row[12]??'', rowIndex: idx + 2,
   };
+}
+
+function vanEntryValidationError(entry: VanEntry): string {
+  if (!entry.studentName.trim()) return 'Student name is missing.';
+  const phoneError = phoneValidationError(entry.driverPhone, 'Driver phone');
+  if (phoneError) return phoneError;
+  if (entry.vanFee.trim() && parseSheetNumber(entry.vanFee) <= 0) return 'Van fee must be a positive numeric amount.';
+  return '';
 }
 
 export function Van() {
@@ -47,7 +57,7 @@ export function Van() {
     if (!token || !window.confirm(`Remove ${entry.studentName}'s van allotment? This cannot be undone.`)) return;
     setDeleting(entry.rowIndex);
     try {
-      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.VAN}'!A${entry.rowIndex}:M${entry.rowIndex}`);
+      const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.VAN}'!A${entry.rowIndex}:M${entry.rowIndex}`);
       const currentEntry = rowToVan(currentRows[0] ?? [], entry.rowIndex - 2);
       if (JSON.stringify(currentEntry) !== JSON.stringify(entry)) {
         toast.info('This van allotment was changed on another device. Reload before removing it.');
@@ -70,8 +80,9 @@ export function Van() {
           placeholder="Search by student or van ID…"
           className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-chess-blue" />
 
-        {filtered.map(e => (
-          <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        {filtered.map(e => {
+          const validationError = vanEntryValidationError(e);
+          return <div key={e.rowIndex} className={`bg-white rounded-xl p-4 shadow-sm border ${validationError ? 'border-red-200' : 'border-gray-100'}`}>
             <div className="flex items-start justify-between">
               <div>
                 <p className="font-semibold text-gray-900">{e.studentName}</p>
@@ -83,8 +94,10 @@ export function Van() {
               {e.pickupLocation && <span>📍 {e.pickupLocation} {e.pickupTime && `@ ${e.pickupTime}`}</span>}
               {e.dropLocation && <span>🏁 {e.dropLocation} {e.dropTime && `@ ${e.dropTime}`}</span>}
               {e.driverName && <span>🚗 {e.driverName}</span>}
-              {e.vanFee && <span>💰 ₹{e.vanFee}/mo</span>}
+              {e.driverPhone && <a href={`tel:${e.driverPhone}`} className="text-chess-blue underline">☎ {e.driverPhone}</a>}
+              {e.vanFee && <span>💰 ₹{parseSheetNumber(e.vanFee).toLocaleString('en-IN')}/mo</span>}
             </div>
+            {validationError && <p role="alert" className="mt-2 text-xs text-red-600">Check Sheet data: {validationError}</p>}
             <div className="mt-3 flex justify-end">
               <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
                 aria-label={`Remove van allotment for ${e.studentName}`} title="Remove van allotment"
@@ -92,8 +105,8 @@ export function Van() {
                 <Trash2 size={17} aria-hidden="true" />
               </button>
             </div>
-          </div>
-        ))}
+          </div>;
+        })}
       </div>
     </Layout>
   );
