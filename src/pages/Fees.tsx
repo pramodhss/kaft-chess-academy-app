@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,9 @@ import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange } fro
 import { useToast } from '../context/ToastContext';
 import { SHEET_ID, TABS } from '../config';
 import { parseSheetNumber } from '../lib/values';
+import { calculateFeeBalance, calculateRosterPayment, normalizeFeeMonth } from '../lib/feeRules';
+import type { FeeDraft } from '../lib/feeRules';
+import { useCoachName } from '../hooks/useCoachName';
 import type { FeeEntry } from '../types';
 
 type FeeForm = { studentName:string; feeMonth:string; feeType:string; amountDue:string;
@@ -17,18 +20,11 @@ const EMPTY_F: FeeForm = { studentName:'', feeMonth:'', feeType:'Monthly Tuition
   amountDue:'', amountPaid:'', paymentMethod:'UPI', paymentStatus:'Pending',
   dueDate:'', paymentDate:'', reference:'', notes:'' };
 
-type FeeDraft = { paid: boolean; amount: string };
-
-function rosterAmountPaid(draft: FeeDraft, amountDue: number): number {
-  if (!draft.paid) return parseSheetNumber(draft.amount);
-  return parseSheetNumber(draft.amount) || amountDue;
-}
-
-function rosterValidationError(existing: FeeEntry | undefined, amountDue: number, amountPaid: number): string {
+function rosterValidationError(amountDue: number, amountPaid: number): string {
   if (amountPaid < 0 || (amountDue > 0 && amountPaid > amountDue)) {
     return `Paid amount must be between ₹0 and ₹${amountDue}.`;
   }
-  if (!existing && amountDue <= 0) return 'Add this student\'s monthly fee amount first.';
+  if (amountDue <= 0) return 'Enter a monthly fee amount greater than zero.';
   return '';
 }
 
@@ -46,9 +42,16 @@ function newReceiptNumber(): string {
   return `RCT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
-function paymentStatus(amountPaid: number, amountDue: number): string {
-  if (amountPaid >= amountDue) return 'Paid';
-  return amountPaid > 0 ? 'Partial' : 'Pending';
+function paymentStatusBadge(status: string): string {
+  if (status === 'Paid') return 'badge-green';
+  if (status === 'Partial') return 'badge-amber';
+  if (status === 'Overdue') return 'badge-red';
+  if (status === 'Waived') return 'badge-blue';
+  return 'badge-gray';
+}
+
+function formatCurrency(value: number | string): string {
+  return `₹ ${parseSheetNumber(value).toLocaleString('en-IN')}`;
 }
 
 function normalized(value: string): string {
@@ -57,7 +60,7 @@ function normalized(value: string): string {
 
 function sameFeeIdentity(fee: FeeEntry, studentName: string, feeMonth: string, feeType: string): boolean {
   return normalized(fee.studentName) === normalized(studentName)
-    && normalized(fee.feeMonth) === normalized(feeMonth)
+    && normalizeFeeMonth(fee.feeMonth) === normalizeFeeMonth(feeMonth)
     && normalized(fee.feeType) === normalized(feeType);
 }
 
@@ -89,14 +92,38 @@ function rowToFee(row: string[], idx: number): FeeEntry {
   };
 }
 function feeToForm(f: FeeEntry): FeeForm {
-  return { studentName:f.studentName, feeMonth:f.feeMonth, feeType:f.feeType,
-    amountDue:f.amountDue, amountPaid:f.amountPaid, paymentMethod:f.paymentMethod,
+  return { studentName:f.studentName, feeMonth:normalizeFeeMonth(f.feeMonth), feeType:f.feeType,
+    amountDue:String(parseSheetNumber(f.amountDue)), amountPaid:String(parseSheetNumber(f.amountPaid)), paymentMethod:f.paymentMethod,
     paymentStatus:f.paymentStatus, dueDate:dateInputValue(f.dueDate), paymentDate:dateInputValue(f.paymentDate),
     reference:f.reference, notes:f.notes };
 }
 
+function canonicalFee(fee: FeeEntry) {
+  return {
+    receiptNo: fee.receiptNo.trim(),
+    studentName: normalized(fee.studentName),
+    batch: normalized(fee.batch),
+    feeMonth: normalizeFeeMonth(fee.feeMonth),
+    feeType: normalized(fee.feeType),
+    amountDue: parseSheetNumber(fee.amountDue),
+    amountPaid: parseSheetNumber(fee.amountPaid),
+    balance: parseSheetNumber(fee.balance),
+    dueDate: dateInputValue(fee.dueDate),
+    paymentDate: dateInputValue(fee.paymentDate),
+    paymentMethod: normalized(fee.paymentMethod),
+    paymentStatus: normalized(fee.paymentStatus),
+    reference: fee.reference.trim(),
+    notes: fee.notes.trim(),
+  };
+}
+
+function sameFeeRecord(left: FeeEntry, right: FeeEntry): boolean {
+  return JSON.stringify(canonicalFee(left)) === JSON.stringify(canonicalFee(right));
+}
+
 export function Fees() {
   const { token, logout } = useAuth();
+  const { coachName: savedCoachName } = useCoachName();
   const [fees, setFees]           = useState<FeeEntry[]>([]);
   const [students, setStudents]   = useState<string[]>([]);
   const [batchMap, setBatchMap]   = useState<Map<string,string>>(new Map());
@@ -109,11 +136,11 @@ export function Fees() {
   const [deleting, setDeleting]   = useState<number|null>(null);
   const [feeSearch, setFeeSearch] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(localMonth);
-  const [batchFilter, setBatchFilter] = useState('All');
   const [drafts, setDrafts] = useState<Map<string, FeeDraft>>(new Map());
   const [rosterSaving, setRosterSaving] = useState('');
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const toast = useToast();
-  const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
+  const coachName = savedCoachName || 'Coach';
 
   const load = async () => {
     if (!token) return;
@@ -156,7 +183,7 @@ export function Fees() {
         return;
       }
       const receipt = newReceiptNumber();
-      const balance = amountDue - amountPaid;
+      const balance = calculateFeeBalance(amountDue, amountPaid, form.paymentStatus);
       const paymentDate = form.paymentDate || localIsoDate();
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
         receipt, form.studentName, batchMap.get(form.studentName) ?? '', form.feeMonth, form.feeType,
@@ -204,7 +231,7 @@ export function Fees() {
         readSheetLive(token, SHEET_ID, `'${tab}'!A:N`),
       ]);
       const currentFee = rowToFee(currentRows[0] ?? [], row - 2);
-      if (currentFee.receiptNo !== editTarget.receiptNo || JSON.stringify(feeToForm(currentFee)) !== JSON.stringify(feeToForm(editTarget))) {
+      if (!sameFeeRecord(currentFee, editTarget)) {
         toast.info('This payment was changed on another device. Reload Fees before editing again.');
         return;
       }
@@ -213,7 +240,7 @@ export function Fees() {
         toast.info('This fee already exists for the selected student, month, and fee type. Edit or remove the other entry first.');
         return;
       }
-      const balance = amountDue - amountPaid;
+      const balance = calculateFeeBalance(amountDue, amountPaid, form.paymentStatus);
       const savedNotes = `${form.notes} [edited by ${coachName}]`.trim();
       await batchWrite(token, SHEET_ID, [
         {range:`'${tab}'!B${row}`,value:form.studentName},
@@ -237,6 +264,7 @@ export function Fees() {
         paymentStatus: form.paymentStatus, reference: form.reference, notes: savedNotes,
       } : fee));
       setEditTarget(null);
+      setForm({...EMPTY_F});
       toast.success(`${form.studentName}'s payment details were updated.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
     finally { setSaving(false); }
@@ -249,7 +277,7 @@ export function Fees() {
       const tab = TABS.FEES;
       const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
       const currentFee = rowToFee(currentRows[0] ?? [], fee.rowIndex - 2);
-      if (currentFee.receiptNo !== fee.receiptNo || JSON.stringify(feeToForm(currentFee)) !== JSON.stringify(feeToForm(fee))) {
+      if (!sameFeeRecord(currentFee, fee)) {
         toast.info('This payment was changed on another device. Reload Fees before removing it.');
         return;
       }
@@ -262,16 +290,13 @@ export function Fees() {
 
   const monthlyByStudent = new Map<string, FeeEntry>();
   const selectedMonthlyFees = fees
-    .filter(fee => fee.feeType === 'Monthly Tuition' && fee.feeMonth === selectedMonth)
+    .filter(fee => fee.feeType === 'Monthly Tuition' && normalizeFeeMonth(fee.feeMonth) === selectedMonth)
     .sort((left, right) => left.rowIndex - right.rowIndex);
   selectedMonthlyFees.forEach(fee => monthlyByStudent.set(normalized(fee.studentName), fee));
   const duplicateMonthlyFees = selectedMonthlyFees.filter(fee => monthlyByStudent.get(normalized(fee.studentName)) !== fee);
 
-  const batches = Array.from(new Set(students.map(student => batchMap.get(student)).filter(Boolean) as string[]))
-    .sort((left, right) => left.localeCompare(right));
   const visibleStudents = students.filter(student =>
-    (batchFilter === 'All' || batchMap.get(student) === batchFilter)
-    && (!feeSearch || student.toLowerCase().includes(feeSearch.toLowerCase()))
+    !feeSearch || student.toLowerCase().includes(feeSearch.toLowerCase())
   );
 
   const knownAmountDue = (student: string): number => {
@@ -288,9 +313,11 @@ export function Fees() {
 
   const feeDraft = (student: string): FeeDraft => {
     const fee = monthlyByStudent.get(normalized(student));
+    const amountDue = fee ? String(parseSheetNumber(fee.amountDue)) : String(knownAmountDue(student) || '');
     return drafts.get(student) ?? {
       paid: fee?.paymentStatus === 'Paid' || fee?.paymentStatus === 'Waived',
-      amount: fee?.amountPaid || '',
+      amountDue,
+      amountPaid: fee ? String(parseSheetNumber(fee.amountPaid)) : '',
     };
   };
 
@@ -302,9 +329,10 @@ export function Fees() {
     if (!token) return;
     const existing = monthlyByStudent.get(normalized(student));
     const draft = feeDraft(student);
-    const due = existing ? parseSheetNumber(existing.amountDue) : knownAmountDue(student);
-    const amountPaid = rosterAmountPaid(draft, due);
-    const validationError = rosterValidationError(existing, due, amountPaid);
+    const due = parseSheetNumber(draft.amountDue);
+    const payment = calculateRosterPayment(existing, draft, due);
+    const { amountPaid } = payment;
+    const validationError = rosterValidationError(due, amountPaid);
     if (validationError) {
       toast.info(validationError.replace('this student', student));
       return;
@@ -313,18 +341,18 @@ export function Fees() {
     setRosterSaving(student);
     try {
       const paymentDate = amountPaid > 0 ? localIsoDate() : '';
-      const status = paymentStatus(amountPaid, due);
-      const balance = Math.max(due - amountPaid, 0);
+      const { status, balance } = payment;
       if (existing) {
         const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A${existing.rowIndex}:N${existing.rowIndex}`);
         const currentFee = rowToFee(currentRows[0] ?? [], existing.rowIndex - 2);
-        if (currentFee.receiptNo !== existing.receiptNo || JSON.stringify(feeToForm(currentFee)) !== JSON.stringify(feeToForm(existing))) {
+        if (!sameFeeRecord(currentFee, existing)) {
           toast.info('This payment changed on another device. Fees have been reloaded.');
           await load();
           return;
         }
         const note = `Roster updated by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`;
         await batchWrite(token, SHEET_ID, [
+          {range:`'${TABS.FEES}'!F${existing.rowIndex}`,value:due},
           {range:`'${TABS.FEES}'!G${existing.rowIndex}`,value:amountPaid},
           {range:`'${TABS.FEES}'!H${existing.rowIndex}`,value:balance},
           {range:`'${TABS.FEES}'!J${existing.rowIndex}`,value:paymentDate},
@@ -332,7 +360,7 @@ export function Fees() {
           {range:`'${TABS.FEES}'!N${existing.rowIndex}`,value:note},
         ]);
         setFees(current => current.map(fee => fee.rowIndex === existing.rowIndex
-          ? {...fee, amountPaid:String(amountPaid), balance:String(balance), paymentDate, paymentStatus:status, notes:note}
+          ? {...fee, amountDue:String(due), amountPaid:String(amountPaid), balance:String(balance), paymentDate, paymentStatus:status, notes:note}
           : fee));
       } else {
         const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`);
@@ -372,38 +400,33 @@ export function Fees() {
   const selectedFees = Array.from(monthlyByStudent.values());
   const totalCollected = selectedFees.reduce((sum, fee) => sum + parseSheetNumber(fee.amountPaid), 0);
   const totalOutstanding = selectedFees.reduce((sum, fee) => sum + Math.max(parseSheetNumber(fee.balance), 0), 0);
-  const otherFees = fees.filter(fee => fee.feeMonth === selectedMonth && fee.feeType !== 'Monthly Tuition');
+  const otherFees = fees.filter(fee => normalizeFeeMonth(fee.feeMonth) === selectedMonth && fee.feeType !== 'Monthly Tuition');
 
   if (loading) return <Layout title="Fees"><Spinner /></Layout>;
 
   return (
-    <Layout title="Fees" action={
-      <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
-        aria-label="Add fee" title="Add fee" className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
-        <Plus size={20} aria-hidden="true" />
-      </button>
-    }>
-      <div className="p-4 space-y-3">
+    <Layout title="Fees">
+      <div className="w-full max-w-4xl mx-auto p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
 
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <input type="month" value={selectedMonth} onChange={event=>{setSelectedMonth(event.target.value);setDrafts(new Map());}}
+        <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-2">
+          <input type="month" value={selectedMonth} onChange={event=>{setSelectedMonth(event.target.value);setDrafts(new Map());setExpandedStudent(null);}}
             aria-label="Fee month" className="input min-w-0" />
-          <select value={batchFilter} onChange={event=>setBatchFilter(event.target.value)} aria-label="Filter by batch"
-            className="input w-28">
-            <option>All</option>
-            {batches.map(batch=><option key={batch}>{batch}</option>)}
-          </select>
+          <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
+            aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
+            className="h-11 flex items-center justify-center rounded-lg bg-navy text-white">
+            <Plus size={19} aria-hidden="true" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-700 text-white rounded-lg p-3">
-            <p className="text-xs opacity-80">Collected</p>
-            <p className="text-xl font-bold">₹{totalCollected.toLocaleString('en-IN')}</p>
+        <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center divide-x divide-gray-200">
+          <div className="flex-1 pr-3">
+            <p className="text-[11px] font-medium text-gray-500">Collected</p>
+            <p className="text-lg font-bold text-green-700">{formatCurrency(totalCollected)}</p>
           </div>
-          <div className="bg-amber-600 text-white rounded-lg p-3">
-            <p className="text-xs opacity-80">Outstanding</p>
-            <p className="text-xl font-bold">₹{totalOutstanding.toLocaleString('en-IN')}</p>
+          <div className="flex-1 pl-3">
+            <p className="text-[11px] font-medium text-gray-500">Balance</p>
+            <p className="text-lg font-bold text-amber-700">{formatCurrency(totalOutstanding)}</p>
           </div>
         </div>
 
@@ -413,11 +436,8 @@ export function Fees() {
 
         <div className="flex items-end justify-between gap-3 pt-1">
           <div>
-            <h2 className="font-bold text-navy">Monthly tuition</h2>
-            <p className="text-xs text-gray-500">{visibleStudents.length} students</p>
-          </div>
-          <div className="grid grid-cols-[52px_82px] gap-2 text-[10px] font-semibold uppercase text-gray-400 text-center">
-            <span>Paid</span><span>Amount</span>
+            <h2 className="font-bold text-navy">Fee register</h2>
+            <p className="text-xs text-gray-500">{visibleStudents.length} students · Monthly tuition</p>
           </div>
         </div>
 
@@ -425,64 +445,80 @@ export function Fees() {
           <div className="text-center py-10 text-gray-400"><p>No students found.</p></div>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+        <div className="space-y-2">
         {visibleStudents.map(student => {
           const fee = monthlyByStudent.get(normalized(student));
           const draft = feeDraft(student);
-          const due = fee ? parseSheetNumber(fee.amountDue) : knownAmountDue(student);
           const changed = drafts.has(student);
-          const balance = Math.max(due - parseSheetNumber(draft.amount), 0);
+          const draftDue = parseSheetNumber(draft.amountDue);
+          const payment = calculateRosterPayment(fee, draft, draftDue);
+          const draftPaid = payment.amountPaid;
+          const status = draftDue > 0 ? payment.status : 'Pending';
+          const balance = payment.balance;
+          const expanded = expandedStudent === student;
           return (
-            <div key={student} className={`px-3 py-3 ${draft.paid?'bg-green-50/60':''}`}>
-              <div className="grid grid-cols-[minmax(0,1fr)_52px_82px] gap-2 items-center">
-                <div className="min-w-0">
-                  <p className="font-semibold text-sm text-gray-900 truncate">{student}</p>
-                  <p className="text-[11px] text-gray-500 truncate">{batchMap.get(student)||'No batch'} · Due ₹{due||'—'}</p>
-                </div>
-                <label className="flex justify-center">
-                  <input type="checkbox" checked={draft.paid} aria-label={`${student} paid`}
-                    onChange={event=>updateDraft(student, {
-                      paid:event.target.checked,
-                      amount:event.target.checked ? String(due || parseSheetNumber(draft.amount) || '') : '0',
-                    })}
-                    className="w-6 h-6 accent-green-600" />
-                </label>
-                <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
-                  <input type="number" min="0" value={draft.amount} aria-label={`${student} paid amount`}
-                    onChange={event=>{
-                      const amount=event.target.value;
-                      updateDraft(student,{paid:due>0&&parseSheetNumber(amount)>=due,amount});
-                    }}
-                    className="w-full h-9 pl-5 pr-1 rounded-lg border border-gray-200 text-sm text-right focus:outline-none focus:border-chess-blue" />
-                </div>
-              </div>
-              {(changed || fee) && (
-                <div className="flex items-center justify-between gap-2 mt-2 pl-0.5">
-                  <span className={`text-xs ${balance>0?'text-amber-700':'text-green-700'}`}>
-                    {balance>0?`Balance ₹${balance}`:'Paid in full'}
+            <div key={student} className={`bg-white border rounded-lg overflow-hidden ${draft.paid?'border-green-300':'border-gray-200'}`}>
+              <div className={`flex items-center gap-2 p-3 ${draft.paid?'bg-green-50/60':''}`}>
+                <button type="button" onClick={()=>setExpandedStudent(expanded ? null : student)}
+                  aria-expanded={expanded} aria-controls={`fee-details-${student}`}
+                  className="min-w-0 flex-1 text-left flex items-center gap-2">
+                  {expanded ? <ChevronDown size={18} className="shrink-0 text-gray-500" /> : <ChevronRight size={18} className="shrink-0 text-gray-500" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold text-sm text-gray-900 break-words block">{student}</span>
+                    <span className="text-xs text-gray-500 mt-0.5 break-words block">{batchMap.get(student)||'No batch'}</span>
+                    <span className="text-xs text-gray-600 mt-1 block">
+                      Due {formatCurrency(draftDue)} · Paid {formatCurrency(draftPaid)}
+                    </span>
                   </span>
-                  <div className="flex items-center gap-1">
-                  {changed && (
-                    <button type="button" onClick={()=>saveRosterFee(student)} disabled={rosterSaving===student}
-                      className="h-8 px-3 rounded-lg bg-navy text-white text-xs font-semibold disabled:opacity-50">
-                      {rosterSaving===student?'Saving…':'Save'}
-                    </button>
-                  )}
-                  {fee && <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}}
-                    aria-label={`Edit fee for ${student}`} title="Edit details"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100">
-                    <Pencil size={15} aria-hidden="true" />
-                  </button>
-                  }
+                </button>
+                <span className={`shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md ${paymentStatusBadge(status)}`}>{status}</span>
+                {fee && <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}}
+                  aria-label={`Edit fee for ${student}`} title="Edit fee details"
+                  className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100">
+                  <Pencil size={16} aria-hidden="true" />
+                </button>}
+              </div>
+
+              {expanded && <div id={`fee-details-${student}`} className="p-3 pt-2 border-t border-gray-100">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-[11px] font-medium text-gray-500 block mb-1">Fee amount</span>
+                  <div className="h-10 flex rounded-lg border border-gray-200 overflow-hidden focus-within:border-chess-blue">
+                    <span className="w-9 shrink-0 flex items-center justify-center border-r border-gray-200 text-sm text-gray-600">₹</span>
+                    <input type="number" min="0" value={draft.amountDue} aria-label={`${student} fee amount`}
+                      onChange={event=>updateDraft(student,{...draft,amountDue:event.target.value,
+                        paid:draft.paid || parseSheetNumber(draft.amountPaid)>=parseSheetNumber(event.target.value)})}
+                      className="min-w-0 flex-1 px-2 bg-transparent text-sm outline-none" /></div>
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-medium text-gray-500 block mb-1">Paid amount</span>
+                  <div className="h-10 flex rounded-lg border border-gray-200 overflow-hidden focus-within:border-chess-blue">
+                    <span className="w-9 shrink-0 flex items-center justify-center border-r border-gray-200 text-sm text-gray-600">₹</span>
+                    <input type="number" min="0" value={draftPaid} aria-label={`${student} paid amount`}
+                      onChange={event=>updateDraft(student,{...draft,amountPaid:event.target.value,paid:parseSheetNumber(event.target.value)>=parseSheetNumber(draft.amountDue)&&parseSheetNumber(draft.amountDue)>0})}
+                      className="min-w-0 flex-1 px-2 bg-transparent text-sm outline-none" /></div>
+                </label>
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-gray-100">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={draft.paid} aria-label={`${student} paid in full`}
+                    onChange={event=>updateDraft(student,{...draft,paid:event.target.checked,amountPaid:event.target.checked?draft.amountDue:'0'})}
+                    className="w-5 h-5 accent-green-600" />
+                  {' '}
+                  Paid in full
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-xs mr-1 ${balance>0?'text-amber-700':'text-green-700'}`}>{balance>0?`Balance ${formatCurrency(balance)}`:'No balance'}</span>
+                  {changed && <button type="button" onClick={()=>saveRosterFee(student)} disabled={rosterSaving===student}
+                    className="h-9 px-3 rounded-lg bg-navy text-white text-xs font-semibold disabled:opacity-50">
+                    {rosterSaving===student?'Saving…':'Save'}
+                  </button>}
                   {fee && <button type="button" onClick={()=>removeFee(fee)} disabled={deleting===fee.rowIndex}
                     aria-label={`Remove monthly fee for ${student}`} title="Remove fee"
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50">
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>}
+                    className="w-9 h-9 flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={16}/></button>}
                 </div>
-                </div>
-              )}
+              </div>
+              </div>}
             </div>
           );
         })}
@@ -495,7 +531,7 @@ export function Fees() {
             {duplicateMonthlyFees.map(fee=><div key={fee.rowIndex} className="py-2 flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-sm text-gray-900 truncate">{fee.studentName}</p>
-                <p className="text-xs text-gray-600">Receipt {fee.receiptNo} · ₹{fee.amountPaid||'0'} paid</p>
+                <p className="text-xs text-gray-600">Receipt {fee.receiptNo} · {formatCurrency(fee.amountPaid)} paid</p>
               </div>
               <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}}
                 aria-label={`Edit duplicate fee for ${fee.studentName}`} className="w-8 h-8 flex items-center justify-center text-gray-600">
@@ -515,7 +551,7 @@ export function Fees() {
             {otherFees.map(fee=><div key={fee.rowIndex} className="px-3 py-2.5 flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-sm truncate">{fee.studentName}</p>
-                <p className="text-xs text-gray-500 truncate">{fee.feeType} · ₹{fee.amountPaid||'0'} paid</p>
+                <p className="text-xs text-gray-500 truncate">{fee.feeType} · {formatCurrency(fee.amountPaid)} paid</p>
               </div>
               <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}} aria-label={`Edit ${fee.feeType} fee`}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500"><Pencil size={15}/></button>

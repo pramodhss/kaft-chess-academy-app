@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
+import { useCoachName } from '../hooks/useCoachName';
 
 const HEADERS = ['Tournament Name','Type','Date','Reg Deadline','Venue','Entry Fee','Eligibility','Link','Notes','Status','Added By','Added On'];
 const TYPES = ['Internal','Zonal','District','State','National','Online','Rapid','Blitz','Classical'];
@@ -30,6 +31,7 @@ function rowToEntry(row: string[], rowIndex: number): UTEntry {
 
 export function UpcomingTournaments() {
   const { token, logout } = useAuth();
+  const { coachName: savedCoachName } = useCoachName();
   const toast = useToast();
   const [entries, setEntries] = useState<UTEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,7 @@ export function UpcomingTournaments() {
   const [form, setForm] = useState({ ...EMPTY });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
-  const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
+  const coachName = savedCoachName || 'Coach';
 
   const load = async () => {
     if (!token) return;

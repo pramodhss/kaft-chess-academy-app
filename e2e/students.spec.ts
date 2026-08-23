@@ -1,0 +1,46 @@
+import { expect } from '@playwright/test';
+import { test } from './fixtures/test';
+import { openApp } from './fixtures/sheetsMock';
+
+function sheetRows(workbook: Record<string, string[][]>, tab: string) {
+  return workbook[tab].filter(row => row.some(Boolean));
+}
+
+test('adds a validated student and synchronizes the attendance roster', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Full Name *').fill('Ishaan Rao');
+  await dialog.getByLabel('Date of Birth *').fill('2015-04-12');
+  await dialog.getByLabel('Parent / Guardian Name *').fill('Anita Rao');
+  await dialog.getByLabel('Phone *', { exact: true }).fill('9988776655');
+  await dialog.getByLabel('Assigned Coach').fill('Coach Meera');
+  await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
+
+  await expect(page.getByText('Ishaan Rao', { exact: true })).toBeVisible();
+  await expect.poll(() => sheetRows(sheets.workbook, 'Students & Parents').some(row => row[0] === 'Ishaan Rao')).toBe(true);
+  await expect.poll(() => sheetRows(sheets.workbook, 'Weekend Attendance').some(row => row[0] === 'Ishaan Rao')).toBe(true);
+
+  const student = sheetRows(sheets.workbook, 'Students & Parents').find(row => row[0] === 'Ishaan Rao');
+  expect(student?.[1]).toBe('2015-04-12');
+  expect(student?.[9]).toBe('Anita Rao');
+  expect(student?.[10]).toBe('9988776655');
+  expect(student?.[29]).toBe('Coach Meera');
+});
+
+test('blocks duplicate student names before writing', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+  const writesBefore = sheets.writes.length;
+  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Full Name *').fill('Aarav Kumar');
+  await dialog.getByLabel('Date of Birth *').fill('2014-05-10');
+  await dialog.getByLabel('Parent / Guardian Name *').fill('Priya Kumar');
+  await dialog.getByLabel('Phone *', { exact: true }).fill('9876543210');
+  await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
+
+  await expect(page.getByText(/student with this name already exists/i)).toBeVisible();
+  expect(sheets.writes).toHaveLength(writesBefore);
+});

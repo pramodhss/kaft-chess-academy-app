@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
+import { useCoachName } from '../hooks/useCoachName';
 
 const HEADERS = ['Name','Type','URL','Description','Added By','Date Added'];
 const TYPES = ['eBook','PDF','Video','Article','Link','Other'];
@@ -27,6 +28,7 @@ function rowToResource(row: string[], rowIndex: number): Resource {
 
 export function Resources() {
   const { token, logout } = useAuth();
+  const { coachName: savedCoachName } = useCoachName();
   const toast = useToast();
   const [items, setItems] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export function Resources() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
-  const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
+  const coachName = savedCoachName || 'Coach';
 
   const load = async () => {
     if (!token) return;

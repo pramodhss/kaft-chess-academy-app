@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
+import { useCoachName } from '../hooks/useCoachName';
 import { SHEET_ID, TABS } from '../config';
 
 function buildMonths(count: number) {
@@ -59,6 +60,7 @@ export interface StudentReport {
 
 export function MonthlyReport() {
   const { token, logout } = useAuth();
+  const { coachName: savedCoachName } = useCoachName();
   const [selectedMonth, setSelectedMonth] = useState(MONTHS.length - 1);
   const [reports, setReports] = useState<StudentReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,7 +71,7 @@ export function MonthlyReport() {
   const [emailTo, setEmailTo] = useState('');
   const [emailCc, setEmailCc] = useState('');
   const [emailError, setEmailError] = useState('');
-  const coachName = localStorage.getItem('chess_coach_name') ?? 'Admin';
+  const coachName = savedCoachName || 'Admin';
   const attendanceReports = reports.filter(report => report.daysScheduled > 0);
   const avgAttendance = attendanceReports.length
     ? Math.round(attendanceReports.reduce((sum, report) => sum + report.attendancePct, 0) / attendanceReports.length * 100)

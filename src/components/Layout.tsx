@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { BottomNav } from './BottomNav';
 import { useTheme } from '../hooks/useTheme';
 import { useOnline } from '../hooks/useOnline';
+import { useCoachName } from '../hooks/useCoachName';
 
 interface LayoutProps {
   title: string;
@@ -14,7 +15,7 @@ export function Layout({ title, children, action, showBack }: LayoutProps) {
   useTheme();
   const online = useOnline();
   const navigate = useNavigate();
-  const coach = localStorage.getItem('chess_coach_name');
+  const { coachName: coach } = useCoachName();
   return (
     <div className="flex flex-col h-full bg-gray-50">
       <header

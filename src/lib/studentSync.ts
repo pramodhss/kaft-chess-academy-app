@@ -45,7 +45,7 @@ function matchingUpdates(target: SyncTarget, rows: string[][], previous: Student
   });
 }
 
-export async function ensureAttendanceStudent(token: string, sheetId: string, student: StudentLink) {
+async function ensureAttendanceStudent(token: string, sheetId: string, student: StudentLink) {
   const rows = await readSheetLive(token, sheetId, `'${TABS.ATTENDANCE}'!A:B`);
   const matchIndex = rows.slice(1).findIndex(row => normalizedName(row[0] ?? '') === normalizedName(student.name));
   if (matchIndex < 0) {

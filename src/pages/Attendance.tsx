@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetUnformatted, batchWrite, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
 import { reconcileAttendanceRoster } from '../lib/studentSync';
+import { useCoachName } from '../hooks/useCoachName';
 import type { SheetValue } from '../lib/sheets';
 import { SHEET_ID, TABS, ATT_DATE_START } from '../config';
 
@@ -65,6 +66,7 @@ interface AttRow { name: string; batch: string; present: boolean; sheetRow: numb
 
 export function Attendance() {
   const { token, logout } = useAuth();
+  const { coachName: savedCoachName } = useCoachName();
   const toast = useToast();
   const [attendanceDates, setAttendanceDates] = useState<AttendanceDate[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -78,7 +80,7 @@ export function Attendance() {
   const [addingDate, setAddingDate] = useState(false);
   const [deletingDate, setDeletingDate] = useState(false);
   const [error, setError] = useState('');
-  const coachName = localStorage.getItem('chess_coach_name') ?? 'Coach';
+  const coachName = savedCoachName || 'Coach';
 
   useEffect(() => {
     if (!token) return;
