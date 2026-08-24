@@ -12,6 +12,8 @@ export interface SheetsMock {
   workbook: Workbook;
   writes: SheetWrite[];
   driveUploads: string[];
+  driveDeletes: string[];
+  failPublicSharing: boolean;
 }
 
 const COLUMN_PATTERN = /^([A-Z]+)(\d*)$/;
@@ -222,7 +224,7 @@ function defaultWorkbook(): Workbook {
 }
 
 export async function installSheetsMock(context: BrowserContext, initial = defaultWorkbook()): Promise<SheetsMock> {
-  const mock: SheetsMock = { workbook: structuredClone(initial), writes: [], driveUploads: [] };
+  const mock: SheetsMock = { workbook: structuredClone(initial), writes: [], driveUploads: [], driveDeletes: [], failPublicSharing: false };
 
   await context.addInitScript(() => {
     localStorage.setItem('chess_auth', JSON.stringify({ token: 'test-token', email: 'coach@example.com', expiresAt: Date.now() + 3_600_000 }));
@@ -234,7 +236,15 @@ export async function installSheetsMock(context: BrowserContext, initial = defau
     mock.driveUploads.push(route.request().postData() ?? '');
     await route.fulfill({ json: { id: 'drive-file-1', name: 'academy-guide.pdf', webViewLink: 'https://drive.google.com/file/d/drive-file-1/view', webContentLink: 'https://drive.google.com/uc?id=drive-file-1' } });
   });
-  await context.route('https://www.googleapis.com/drive/v3/files/**', route => route.fulfill({ status: route.request().method() === 'DELETE' ? 204 : 200, json: {} }));
+  await context.route('https://www.googleapis.com/drive/v3/files/**', route => {
+    const request = route.request();
+    if (request.url().endsWith('/permissions') && mock.failPublicSharing) return route.fulfill({ status: 403, json: { error: { message: 'Public sharing is disabled by policy.' } } });
+    if (request.method() === 'DELETE') {
+      mock.driveDeletes.push(request.url());
+      return route.fulfill({ status: 204, body: '' });
+    }
+    return route.fulfill({ status: 200, json: {} });
+  });
 
   return mock;
 }

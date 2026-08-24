@@ -114,6 +114,7 @@ html.compact .app-main .p-4 { padding: 0.75rem; }
 .primary-action {
   @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-navy px-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50;
 }
+.resource-action { @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold; }
 
 .page-stack { @apply space-y-3 p-3 sm:p-4 md:p-6; }
 .form-grid { @apply space-y-2.5; }

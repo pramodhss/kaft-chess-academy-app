@@ -1,10 +1,10 @@
 import { cloneElement, isValidElement, useEffect, useId, useState } from 'react';
-import { BookOpen, Download, ExternalLink, FileText, Library, Link2, Newspaper, Paperclip, Plus, Trash2, Video, X } from 'lucide-react';
+import { BookOpen, Download, ExternalLink, Eye, FileText, Library, Link2, Newspaper, Paperclip, Plus, Share2, Trash2, Video, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { readSheet, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import { useCoachName } from '../hooks/useCoachName';
 import { deleteDriveFile, uploadPdf, validatePdf } from '../lib/drive';
@@ -19,12 +19,6 @@ function isWebUrl(value: string): boolean {
   try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
 }
 
-function resourceActionLabel(type: string): string {
-  if (type === 'Video') return 'Watch';
-  if (type === 'PDF' || type === 'eBook') return 'Download / Open';
-  return 'Open';
-}
-
 interface Resource { name:string; type:string; url:string; description:string; addedBy:string; dateAdded:string; fileId:string; rowIndex:number }
 
 function rowToResource(row: string[], rowIndex: number): Resource {
@@ -32,6 +26,14 @@ function rowToResource(row: string[], rowIndex: number): Resource {
     name:row[0]??'', type:row[1]??'', url:row[2]??'', description:row[3]??'',
     addedBy:row[4]??'', dateAdded:row[5]??'', fileId:row[6]??'', rowIndex,
   };
+}
+
+function isSameResource(current: Resource, expected: Resource) {
+  return current.rowIndex === expected.rowIndex
+    && current.name === expected.name
+    && current.type === expected.type
+    && current.url === expected.url
+    && current.fileId === expected.fileId;
 }
 
 export function Resources() {
@@ -76,6 +78,7 @@ export function Resources() {
         const uploaded = await uploadPdf(token, pdf, shareByLink);
         url = uploaded.webViewLink;
         fileId = uploaded.id;
+        if (shareByLink && !uploaded.sharingEnabled) toast.info('PDF uploaded, but this Google account does not allow public link sharing. Signed-in users can still open it.');
       }
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:G`, [[
         form.name, form.type, url, form.description, coachName, new Date().toLocaleDateString('en-IN'), fileId,
@@ -88,7 +91,10 @@ export function Resources() {
       setShareByLink(false);
       void recordAudit(token, 'CREATE', 'Resources', form.name, fileId ? 'Drive PDF' : 'External link').catch(() => undefined);
       toast.success(`${form.name} was added to Resources.`);
-    } catch(e:any) { toast.error('Save failed: ' + e.message); }
+    } catch(e:any) {
+      if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
+      toast.error('Save failed: ' + e.message);
+    }
     finally { setSaving(false); }
   };
 
@@ -96,9 +102,9 @@ export function Resources() {
     if (!token || !window.confirm(`Remove ${resource.name} from Resources? This cannot be undone.`)) return;
     setDeleting(resource.rowIndex);
     try {
-      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:G${resource.rowIndex}`);
+      const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:G${resource.rowIndex}`);
       const currentResource = rowToResource(currentRows[0] ?? [], resource.rowIndex);
-      if (JSON.stringify(currentResource) !== JSON.stringify(resource)) {
+      if (!isSameResource(currentResource, resource)) {
         toast.info('This resource was changed on another device. Reload before removing it.');
         return;
       }
@@ -112,6 +118,18 @@ export function Resources() {
   };
 
   const u = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({...form,[k]:e.target.value});
+  const shareResource = async (resource: Resource) => {
+    try {
+      if (navigator.share) await navigator.share({ title: resource.name, url: resource.url });
+      else {
+        await navigator.clipboard.writeText(resource.url);
+        toast.success('Resource link copied.');
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
+      toast.error('Unable to share this resource.');
+    }
+  };
   const visible = filter ? items.filter(i => i.type === filter) : items;
 
   if (loading) return <Layout title="Resources"><PageSkeleton /></Layout>;
@@ -134,7 +152,8 @@ export function Resources() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {visible.map(r => {
           const TypeIcon = TYPE_ICON[r.type as keyof typeof TYPE_ICON] ?? Paperclip;
-          const ActionIcon = r.type === 'PDF' || r.type === 'eBook' ? Download : ExternalLink;
+          const isPdf = r.type === 'PDF' || r.type === 'eBook';
+          const downloadUrl = r.fileId ? `https://drive.google.com/uc?export=download&id=${encodeURIComponent(r.fileId)}` : r.url;
           return (
           <div key={r.rowIndex} className="surface-card p-4">
             <div className="flex items-start gap-3">
@@ -143,18 +162,20 @@ export function Resources() {
                 <p className="font-semibold text-gray-900">{r.name}</p>
                 <span className="badge-blue text-xs">{r.type}</span>
                 {r.description && <p className="text-xs text-gray-500 mt-1">{r.description}</p>}
-                <a href={r.url} target="_blank" rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-navy px-3 py-2 text-xs font-medium text-white">
-                  <ActionIcon size={14} aria-hidden="true" />{resourceActionLabel(r.type)}
-                </a>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="resource-action bg-navy text-white"><Eye size={14} aria-hidden="true" />{r.type === 'Video' ? 'Watch' : 'View'}</a>
+                  {isPdf && <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download className="resource-action border border-gray-200 bg-white text-gray-700"><Download size={14} aria-hidden="true" />Download</a>}
+                  <button type="button" onClick={() => shareResource(r)} className="resource-action border border-gray-200 bg-white text-gray-700"><Share2 size={14} aria-hidden="true" />Share</button>
+                  {!isPdf && <ExternalLink size={14} className="self-center text-gray-300" aria-hidden="true" />}
+                </div>
               </div>
             </div>
             <div className="mt-2 flex items-center justify-between gap-2">
               <p className="text-xs text-gray-300">Added by {r.addedBy} · {r.dateAdded}</p>
               <button type="button" onClick={() => removeResource(r)} disabled={deleting === r.rowIndex}
-                aria-label={`Remove ${r.name}`} title="Remove resource"
-                className="p-2 rounded-lg bg-red-50 text-red-700 disabled:opacity-50">
-                <Trash2 size={17} aria-hidden="true" />
+                aria-label={`Delete ${r.name}`} title="Delete resource"
+                className="resource-action bg-red-50 text-red-700 disabled:opacity-50">
+                <Trash2 size={15} aria-hidden="true" />Delete
               </button>
             </div>
           </div>
