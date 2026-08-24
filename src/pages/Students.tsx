@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -695,18 +695,19 @@ export function Students() {
           const cat = getCategory(s.age);
           return (
             <button type="button" key={s.name+s.rowIndex} onClick={() => setSelected(s)}
-              className="w-full bg-white rounded-lg p-3.5 shadow-sm border border-gray-100 text-left grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center active:bg-gray-50">
-              <div className="min-w-0">
+              className="card-btn w-full bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
+              <StudentAvatar name={s.name} />
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold text-gray-900">{s.name}</p>
-                <div className="flex gap-x-2 gap-y-1 mt-1 flex-wrap items-center">
+                <div className="flex gap-x-2 gap-y-1 mt-0.5 flex-wrap items-center">
                   <span className="text-xs text-gray-600 break-words">{s.batch}</span>
                   {cat && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
                   {s.fideId && <span className="text-xs text-gray-500 whitespace-nowrap">FIDE: {s.fideId}</span>}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-shrink-0 items-center gap-1.5">
                 <span className={s.status==='Active'?'badge-green':'badge-gray'}>{s.status}</span>
-                <span className="text-gray-500" aria-hidden="true">›</span>
+                <ChevronRight size={16} className="hover-arrow text-gray-400" aria-hidden="true" />
               </div>
             </button>
           );
@@ -851,6 +852,17 @@ function Section({ title, children }: Readonly<{ title: string; children: React.
 function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
   return <label className="block"><span className="text-xs font-medium text-gray-500 mb-1 block">{label}</span>{children}</label>;
 }
+const AVATAR_PALETTE = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#EC4899','#84CC16'];
+function StudentAvatar({ name }: Readonly<{ name: string }>) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+  const bg = AVATAR_PALETTE[name.charCodeAt(0) % AVATAR_PALETTE.length];
+  return (
+    <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: bg }}>
+      {initials}
+    </span>
+  );
+}
+
 function InfoSection({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) {
   return (
     <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">

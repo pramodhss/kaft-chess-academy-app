@@ -103,6 +103,28 @@ html.compact .app-main .p-4 { padding: 0.75rem; }
   transition: width 180ms ease, background-color 180ms ease;
 }
 
+/* ── Hover fixes: dark mode makes hover:bg-gray-50 invisible ─────────────── */
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover  { background-color: rgba(255,255,255,0.05) !important; }
+html.dark .active\:bg-gray-50:active { background-color: rgba(255,255,255,0.06) !important; }
+
+/* Gold-ring card button — apply to interactive list rows */
+.card-btn {
+  transition: box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+.card-btn:not(:disabled):hover {
+  border-color: rgba(201, 151, 10, 0.28) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(201,151,10,0.12) !important;
+  background-color: rgba(201, 151, 10, 0.025) !important;
+}
+html.dark .card-btn:not(:disabled):hover {
+  background-color: rgba(201,151,10,0.045) !important;
+  border-color: rgba(201,151,10,0.32) !important;
+}
+.hover-arrow { transition: transform 200ms ease, color 200ms ease; }
+.card-btn:hover .hover-arrow { transform: translateX(3px); color: #c9970a !important; }
+html.dark .card-btn:hover .hover-arrow { color: #fcd34d !important; }
+
 .header-action {
   @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-2.5 text-xs font-semibold text-white;
   backdrop-filter: blur(8px);

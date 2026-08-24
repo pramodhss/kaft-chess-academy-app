@@ -139,7 +139,7 @@ export function Dashboard() {
           </article>)}</div>
         </section>}
 
-        <button type="button" onClick={() => navigate('/operations')} className="surface-card flex w-full items-center justify-between border-l-[3px] border-l-chess-blue p-4 text-left transition-colors hover:bg-gray-50">
+        <button type="button" onClick={() => navigate('/operations')} className="card-btn surface-card flex w-full items-center justify-between border-l-[3px] border-l-chess-blue p-4 text-left">
           <span><strong className="block text-sm text-gray-900">Operations & Data</strong><span className="text-xs text-gray-500">Follow-ups, data quality and exports</span></span>
           <ChevronRight size={17} className="text-chess-blue" />
         </button>
