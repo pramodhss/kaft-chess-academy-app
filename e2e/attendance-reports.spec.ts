@@ -65,3 +65,18 @@ test('van flags malformed imported phone data', async ({ page, sheets }) => {
   await openApp(page, '#/van');
   await expect(page.getByRole('alert')).toContainText('Driver phone must contain numbers only');
 });
+
+test('dashboard shows pending fee alert when students have outstanding balance', async ({ page, sheets }) => {
+  void sheets;
+  await openApp(page, '#/');
+  // Wait for Dashboard data to load — stat card appears when Sheets returns
+  await expect(page.getByText('Active Students')).toBeVisible({ timeout: 10000 });
+  // Mock has Aarav Kumar with 500 balance; matches singular "student" form\n  await expect(page.getByText(/\d+ student.* with pending fees/i)).toBeVisible();
+});
+
+test('student timeline pre-selects the student passed in URL query param', async ({ page, sheets }) => {
+  void sheets;
+  await openApp(page, '#/timeline?student=Aarav Kumar');
+  // The URL param should auto-select Aarav Kumar in the student dropdown
+  await expect(page.locator('#timeline-student')).toHaveValue('Aarav Kumar');
+});

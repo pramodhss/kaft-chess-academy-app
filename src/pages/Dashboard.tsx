@@ -92,7 +92,7 @@ export function Dashboard() {
         });
         setStats({ total: data.length, active, collected, outstanding });
         setBirthdays(upcomingBirthdays(studentRows));
-        setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 6));
+        setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
         const overdueMap = new Map<string, number>();
         feeRows.slice(1).forEach(r => {
           const name = (r[0] ?? '').trim();

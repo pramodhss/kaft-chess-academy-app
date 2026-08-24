@@ -39,6 +39,9 @@ test('manages a tournament roster, payments, and automatic student history', asy
   expect(aarav?.slice(1, 8)).toEqual(['State Junior Open', '2026-09-14', '2026-09', 'Aarav Kumar', 'Yes', 'Yes', '750']);
   expect(diya?.[5]).toBe('Yes');
   expect(diya?.[6]).toBe('No');
+  // Van Required (index 10) and Student Notes (index 11) start as 'No' and '' for new rows
+  expect(aarav?.[10]).toBe('No');
+  expect(aarav?.[11]).toBe('');
 
   await openApp(page, '#/students');
   await page.getByRole('button', { name: /Aarav Kumar/ }).click();
