@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Download, Mail, Printer } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
@@ -251,9 +252,9 @@ export function MonthlyReport() {
     <Layout title="Monthly Report" showBack action={
       loaded ? (
         <div className="flex gap-1 no-print">
-          <button onClick={() => { setEmailError(''); setShowEmailModal(true); }} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">📧</button>
-          <button onClick={downloadPdf} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">⬇ PDF</button>
-          <button onClick={() => window.print()} className="bg-white text-navy text-xs font-bold px-2 py-1 rounded-full">🖨️</button>
+          <button type="button" onClick={() => { setEmailError(''); setShowEmailModal(true); }} className="header-action px-2" aria-label="Email report" title="Email report"><Mail size={15} aria-hidden="true" /></button>
+          <button type="button" onClick={downloadPdf} className="header-action"><Download size={15} aria-hidden="true" /> PDF</button>
+          <button type="button" onClick={() => window.print()} className="header-action px-2" aria-label="Print report" title="Print report"><Printer size={15} aria-hidden="true" /></button>
         </div>
       ) : undefined
     }>

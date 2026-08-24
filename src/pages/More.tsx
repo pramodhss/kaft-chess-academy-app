@@ -2,19 +2,22 @@ import { useNavigate } from 'react-router-dom';
 import {
   BookOpenCheck, Bus, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
   ExternalLink, FileChartColumn, Gauge, Library, LogOut, Medal,
-  Moon, ReceiptText, Settings, Sun, Trophy,
+  History, Moon, ReceiptText, Settings, Sun, Trophy, Workflow,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { useTheme } from '../hooks/useTheme';
+import { useDensity } from '../hooks/useDensity';
 import { ACADEMY_LINKS, SOCIAL } from '../config';
 
 const ITEMS = [
+  { to:'/operations', Icon:Workflow, label:'Operations Center', desc:'Actions, reminders, quality and exports', hi:true },
   { to:'/admin-settings', Icon:Settings, label:'Admin Settings', desc:'Manage student types and chess levels' },
   { to:'/progress',       Icon:ChartNoAxesCombined, label:'Student Progress', desc:'Attendance and skill rating trends' },
+  { to:'/timeline',       Icon:History, label:'Student Timeline', desc:'Fees, attendance and tournament history' },
   { to:'/leaderboard',    Icon:Medal, label:'Leaderboard', desc:'Tournament rankings by medals and wins' },
-  { to:'/monthly-report', Icon:FileChartColumn, label:'Monthly Report', desc:'Attendance, fees and achievements', hi:true },
+  { to:'/monthly-report', Icon:FileChartColumn, label:'Monthly Report', desc:'Attendance, fees and achievements' },
   { to:'/upcoming',       Icon:CalendarDays, label:'Upcoming Tournaments', desc:'Post and view upcoming events' },
   { to:'/resources',      Icon:Library, label:'Resources & eBooks', desc:'Share study material and links' },
   { to:'/curriculum',     Icon:BookOpenCheck, label:'Curriculum', desc:'Beginner to advanced chess syllabus' },
@@ -35,6 +38,7 @@ const SOCIALS = [
 
 const USEFUL_LINKS = [
   { key:'fide', label:'FIDE Ratings', desc:'Official player profiles and ratings', Icon:Gauge, url:ACADEMY_LINKS.fideRatings },
+  { key:'chess-results', label:'Chess-Results', desc:'Tournament pairings, standings and results', Icon:Trophy, url:ACADEMY_LINKS.chessResults },
   { key:'tamil', label:'Tamil Chess', desc:'Tamil Nadu chess news and tournaments', Icon:Trophy, url:ACADEMY_LINKS.tamilChess },
   { key:'easy-pay', label:'Easy Pay Chess', desc:'Tournament registration and payments', Icon:ReceiptText, url:ACADEMY_LINKS.easyPayChess },
   { key:'aicf', label:'AICF Events', desc:'All India Chess Federation events', Icon:CalendarDays, url:ACADEMY_LINKS.aicfEvents },
@@ -45,29 +49,31 @@ export function More() {
   const { logout } = useAuth();
   const { coachName, setShowPrompt } = useCoachName();
   const { dark, toggle } = useTheme();
+  const { density, toggleDensity } = useDensity();
   return (
     <Layout title="More">
-      <div className="p-4 space-y-3">
-        {ITEMS.map(({ to, Icon, label, desc, hi }) => (
-          <button type="button" key={to} onClick={() => navigate(to)}
-            className={`w-full rounded-xl p-4 shadow-sm border text-left flex items-center gap-4 active:scale-[0.98] transition-transform
-              ${hi ? 'bg-navy text-white border-navy' : 'bg-white border-gray-100'}`}>
-            <span className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${hi ? 'bg-white/10' : 'bg-gray-100 text-navy'}`}>
-              <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
-            </span>
-            <div>
-              <p className={`font-semibold ${hi ? 'text-white' : 'text-gray-900'}`}>{label}</p>
-              <p className={`text-xs ${hi ? 'text-chess-light' : 'text-gray-400'}`}>{desc}</p>
-            </div>
-            <ChevronRight size={18} className={`ml-auto ${hi ? 'text-white/50' : 'text-gray-300'}`} aria-hidden="true" />
-          </button>
-        ))}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs font-bold text-navy uppercase tracking-wider mb-3">Useful Chess Links</p>
+      <div className="space-y-4 p-4 md:p-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {ITEMS.map(({ to, Icon, label, desc, hi }) => (
+            <button type="button" key={to} onClick={() => navigate(to)}
+              className={`surface-card flex w-full items-center gap-3 p-3 text-left transition-colors hover:border-chess-blue/30 ${hi ? 'border-l-[3px] border-l-chess-blue' : ''}`}>
+              <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${hi ? 'bg-navy text-chess-light' : 'bg-gray-100 text-navy'}`}>
+                <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-900">{label}</p>
+                <p className="truncate text-xs text-gray-400">{desc}</p>
+              </div>
+              <ChevronRight size={17} className="ml-auto flex-shrink-0 text-gray-300" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+        <div className="surface-card p-4">
+          <p className="section-label mb-3 text-navy">Useful Chess Links</p>
           <div className="space-y-2">
             {USEFUL_LINKS.map(({ key, label, desc, Icon, url }) => (
               <a key={key} href={url} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 transition-colors hover:border-chess-blue/30">
                 <span className="w-10 h-10 rounded-lg bg-navy text-chess-light flex items-center justify-center flex-shrink-0">
                   <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
                 </span>
@@ -81,20 +87,20 @@ export function More() {
           </div>
         </div>
         {SOCIALS.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs font-bold text-navy uppercase tracking-wider mb-3">Academy Social Media</p>
+          <div className="surface-card p-4">
+            <p className="section-label mb-3 text-navy">Academy Social Media</p>
             <div className="grid grid-cols-2 gap-2">
               {SOCIALS.map(({ key, label, url }) => (
                 <a key={key} href={url} target="_blank" rel="noopener noreferrer"
-                  className="bg-gray-50 text-gray-700 border border-gray-100 rounded-xl p-3 flex items-center gap-2 font-medium text-sm">
+                  className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm font-medium text-gray-700">
                   <ExternalLink size={18} strokeWidth={1.8} className="text-navy" aria-hidden="true" />{label}
                 </a>
               ))}
             </div>
           </div>
         )}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs font-bold text-navy uppercase tracking-wider mb-2">Logged in as</p>
+        <div className="surface-card p-4">
+          <p className="section-label mb-2 text-navy">Logged in as</p>
           <p className="font-semibold text-gray-900 flex items-center gap-2"><CircleUserRound size={18} />{coachName || '—'}</p>
           <button type="button" onClick={() => setShowPrompt(true)} className="text-xs text-chess-blue mt-1">Change name</button>
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
@@ -106,8 +112,14 @@ export function More() {
               </span>
             </button>
           </div>
+          <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+            <span className="text-sm text-gray-600">Display density</span>
+            <button type="button" onClick={toggleDensity} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700">
+              {density === 'compact' ? 'Compact' : 'Comfortable'}
+            </button>
+          </div>
         </div>
-        <button type="button" onClick={logout} className="w-full bg-gray-100 text-gray-600 rounded-xl p-4 text-sm font-medium flex items-center justify-center gap-2">
+        <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-100 p-3 text-sm font-medium text-gray-600">
           <LogOut size={17} aria-hidden="true" /> Sign Out
         </button>
       </div>

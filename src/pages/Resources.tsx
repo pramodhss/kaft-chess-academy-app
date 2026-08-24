@@ -1,28 +1,36 @@
-import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { cloneElement, isValidElement, useEffect, useId, useState } from 'react';
+import { BookOpen, Download, ExternalLink, FileText, Library, Link2, Newspaper, Paperclip, Plus, Trash2, Video, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import { useCoachName } from '../hooks/useCoachName';
+import { deleteDriveFile, uploadPdf, validatePdf } from '../lib/drive';
+import { recordAudit } from '../lib/audit';
 
-const HEADERS = ['Name','Type','URL','Description','Added By','Date Added'];
+const HEADERS = ['Name','Type','URL','Description','Added By','Date Added','Drive File ID'];
 const TYPES = ['eBook','PDF','Video','Article','Link','Other'];
-const TYPE_ICON: Record<string,string> = { eBook:'📖', PDF:'📄', Video:'🎥', Article:'📰', Link:'🔗', Other:'📎' };
+const TYPE_ICON = { eBook: BookOpen, PDF: FileText, Video, Article: Newspaper, Link: Link2, Other: Paperclip };
 const EMPTY = { name:'', type:'PDF', url:'', description:'' };
 
 function isWebUrl(value: string): boolean {
   try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
 }
 
-interface Resource { name:string; type:string; url:string; description:string; addedBy:string; dateAdded:string; rowIndex:number }
+function resourceActionLabel(type: string): string {
+  if (type === 'Video') return 'Watch';
+  if (type === 'PDF' || type === 'eBook') return 'Download / Open';
+  return 'Open';
+}
+
+interface Resource { name:string; type:string; url:string; description:string; addedBy:string; dateAdded:string; fileId:string; rowIndex:number }
 
 function rowToResource(row: string[], rowIndex: number): Resource {
   return {
     name:row[0]??'', type:row[1]??'', url:row[2]??'', description:row[3]??'',
-    addedBy:row[4]??'', dateAdded:row[5]??'', rowIndex,
+    addedBy:row[4]??'', dateAdded:row[5]??'', fileId:row[6]??'', rowIndex,
   };
 }
 
@@ -38,6 +46,8 @@ export function Resources() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [shareByLink, setShareByLink] = useState(false);
   const coachName = savedCoachName || 'Coach';
 
   const load = async () => {
@@ -45,7 +55,7 @@ export function Resources() {
     setLoading(true); setError('');
     try {
       await ensureSheet(token, SHEET_ID, TABS.RESOURCES, HEADERS);
-      const rows = await readSheet(token, SHEET_ID, `'${TABS.RESOURCES}'!A:F`);
+      const rows = await readSheet(token, SHEET_ID, `'${TABS.RESOURCES}'!A:G`);
       setItems(rows.slice(1).map((row, index) => rowToResource(row, index + 2)).filter(item => item.name.trim()));
     } catch(e:any) { if(e.message==='TOKEN_EXPIRED'){logout();return;} setError(e.message); }
     finally { setLoading(false); }
@@ -54,17 +64,29 @@ export function Resources() {
   useEffect(() => { load(); }, [token]);
 
   const handleAdd = async () => {
-    if (!token || !form.name.trim() || !form.url.trim()) return;
-    if (!isWebUrl(form.url.trim())) { toast.error('Enter a valid http:// or https:// resource URL.'); return; }
+    if (!token || !form.name.trim() || (!form.url.trim() && !pdf)) return;
+    if (!pdf && !isWebUrl(form.url.trim())) { toast.error('Enter a valid http:// or https:// resource URL.'); return; }
     setSaving(true);
     try {
-      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:F`, [[
-        form.name, form.type, form.url, form.description, coachName, new Date().toLocaleDateString('en-IN'),
+      let url = form.url.trim();
+      let fileId = '';
+      if (pdf) {
+        const validationError = await validatePdf(pdf);
+        if (validationError) { toast.error(validationError); return; }
+        const uploaded = await uploadPdf(token, pdf, shareByLink);
+        url = uploaded.webViewLink;
+        fileId = uploaded.id;
+      }
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:G`, [[
+        form.name, form.type, url, form.description, coachName, new Date().toLocaleDateString('en-IN'), fileId,
       ]]);
       const dateAdded = new Date().toLocaleDateString('en-IN');
-      setItems(prev => [...prev, { ...form, addedBy: coachName, dateAdded, rowIndex }]);
+      setItems(prev => [...prev, { ...form, url, fileId, addedBy: coachName, dateAdded, rowIndex }]);
       setShowAdd(false);
       setForm({ ...EMPTY });
+      setPdf(null);
+      setShareByLink(false);
+      void recordAudit(token, 'CREATE', 'Resources', form.name, fileId ? 'Drive PDF' : 'External link').catch(() => undefined);
       toast.success(`${form.name} was added to Resources.`);
     } catch(e:any) { toast.error('Save failed: ' + e.message); }
     finally { setSaving(false); }
@@ -74,13 +96,15 @@ export function Resources() {
     if (!token || !window.confirm(`Remove ${resource.name} from Resources? This cannot be undone.`)) return;
     setDeleting(resource.rowIndex);
     try {
-      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:F${resource.rowIndex}`);
+      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:G${resource.rowIndex}`);
       const currentResource = rowToResource(currentRows[0] ?? [], resource.rowIndex);
       if (JSON.stringify(currentResource) !== JSON.stringify(resource)) {
         toast.info('This resource was changed on another device. Reload before removing it.');
         return;
       }
-      await clearSheetRange(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:F${resource.rowIndex}`);
+      await clearSheetRange(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:G${resource.rowIndex}`);
+      if (resource.fileId) await deleteDriveFile(token, resource.fileId).catch(() => toast.info('Resource removed; the Drive file could not be deleted.'));
+      void recordAudit(token, 'DELETE', 'Resources', resource.name).catch(() => undefined);
       setItems(prev => prev.filter(item => item.rowIndex !== resource.rowIndex));
       toast.success(`${resource.name} was removed from Resources.`);
     } catch (e: any) { toast.error('Remove failed: ' + e.message); }
@@ -90,34 +114,38 @@ export function Resources() {
   const u = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({...form,[k]:e.target.value});
   const visible = filter ? items.filter(i => i.type === filter) : items;
 
-  if (loading) return <Layout title="Resources"><Spinner /></Layout>;
+  if (loading) return <Layout title="Resources"><PageSkeleton /></Layout>;
 
   return (
-    <Layout title="📚 Resources & eBooks" showBack action={
-      <button onClick={() => setShowAdd(true)} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
+    <Layout title="Resources & eBooks" showBack action={
+      <button type="button" onClick={() => setShowAdd(true)} aria-label="+ Add" className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {['', ...TYPES].map(t => (
-            <button key={t} onClick={() => setFilter(t)}
+            <button type="button" key={t} onClick={() => setFilter(t)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${filter===t?'bg-navy text-white':'bg-gray-100 text-gray-600'}`}>
               {t || 'All'} {t ? `(${items.filter(i=>i.type===t).length})` : `(${items.length})`}
             </button>
           ))}
         </div>
-        {visible.length===0 && <div className="text-center py-12 text-gray-400"><p className="text-4xl mb-2">📚</p><p>No resources yet. Tap + Add to share a link or eBook.</p></div>}
-        {visible.map(r => (
-          <div key={r.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        {visible.length===0 && <div className="flex flex-col items-center py-14 text-center text-gray-400"><span className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-500"><Library size={23} aria-hidden="true" /></span><p className="font-medium text-gray-600">No resources yet</p><p className="mt-1 max-w-xs text-sm">Add a link, PDF, video, or eBook for the academy.</p></div>}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {visible.map(r => {
+          const TypeIcon = TYPE_ICON[r.type as keyof typeof TYPE_ICON] ?? Paperclip;
+          const ActionIcon = r.type === 'PDF' || r.type === 'eBook' ? Download : ExternalLink;
+          return (
+          <div key={r.rowIndex} className="surface-card p-4">
             <div className="flex items-start gap-3">
-              <span className="text-3xl">{TYPE_ICON[r.type] ?? '📎'}</span>
+              <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-navy"><TypeIcon size={20} aria-hidden="true" /></span>
               <div className="flex-1">
                 <p className="font-semibold text-gray-900">{r.name}</p>
                 <span className="badge-blue text-xs">{r.type}</span>
                 {r.description && <p className="text-xs text-gray-500 mt-1">{r.description}</p>}
                 <a href={r.url} target="_blank" rel="noopener noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 bg-navy text-white text-xs font-medium px-3 py-1.5 rounded-full">
-                  {r.type === 'Video' ? '▶ Watch' : r.type === 'PDF' || r.type === 'eBook' ? '⬇ Download / Open' : '🔗 Open'}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-navy px-3 py-2 text-xs font-medium text-white">
+                  <ActionIcon size={14} aria-hidden="true" />{resourceActionLabel(r.type)}
                 </a>
               </div>
             </div>
@@ -130,33 +158,39 @@ export function Resources() {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
+        </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setShowAdd(false)}>
-          <div className="bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="modal-backdrop items-end justify-center sm:items-center">
+          <dialog open aria-labelledby="add-resource-title" className="modal-panel m-0 max-h-[90vh] max-w-lg overflow-y-auto p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-lg text-navy">Add Resource</h2>
-              <button onClick={() => setShowAdd(false)} className="text-gray-400 text-2xl">×</button>
+              <h2 id="add-resource-title" className="font-bold text-lg text-navy">Add Resource</h2>
+              <button type="button" onClick={() => setShowAdd(false)} aria-label="Close" title="Close" className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"><X size={19} aria-hidden="true" /></button>
             </div>
             <div className="space-y-3">
               <F label="Name *"><input value={form.name} onChange={u('name')} className="input" placeholder="e.g. Chess Tactics for Beginners" /></F>
               <F label="Type"><select value={form.type} onChange={u('type')} className="input">{TYPES.map(o=><option key={o}>{o}</option>)}</select></F>
-              <F label="URL / Link *"><input value={form.url} onChange={u('url')} className="input" placeholder="https://drive.google.com/… or any URL" /></F>
+              <F label="Upload PDF"><input type="file" accept="application/pdf,.pdf" onChange={event => { const file = event.target.files?.[0] ?? null; setPdf(file); if (file && !form.name.trim()) setForm(current => ({ ...current, name: file.name.replace(/\.pdf$/i, ''), type: 'PDF' })); }} className="input file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1 file:text-xs file:font-semibold" /></F>
+              {pdf && <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={shareByLink} onChange={event => setShareByLink(event.target.checked)} /> Allow anyone with the link to view this PDF</label>}
+              <div className="flex items-center gap-2 text-xs text-gray-400"><span className="h-px flex-1 bg-gray-200" />or add a link<span className="h-px flex-1 bg-gray-200" /></div>
+              <F label="URL / Link"><input value={form.url} onChange={u('url')} className="input" placeholder="https://drive.google.com/… or any URL" /></F>
               <F label="Description"><textarea value={form.description} onChange={u('description')} className="input" rows={2} /></F>
               <p className="text-xs text-gray-400">Will be added by: <strong>{coachName}</strong></p>
             </div>
-            <button onClick={handleAdd} disabled={saving||!form.name.trim()||!form.url.trim()}
-              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+            <button type="button" onClick={handleAdd} disabled={saving||!form.name.trim()||(!form.url.trim()&&!pdf)}
+              className="primary-action mt-4 w-full">
               {saving && <span className="button-spinner" aria-hidden="true"/>}
               {saving ? 'Adding resource…' : 'Add Resource'}
             </button>
-          </div>
+          </dialog>
         </div>
       )}
     </Layout>
   );
 }
-function F({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>{children}</div>;
+function F({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
+  const id = useId();
+  return <div><label htmlFor={id} className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>{isValidElement(children) ? cloneElement(children as React.ReactElement<{ id?: string }>, { id }) : children}</div>;
 }

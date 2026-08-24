@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
@@ -136,7 +136,7 @@ export function StudentProgress() {
           )}
         </div>
 
-        {loading && <Spinner label="Loading progress data…" />}
+        {loading && <PageSkeleton />}
 
         {!loading && selected && data.length > 0 && (
           <>

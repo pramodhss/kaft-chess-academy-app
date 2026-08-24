@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
@@ -12,6 +12,7 @@ import { dateValidationError, moneyValidationError } from '../lib/validation';
 import type { FeeDraft } from '../lib/feeRules';
 import { useCoachName } from '../hooks/useCoachName';
 import type { FeeEntry } from '../types';
+import { recordAudit } from '../lib/audit';
 
 type FeeForm = { studentName:string; feeMonth:string; feeType:string; amountDue:string;
   amountPaid:string; paymentMethod:string; paymentStatus:string; dueDate:string;
@@ -250,6 +251,7 @@ export function Fees() {
         reference: form.reference, notes: form.notes, rowIndex,
       };
       setFees(prev => [...prev, added]);
+      void recordAudit(token, 'CREATE', 'Fees', added.receiptNo, `${added.studentName} · ${added.feeMonth}`).catch(() => undefined);
       setShowAdd(false);
       setForm({...EMPTY_F});
       toast.success(`Payment for ${added.studentName} was saved successfully.`);
@@ -306,6 +308,7 @@ export function Fees() {
         paymentStatus: form.paymentStatus, reference: form.reference, notes: savedNotes,
       } : fee));
       setEditTarget(null);
+      void recordAudit(token, 'UPDATE', 'Fees', editTarget.receiptNo, `${form.studentName} · ${form.feeMonth}`).catch(() => undefined);
       setForm({...EMPTY_F});
       toast.success(`${form.studentName}'s payment details were updated.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
@@ -325,6 +328,7 @@ export function Fees() {
       }
       await clearSheetRange(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
       setFees(prev => prev.filter(entry => entry.rowIndex !== fee.rowIndex));
+      void recordAudit(token, 'DELETE', 'Fees', fee.receiptNo, fee.studentName).catch(() => undefined);
       toast.success(`Receipt ${fee.receiptNo} was removed.`);
     } catch (e: any) { toast.error('Remove failed: ' + e.message); }
     finally { setDeleting(null); }
@@ -434,6 +438,7 @@ export function Fees() {
         }]);
       }
       setDrafts(current => { const next = new Map(current); next.delete(student); return next; });
+      void recordAudit(token, existing ? 'UPDATE' : 'CREATE', 'Fees', `${student} · ${selectedMonth}`, 'Monthly roster').catch(() => undefined);
       toast.success(`${student}'s fee was updated.`);
     } catch (e: any) { toast.error('Save failed: ' + e.message); }
     finally { setRosterSaving(''); }
@@ -444,7 +449,7 @@ export function Fees() {
   const totalOutstanding = selectedFees.reduce((sum, fee) => sum + Math.max(parseSheetNumber(fee.balance), 0), 0);
   const otherFees = fees.filter(fee => normalizeFeeMonth(fee.feeMonth) === selectedMonth && fee.feeType !== 'Monthly Tuition');
 
-  if (loading) return <Layout title="Fees"><Spinner /></Layout>;
+  if (loading) return <Layout title="Fees"><PageSkeleton /></Layout>;
 
   return (
     <Layout title="Fees">

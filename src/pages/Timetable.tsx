@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { EmptyState, ErrorState } from '../components/EmptyState';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
@@ -32,7 +32,7 @@ export function Timetable() {
     })();
   }, [token]);
 
-  if (loading) return <Layout title="Timetable" showBack><Spinner /></Layout>;
+  if (loading) return <Layout title="Timetable" showBack><PageSkeleton /></Layout>;
 
   const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const availableDays = Array.from(new Set(rows.map(row => row.day.trim()).filter(Boolean)))

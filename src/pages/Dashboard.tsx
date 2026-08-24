@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, CalendarCheck, LayoutGrid, ReceiptIndianRupee, Trophy, Users } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber } from '../lib/values';
@@ -95,13 +95,13 @@ export function Dashboard() {
 
   let content: React.ReactNode;
   if (loading) {
-    content = <Spinner />;
+    content = <PageSkeleton />;
   } else if (error) {
     content = <p className="p-4 text-red-600 text-sm">{error}</p>;
   } else if (stats) {
     content = (
-      <div className="p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-5 p-4 md:p-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatCard label="Active Students" value={stats.active} sub={`of ${stats.total} enrolled`} color="bg-navy text-white" />
           <StatCard label="Next Session" value={`${DAYS_S[nextSession.getDay()]} ${nextSession.getDate()} ${MONTHS_S[nextSession.getMonth()]}`} color="bg-chess-blue text-white" />
           <StatCard label="Fees Collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} color="bg-green-600 text-white" />
@@ -109,8 +109,8 @@ export function Dashboard() {
         </div>
 
         {birthdays.length > 0 && (
-          <div className="bg-pink-50 border border-pink-200 rounded-xl p-4">
-            <p className="text-pink-800 font-bold text-sm mb-2">Upcoming Birthdays</p>
+          <div className="rounded-lg border border-pink-200 bg-pink-50 p-4">
+            <p className="mb-2 text-sm font-semibold text-pink-800">Upcoming Birthdays</p>
             {birthdays.map(b => {
               let timing = `in ${b.daysLeft} days`;
               if (b.daysLeft === 0) timing = 'Today';
@@ -125,11 +125,16 @@ export function Dashboard() {
           </div>
         )}
 
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Quick Access</h2>
-        <div className="grid grid-cols-3 gap-3">
+        <button type="button" onClick={() => navigate('/operations')} className="surface-card flex w-full items-center justify-between border-l-[3px] border-l-chess-blue p-4 text-left">
+          <span><strong className="block text-sm text-gray-900">Operations Center</strong><span className="text-xs text-gray-500">Review follow-ups, data quality and exports</span></span>
+          <span className="text-sm font-semibold text-chess-blue">Open</span>
+        </button>
+
+        <h2 className="section-label">Quick Access</h2>
+        <div className="grid grid-cols-3 gap-3 md:grid-cols-6">
           {QUICK_LINKS.map(({ to, Icon, label }) => (
             <button type="button" key={to} onClick={() => navigate(to)}
-              className="quick-link bg-white text-gray-700 flex flex-col items-center justify-center rounded-xl p-4 font-medium text-sm gap-2">
+              className="quick-link flex flex-col items-center justify-center gap-2 rounded-lg bg-white p-3 text-sm font-medium text-gray-700">
               <Icon size={24} strokeWidth={1.7} className="text-navy" aria-hidden="true" />
               <span>{label}</span>
             </button>
@@ -150,9 +155,9 @@ export function Dashboard() {
 
 function StatCard({ label, value, sub, color }: Readonly<{ label: string; value: string | number; sub?: string; color: string }>) {
   return (
-    <div className={`${color} stat-card rounded-xl p-4`}>
+    <div className={`${color} stat-card rounded-lg p-4`}>
       <p className="text-xs opacity-80 mb-1">{label}</p>
-      <p className="text-2xl font-bold leading-tight">{value}</p>
+      <p className="text-xl font-bold leading-tight sm:text-2xl">{value}</p>
       {sub && <p className="text-xs opacity-70 mt-0.5">{sub}</p>}
     </div>
   );

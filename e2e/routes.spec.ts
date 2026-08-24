@@ -17,6 +17,8 @@ const routes = [
   ['Curriculum', '#/curriculum'],
   ['Leaderboard', '#/leaderboard'],
   ['Admin Settings', '#/admin-settings'],
+  ['Operations Center', '#/operations'],
+  ['Student Timeline', '#/timeline'],
   ['More', '#/more'],
 ] as const;
 

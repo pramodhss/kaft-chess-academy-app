@@ -2,10 +2,125 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color: #1f2937;
+  background: #f4f5f7;
+  font-family: 'Manrope Variable', 'Avenir Next', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --app-page: #f4f5f7;
+  --app-surface: #ffffff;
+  --app-border: #e2e5e9;
+  --app-muted: #667085;
+  --app-navy: #0d0d1a;
+  --app-gold: #c9970a;
+  --app-header-height: 64px;
+}
+
 html, body, #root {
   height: 100%;
   /* prevent pull-to-refresh on iOS when scrolling app content */
   overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  background-color: var(--app-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  min-height: 100%;
+  background-color: var(--app-page);
+}
+
+.app-header {
+  min-height: calc(var(--app-header-height) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--app-navy);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.app-header-inner {
+  width: 100%;
+  max-width: 72rem;
+  min-height: var(--app-header-height);
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.app-logo {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.app-main {
+  scrollbar-gutter: stable;
+}
+
+.app-main > .route-view {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.route-view {
+  min-height: 100%;
+  animation: route-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #eceef1 25%, #f7f8f9 50%, #eceef1 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+html.compact .surface-card { padding: 0.65rem !important; }
+html.compact .input { padding-top: 0.45rem; padding-bottom: 0.45rem; }
+html.compact .app-main .space-y-3 { gap: 0.5rem; }
+html.compact .app-main .p-4 { padding: 0.75rem; }
+
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: var(--app-border);
+  box-shadow: 0 -8px 24px rgba(13, 13, 26, 0.06);
+  backdrop-filter: blur(16px);
+}
+
+.bottom-nav-item {
+  min-height: 58px;
+}
+
+.bottom-nav-indicator {
+  transition: width 180ms ease, background-color 180ms ease;
+}
+
+.header-action {
+  @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 text-xs font-semibold text-white;
+}
+
+.section-label {
+  @apply text-xs font-semibold uppercase text-gray-500;
+  letter-spacing: 0.08em;
+}
+
+.surface-card {
+  @apply rounded-lg border border-gray-100 bg-white shadow-sm;
+}
+
+.primary-action {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-navy px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.modal-backdrop {
+  @apply fixed inset-0 z-50 flex bg-black/55 p-3;
+  backdrop-filter: blur(4px);
+  animation: backdrop-enter 180ms ease-out;
+}
+
+.modal-panel {
+  @apply w-full rounded-xl bg-white shadow-xl;
+  animation: modal-enter 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* hide scrollbars on mobile list panels */
@@ -20,7 +135,7 @@ html, body, #root {
 .badge-gray   { @apply bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full; }
 
 .input {
-  @apply w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm
+  @apply w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm
          focus:outline-none focus:border-chess-blue bg-white;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
@@ -38,18 +153,14 @@ button:not(:disabled) {
 }
 
 button:not(:disabled):active {
-  transform: scale(0.975);
-}
-
-.page-content > * {
-  animation: page-enter 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: scale(0.985);
 }
 
 .stat-card {
   position: relative;
   overflow: hidden;
-  min-height: 104px;
-  box-shadow: 0 8px 22px rgba(23, 54, 93, 0.12);
+  min-height: 96px;
+  box-shadow: 0 8px 22px rgba(13, 13, 26, 0.10);
 }
 
 .stat-card::after {
@@ -64,9 +175,15 @@ button:not(:disabled):active {
 }
 
 .quick-link {
-  min-height: 92px;
+  min-height: 88px;
   border: 1px solid rgba(23, 54, 93, 0.06);
-  box-shadow: 0 5px 16px rgba(23, 54, 93, 0.08);
+  box-shadow: 0 2px 8px rgba(13, 13, 26, 0.07);
+}
+
+.quick-link:hover {
+  border-color: rgba(201, 151, 10, 0.35);
+  box-shadow: 0 8px 22px rgba(13, 13, 26, 0.10);
+  transform: translateY(-1px);
 }
 
 .quick-link:not(:disabled):active {
@@ -154,6 +271,12 @@ html.dark .chess-loader { border-bottom-color: rgba(252, 211, 77, 0.4); }
 
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
 html.dark { color-scheme: dark; }
+html.dark {
+  --app-page: #111827;
+  --app-surface: #1f2937;
+  --app-border: #374151;
+  --app-muted: #c4cad3;
+}
 html.dark body,
 html.dark .bg-gray-50   { background-color: #111827 !important; }
 html.dark .bg-white     { background-color: #1f2937 !important; }
@@ -203,6 +326,8 @@ html.dark .badge-blue   { background-color: #1e3a5f !important; color: #93c5fd !
 html.dark .badge-green  { background-color: #14532d !important; color: #86efac !important; }
 html.dark .badge-amber  { background-color: #451a03 !important; color: #fde68a !important; }
 html.dark .badge-red    { background-color: #450a0a !important; color: #fca5a5 !important; }
+html.dark .bottom-nav { background: rgba(31, 41, 55, 0.96); }
+html.dark .skeleton { background: linear-gradient(90deg, #293241 25%, #374151 50%, #293241 75%); background-size: 200% 100%; }
 /* ── Chess animations ─────────────────────────────────────────────────────── */
 @keyframes chess-float {
   0%, 100% { transform: translateY(0px); }
@@ -238,6 +363,22 @@ html.dark .badge-red    { background-color: #450a0a !important; color: #fca5a5 !
 @keyframes page-enter {
   from { transform: translateY(8px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+@keyframes route-enter {
+  from { transform: translateY(5px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-enter {
+  from { transform: translateY(10px) scale(0.985); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 @keyframes chess-slide-down {
   from { transform: translateY(-12px); opacity: 0; }

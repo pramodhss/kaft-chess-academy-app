@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetUnformatted, batchWrite, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
@@ -9,6 +9,9 @@ import { reconcileAttendanceRoster } from '../lib/studentSync';
 import { useCoachName } from '../hooks/useCoachName';
 import type { SheetValue } from '../lib/sheets';
 import { SHEET_ID, TABS, ATT_DATE_START } from '../config';
+import { useOnline } from '../hooks/useOnline';
+import { flushAttendanceQueue, queueAttendance } from '../lib/offlineAttendance';
+import { recordAudit } from '../lib/audit';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -81,6 +84,15 @@ export function Attendance() {
   const [deletingDate, setDeletingDate] = useState(false);
   const [error, setError] = useState('');
   const coachName = savedCoachName || 'Coach';
+  const online = useOnline();
+
+  useEffect(() => {
+    if (!token || !online) return;
+    void flushAttendanceQueue(token, SHEET_ID).then(result => {
+      if (result.saved > 0) toast.success(`${result.saved} queued attendance change${result.saved === 1 ? '' : 's'} synced.`);
+      if (result.conflicts > 0) toast.info(`${result.conflicts} offline change${result.conflicts === 1 ? '' : 's'} need review because Sheet data changed.`);
+    }).catch(() => undefined);
+  }, [token, online]);
 
   useEffect(() => {
     if (!token) return;
@@ -156,6 +168,16 @@ export function Attendance() {
 
   const save = async () => {
     if (!token || dirty.size === 0 || !selectedDate) return;
+    if (!online) {
+      const dateCol = colLetter(selectedDate.columnIndex);
+      try {
+        queueAttendance(Array.from(dirty.entries()).map(([row, value]) => ({ range: `'${TABS.ATTENDANCE}'!${dateCol}${row}`, base: rows.find(item => item.sheetRow === row)?.present ?? false, value })));
+        setRows(current => current.map(row => dirty.has(row.sheetRow) ? { ...row, present: dirty.get(row.sheetRow) ?? row.present } : row));
+        setDirty(new Map());
+        toast.info('Attendance saved offline and will sync after reconnection.');
+      } catch (error: any) { toast.error(error.message); }
+      return;
+    }
     setSaving(true);
     try {
       const headerRows = await readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`);
@@ -181,6 +203,7 @@ export function Attendance() {
         range: `'${TABS.ATTENDANCE}'!${dateCol}${row}`, value: val,
       }));
       await batchWrite(token, SHEET_ID, updates);
+      void recordAudit(token, 'UPDATE', 'Attendance', dateKey(selectedDate.date), `${updates.length} cells`).catch(() => undefined);
       setRows(prev => prev.map(row => dirty.has(row.sheetRow)
         ? { ...row, present: dirty.get(row.sheetRow) ?? row.present }
         : row));
@@ -270,12 +293,12 @@ export function Attendance() {
     <Layout title="Attendance" action={
       dirty.size > 0 ? (
         <button type="button" onClick={save} disabled={saving}
-          className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full disabled:opacity-50">
-          {saving ? 'Saving…' : `Save ${dirty.size}`}
+          className="header-action disabled:opacity-50">
+          {!saving && <Check size={15} aria-hidden="true" />}{saving ? 'Saving…' : `Save ${dirty.size}`}
         </button>
       ) : undefined
     }>
-      {loading ? <Spinner /> : (
+      {loading ? <PageSkeleton /> : (
         <div className="flex flex-col h-full">
           {error && <p className="px-4 py-2 text-red-600 text-sm bg-red-50">{error}</p>}
 

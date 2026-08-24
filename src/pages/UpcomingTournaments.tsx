@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
@@ -93,11 +93,11 @@ export function UpcomingTournaments() {
 
   const u = (k: keyof typeof EMPTY) => (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({...form,[k]:e.target.value});
 
-  if (loading) return <Layout title="Upcoming Tournaments" showBack><Spinner /></Layout>;
+  if (loading) return <Layout title="Upcoming Tournaments" showBack><PageSkeleton /></Layout>;
 
   return (
     <Layout title="Upcoming Tournaments" showBack action={
-      <button onClick={() => setShowAdd(true)} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
+      <button type="button" onClick={() => setShowAdd(true)} aria-label="+ Add" className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}

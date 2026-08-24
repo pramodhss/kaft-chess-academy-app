@@ -1,33 +1,43 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { GOOGLE_CLIENT_ID } from './config';
 import { CoachNameProvider, useCoachName } from './hooks/useCoachName';
 import { Login }                from './pages/Login';
-import { Dashboard }            from './pages/Dashboard';
-import { Students }             from './pages/Students';
-import { Attendance }           from './pages/Attendance';
-import { Fees }                 from './pages/Fees';
-import { Tournaments }          from './pages/Tournaments';
-import { Van }                  from './pages/Van';
-import { Timetable }            from './pages/Timetable';
-import { More }                 from './pages/More';
-import { MonthlyReport }        from './pages/MonthlyReport';
-import { UpcomingTournaments }  from './pages/UpcomingTournaments';
-import { Resources }            from './pages/Resources';
-import { Leaderboard }          from './pages/Leaderboard';
-import { StudentProgress }      from './pages/StudentProgress';
-import { Curriculum }           from './pages/Curriculum';
-import { AdminSettings }        from './pages/AdminSettings';
 import { ErrorBoundary }         from './components/ErrorBoundary';
+import { PageSkeleton }          from './components/Skeleton';
 import { ToastProvider }         from './context/ToastContext';
+import { RoleProvider, useRole } from './context/RoleContext';
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
+const Students = lazy(() => import('./pages/Students').then(module => ({ default: module.Students })));
+const Attendance = lazy(() => import('./pages/Attendance').then(module => ({ default: module.Attendance })));
+const Fees = lazy(() => import('./pages/Fees').then(module => ({ default: module.Fees })));
+const Tournaments = lazy(() => import('./pages/Tournaments').then(module => ({ default: module.Tournaments })));
+const Van = lazy(() => import('./pages/Van').then(module => ({ default: module.Van })));
+const Timetable = lazy(() => import('./pages/Timetable').then(module => ({ default: module.Timetable })));
+const More = lazy(() => import('./pages/More').then(module => ({ default: module.More })));
+const MonthlyReport = lazy(() => import('./pages/MonthlyReport').then(module => ({ default: module.MonthlyReport })));
+const UpcomingTournaments = lazy(() => import('./pages/UpcomingTournaments').then(module => ({ default: module.UpcomingTournaments })));
+const Resources = lazy(() => import('./pages/Resources').then(module => ({ default: module.Resources })));
+const Leaderboard = lazy(() => import('./pages/Leaderboard').then(module => ({ default: module.Leaderboard })));
+const StudentProgress = lazy(() => import('./pages/StudentProgress').then(module => ({ default: module.StudentProgress })));
+const Curriculum = lazy(() => import('./pages/Curriculum').then(module => ({ default: module.Curriculum })));
+const AdminSettings = lazy(() => import('./pages/AdminSettings').then(module => ({ default: module.AdminSettings })));
+const OperationsCenter = lazy(() => import('./pages/OperationsCenter').then(module => ({ default: module.OperationsCenter })));
+const StudentTimeline = lazy(() => import('./pages/StudentTimeline').then(module => ({ default: module.StudentTimeline })));
+
+function RoleRoute({ allowed, children }: Readonly<{ allowed: string[]; children: React.ReactNode }>) {
+  const { role } = useRole();
+  return allowed.includes(role) ? children : <Navigate to="/" replace />;
+}
 
 function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
   const [val, setVal] = useState('');
   return (
-    <div className="fixed inset-0 bg-navy/95 flex items-center justify-center z-50 p-6">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+    <div className="modal-backdrop items-center justify-center bg-navy/90 p-6">
+      <div className="modal-panel w-full max-w-sm p-6">
         <img src="logo.jpg" alt="Kaft Chess Academy"
           className="w-16 h-16 rounded-xl mx-auto mb-3 object-cover shadow-md" />
         <h2 className="text-xl font-bold text-navy text-center mb-1">Welcome!</h2>
@@ -36,7 +46,7 @@ function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
           onKeyDown={e => e.key === 'Enter' && val.trim() && onSave(val)}
           className="input w-full mb-4" placeholder="Your name (e.g. Coach Pramodh)" autoFocus />
         <button type="button" onClick={() => val.trim() && onSave(val)} disabled={!val.trim()}
-          className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-50">
+          className="primary-action w-full">
           Continue
         </button>
       </div>
@@ -51,22 +61,24 @@ function AppRoutes() {
   return (
     <>
       {showPrompt && <CoachNameModal onSave={saveCoachName} />}
-      <Routes>
+      <Suspense fallback={<PageSkeleton />}><Routes>
         <Route path="/"                  element={<Dashboard />} />
-        <Route path="/students"          element={<Students />} />
-        <Route path="/attendance"        element={<Attendance />} />
-        <Route path="/fees"              element={<Fees />} />
+        <Route path="/students"          element={<RoleRoute allowed={['admin','coach']}><Students /></RoleRoute>} />
+        <Route path="/attendance"        element={<RoleRoute allowed={['admin','coach']}><Attendance /></RoleRoute>} />
+        <Route path="/fees"              element={<RoleRoute allowed={['admin','finance']}><Fees /></RoleRoute>} />
         <Route path="/tournaments"       element={<Tournaments />} />
         <Route path="/upcoming"          element={<UpcomingTournaments />} />
-        <Route path="/van"               element={<Van />} />
+        <Route path="/van"               element={<RoleRoute allowed={['admin','transport']}><Van /></RoleRoute>} />
         <Route path="/timetable"         element={<Timetable />} />
         <Route path="/resources"         element={<Resources />} />
         <Route path="/curriculum"        element={<Curriculum />} />
-        <Route path="/admin-settings"    element={<AdminSettings />} />
+        <Route path="/admin-settings"    element={<RoleRoute allowed={['admin']}><AdminSettings /></RoleRoute>} />
+        <Route path="/operations"        element={<RoleRoute allowed={['admin','coach','finance']}><OperationsCenter /></RoleRoute>} />
+        <Route path="/timeline"          element={<StudentTimeline />} />
         <Route path="/monthly-report"    element={<MonthlyReport />} />        <Route path="/leaderboard"      element={<Leaderboard />} />
         <Route path="/progress"         element={<StudentProgress />} />        <Route path="/more"              element={<More />} />
         <Route path="*"                  element={<Navigate to="/" replace />} />
-      </Routes>
+      </Routes></Suspense>
     </>
   );
 }
@@ -77,11 +89,13 @@ export default function App() {
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <AuthProvider>
           <ToastProvider>
-            <CoachNameProvider>
-              <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <AppRoutes />
-              </HashRouter>
-            </CoachNameProvider>
+            <RoleProvider>
+              <CoachNameProvider>
+                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                  <AppRoutes />
+                </HashRouter>
+              </CoachNameProvider>
+            </RoleProvider>
           </ToastProvider>
         </AuthProvider>
       </GoogleOAuthProvider>

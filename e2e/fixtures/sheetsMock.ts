@@ -11,6 +11,7 @@ export interface SheetWrite {
 export interface SheetsMock {
   workbook: Workbook;
   writes: SheetWrite[];
+  driveUploads: string[];
 }
 
 const COLUMN_PATTERN = /^([A-Z]+)(\d*)$/;
@@ -218,7 +219,7 @@ function defaultWorkbook(): Workbook {
 }
 
 export async function installSheetsMock(context: BrowserContext, initial = defaultWorkbook()): Promise<SheetsMock> {
-  const mock: SheetsMock = { workbook: structuredClone(initial), writes: [] };
+  const mock: SheetsMock = { workbook: structuredClone(initial), writes: [], driveUploads: [] };
 
   await context.addInitScript(() => {
     localStorage.setItem('chess_auth', JSON.stringify({ token: 'test-token', email: 'coach@example.com', expiresAt: Date.now() + 3_600_000 }));
@@ -226,6 +227,11 @@ export async function installSheetsMock(context: BrowserContext, initial = defau
   });
 
   await context.route('https://sheets.googleapis.com/**', route => fulfillSheetsRequest(route, mock));
+  await context.route('https://www.googleapis.com/upload/drive/v3/files**', async route => {
+    mock.driveUploads.push(route.request().postData() ?? '');
+    await route.fulfill({ json: { id: 'drive-file-1', name: 'academy-guide.pdf', webViewLink: 'https://drive.google.com/file/d/drive-file-1/view', webContentLink: 'https://drive.google.com/uc?id=drive-file-1' } });
+  });
+  await context.route('https://www.googleapis.com/drive/v3/files/**', route => route.fulfill({ status: route.request().method() === 'DELETE' ? 204 : 200, json: {} }));
 
   return mock;
 }

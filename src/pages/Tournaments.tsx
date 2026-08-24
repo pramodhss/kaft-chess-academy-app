@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, appendRows, clearSheetRange } from '../lib/sheets';
@@ -107,11 +107,11 @@ export function Tournaments() {
     finally { setDeleting(null); }
   };
 
-  if (loading) return <Layout title="Tournaments" showBack><Spinner /></Layout>;
+  if (loading) return <Layout title="Tournaments" showBack><PageSkeleton /></Layout>;
 
   return (
     <Layout title="Tournaments" showBack action={
-      <button onClick={() => setShowAdd(true)} className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
+      <button type="button" onClick={() => setShowAdd(true)} aria-label="+ Add" className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm">{error}</p>}

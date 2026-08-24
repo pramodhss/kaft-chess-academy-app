@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Copy, Pencil, Trash2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Check, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheetColumns, writeRange } from '../lib/sheets';
 import { isStudentNameReserved, syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
+import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, DEFAULT_LEVELS, loadStudentOptions } from '../lib/studentOptions';
 import {
   dateValidationError,
@@ -309,7 +311,8 @@ export function Students() {
   const [filtered, setFiltered] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
   const [selected, setSelected] = useState<Student | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -390,6 +393,7 @@ export function Students() {
         { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
       );
       setStudents(prev => [...prev, formToStudent(form, savedRow)]);
+      void recordAudit(token, 'CREATE', 'Students', form.name, `Row ${savedRow}`).catch(() => undefined);
       setShowAdd(false);
       setForm({ ...EMPTY });
       if (attendanceSynced) toast.success('Student added successfully. The new profile is ready.');
@@ -465,6 +469,7 @@ export function Students() {
       setStudents(prev => prev.map(student => student.rowIndex === row ? updated : student));
       setEditMode(false);
       setSelected(updated);
+      void recordAudit(token, 'UPDATE', 'Students', updated.name, `Row ${row}`).catch(() => undefined);
       if (attendanceSynced) toast.success(`${updated.name}'s changes were updated successfully.`);
       else toast.error(`${updated.name}'s profile was updated, but Attendance could not update. Open Attendance while online to retry.`);
     } catch(e:any) { toast.error('Save failed: '+e.message); }
@@ -489,19 +494,20 @@ export function Students() {
       }
       await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
       setStudents(prev => prev.filter(student => student.rowIndex !== row));
+      void recordAudit(token, 'DELETE', 'Students', selected.name, `Row ${row}`).catch(() => undefined);
       setSelected(null);
       toast.success(`${selected.name} was removed from Students.`);
     } catch (e: any) { toast.error('Remove failed: ' + e.message); }
     finally { setDeleting(false); }
   };
 
-  if (loading) return <Layout title="Students"><Spinner /></Layout>;
+  if (loading) return <Layout title="Students"><PageSkeleton /></Layout>;
 
   // Edit mode
   if (selected && editMode) {
     return (
       <Layout title="Edit Student" action={
-        <button type="button" onClick={() => setEditMode(false)} className="text-white text-sm">Cancel</button>
+        <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
           <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} />
@@ -624,7 +630,8 @@ export function Students() {
         });
         setShowAdd(true);
       }}
-        className="bg-white text-navy text-sm font-bold px-3 py-1 rounded-full">+ Add</button>
+        aria-label="+ Add"
+        className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}

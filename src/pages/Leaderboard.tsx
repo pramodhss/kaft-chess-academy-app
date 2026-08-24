@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
@@ -41,7 +41,7 @@ export function Leaderboard() {
     })();
   }, [token, logout]);
 
-  if (loading) return <Layout title="Leaderboard"><Spinner /></Layout>;
+  if (loading) return <Layout title="Leaderboard"><PageSkeleton /></Layout>;
 
   return (
     <Layout title="🏆 Leaderboard" showBack>

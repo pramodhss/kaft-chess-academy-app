@@ -6,18 +6,18 @@ export function Login() {
   const noClientId = (GOOGLE_CLIENT_ID as string) === 'PASTE_YOUR_OAUTH_CLIENT_ID_HERE';
 
   return (
-    <div className="min-h-screen bg-navy flex flex-col items-center justify-center p-6">
-      <div className="text-center mb-10">
-        <img src="logo.jpg" alt="Kaft Chess Academy" className="w-28 h-28 rounded-2xl mx-auto mb-4 shadow-lg object-cover"/>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-navy p-6">
+      <div className="mb-8 text-center">
+        <img src="logo.jpg" alt="Kaft Chess Academy" className="mx-auto mb-4 h-24 w-24 rounded-xl object-cover shadow-lg"/>
         <h1 className="text-3xl font-bold text-white">Kaft Chess Academy</h1>
         <p className="text-chess-light mt-2 text-sm">Operations Manager</p>
       </div>
 
-      <div className="w-full max-w-sm bg-white rounded-2xl p-6 shadow-xl">
+      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white p-6 shadow-xl">
         {noClientId ? (
           <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">
-            <strong>Setup needed:</strong> Open <code>src/config.ts</code> and replace
-            <code> PASTE_YOUR_OAUTH_CLIENT_ID_HERE </code> with your Google OAuth Client ID.
+            <strong>Setup needed:</strong> Open <code>src/config.ts</code> and replace{' '}
+            <code>PASTE_YOUR_OAUTH_CLIENT_ID_HERE</code> with your Google OAuth Client ID.
           </div>
         ) : null}
 
@@ -26,11 +26,12 @@ export function Login() {
         </p>
 
         <button
+          type="button"
           onClick={login}
           disabled={noClientId}
           className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200
                      hover:border-chess-blue hover:bg-chess-light text-gray-700 font-semibold
-                     py-3 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                     py-3 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg width="20" height="20" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { clearSheetRange, readSheet, readSheetLive } from '../lib/sheets';
@@ -70,7 +70,7 @@ export function Van() {
     finally { setDeleting(null); }
   };
 
-  if (loading) return <Layout title="Van Allotment" showBack><Spinner /></Layout>;
+  if (loading) return <Layout title="Van Allotment" showBack><PageSkeleton /></Layout>;
 
   return (
     <Layout title="Van Allotment" showBack>

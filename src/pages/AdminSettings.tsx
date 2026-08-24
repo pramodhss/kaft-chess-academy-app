@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Save, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { Spinner } from '../components/Spinner';
+import { PageSkeleton } from '../components/Skeleton';
 import { SHEET_ID } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -12,25 +12,42 @@ import {
   saveStudentOptionList,
 } from '../lib/studentOptions';
 import type { StudentOptionKey, StudentOptions } from '../lib/studentOptions';
+import { loadRoles, saveRoles, type AppRole, type RoleEntry } from '../lib/roles';
+import { recordAudit } from '../lib/audit';
 
 export function AdminSettings() {
-  const { token, logout } = useAuth();
+  const { token, email, logout } = useAuth();
   const { coachName } = useCoachName();
   const toast = useToast();
   const [options, setOptions] = useState<StudentOptions | null>(null);
   const [saving, setSaving] = useState<StudentOptionKey | null>(null);
   const [error, setError] = useState('');
+  const [roles, setRoles] = useState<RoleEntry[]>([]);
+  const [savingRoles, setSavingRoles] = useState(false);
 
   const load = async () => {
     if (!token) return;
     setError('');
     try {
       await ensureStudentOptionsSheet(token, SHEET_ID);
-      setOptions(await loadStudentOptions(token, SHEET_ID, true));
+      const [studentOptions, roleEntries] = await Promise.all([loadStudentOptions(token, SHEET_ID, true), loadRoles(token, SHEET_ID)]);
+      setOptions(studentOptions);
+      setRoles(roleEntries.length > 0 ? roleEntries : [{ email: email ?? '', role: 'admin' }]);
     } catch (loadError: any) {
       if (loadError.message === 'TOKEN_EXPIRED') { logout(); return; }
       setError(loadError.message);
     }
+  };
+
+  const saveRoleEntries = async () => {
+    if (!token) return;
+    setSavingRoles(true);
+    try {
+      await saveRoles(token, SHEET_ID, roles, coachName || email || 'Admin');
+      void recordAudit(token, 'UPDATE', 'Settings', 'User roles', `${roles.length} role mappings`).catch(() => undefined);
+      toast.success('Staff roles updated. Changes apply on the next sign-in.');
+    } catch (saveError: any) { toast.error(`Save failed: ${saveError.message}`); }
+    finally { setSavingRoles(false); }
   };
 
   useEffect(() => { void load(); }, [token]);
@@ -73,7 +90,7 @@ export function AdminSettings() {
     }
   };
 
-  if (!options && !error) return <Layout title="Admin Settings"><Spinner /></Layout>;
+  if (!options && !error) return <Layout title="Admin Settings"><PageSkeleton /></Layout>;
 
   return (
     <Layout title="Admin Settings">
@@ -93,6 +110,7 @@ export function AdminSettings() {
               onChange={values => updateValues('batches', values)}
               onSave={() => save('batches', 'student_batches')}
             />
+            <RoleEditor roles={roles} saving={savingRoles} onChange={setRoles} onSave={saveRoleEntries} />
             <OptionEditor
               title="Chess Levels"
               values={options.levels.values}
@@ -105,6 +123,11 @@ export function AdminSettings() {
       </div>
     </Layout>
   );
+}
+
+function RoleEditor({ roles, saving, onChange, onSave }: Readonly<{ roles: RoleEntry[]; saving: boolean; onChange: (roles: RoleEntry[]) => void; onSave: () => void }>) {
+  const roleOptions: AppRole[] = ['admin', 'coach', 'finance', 'transport', 'viewer'];
+  return <section><div className="mb-3 flex items-center justify-between"><div><h2 className="text-sm font-bold text-navy">Staff Roles</h2><p className="text-xs text-gray-400">Map Google account emails to app responsibilities.</p></div><button type="button" onClick={() => onChange([...roles, { email: '', role: 'coach' }])} className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-navy" aria-label="Add staff role"><Plus size={18} /></button></div><div className="space-y-2">{roles.map((entry, index) => <div key={`${entry.email}-${index}`} className="surface-card grid grid-cols-[1fr_auto_auto] gap-2 p-2"><input type="email" value={entry.email} onChange={event => onChange(roles.map((role, roleIndex) => roleIndex === index ? { ...role, email: event.target.value } : role))} className="input" placeholder="coach@example.com" aria-label={`Staff email ${index + 1}`} /><select value={entry.role} onChange={event => onChange(roles.map((role, roleIndex) => roleIndex === index ? { ...role, role: event.target.value as AppRole } : role))} className="input w-28" aria-label={`Role ${index + 1}`}>{roleOptions.map(role => <option key={role}>{role}</option>)}</select><button type="button" onClick={() => onChange(roles.filter((_, roleIndex) => roleIndex !== index))} className="flex h-10 w-10 items-center justify-center rounded-lg text-red-600" aria-label={`Remove ${entry.email || 'role'}`}><Trash2 size={17} /></button></div>)}</div><button type="button" onClick={onSave} disabled={saving || roles.some(entry => !entry.email.trim())} className="primary-action mt-3 w-full"><Save size={17} />{saving ? 'Saving…' : 'Save Staff Roles'}</button></section>;
 }
 
 function OptionEditor({ title, values, saving, onChange, onSave }: Readonly<{

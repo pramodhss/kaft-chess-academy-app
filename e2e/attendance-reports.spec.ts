@@ -34,6 +34,17 @@ test('student progress joins monthly attendance and skill metrics', async ({ pag
   await expect(page.getByText('4.2/5', { exact: true })).toBeVisible();
 });
 
+test('monthly report loads the on-demand PDF generator and downloads a report', async ({ page, sheets }) => {
+  void sheets;
+  await openApp(page, '#/monthly-report');
+  await page.getByRole('button', { name: /Load .* Report/ }).click();
+  await expect(page.getByRole('button', { name: 'PDF', exact: true })).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'PDF', exact: true }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^KAFT_.*_Performance_Report\.pdf$/);
+});
+
 test('dashboard and progress clamp invalid Sheet metrics', async ({ page, sheets }) => {
   sheets.workbook['Fee Register'][1][6] = '-100';
   sheets.workbook['Fee Register'][1][7] = '-500';
