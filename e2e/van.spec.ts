@@ -2,33 +2,70 @@ import { expect } from '@playwright/test';
 import { test } from './fixtures/test';
 import { openApp } from './fixtures/sheetsMock';
 
-test('migrates legacy rows and saves a tournament transport assignment', async ({ page, sheets }) => {
+test('requires a tournament name and date before saving', async ({ page, sheets }) => {
+  void sheets;
   await openApp(page, '#/van');
+  await page.getByRole('button', { name: 'Add tournament' }).click();
+  await expect(page.getByRole('alert')).toContainText('Enter the tournament name');
+  await page.getByLabel('Tournament name').fill('Validation Open');
+  await expect(page.getByRole('alert')).toContainText('Select the tournament date');
+});
 
-  await expect(page.getByText('Legacy transport assignment')).toBeVisible();
-  expect(sheets.workbook['Van Allotment'][0][2]).toBe('Tournament');
-  expect(sheets.workbook['Van Allotment'][1][12]).toContain('Previous batch: Beginner A');
+test('manages a tournament roster, payments, and automatic student history', async ({ page, sheets }) => {
+  await openApp(page, '#/van');
+  await page.getByRole('button', { name: 'Add tournament' }).click();
+  const createDialog = page.getByRole('dialog');
+  await createDialog.getByLabel('Tournament name').fill('State Junior Open');
+  await createDialog.getByLabel('Tournament date').fill('2026-09-14');
+  await createDialog.getByLabel('Entry fee (₹)').fill('750');
+  await createDialog.getByRole('button', { name: 'Create tournament' }).click();
 
-  await page.getByRole('button', { name: 'Add transport assignment' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Student').selectOption('Diya Shah');
-  await dialog.getByLabel('Tournament').fill('State Junior Open');
-  await dialog.getByLabel('Pickup location').fill('KAFT Academy');
-  await dialog.getByLabel('Pickup time').fill('07:30');
-  await dialog.getByLabel('Return location').fill('KAFT Academy');
-  await dialog.getByLabel('Return time').fill('18:00');
-  await dialog.getByLabel('Driver', { exact: true }).fill('Rajesh');
-  await dialog.getByLabel('Driver phone').fill('9876543210');
-  await dialog.getByLabel('Transport fee').fill('750');
-  await dialog.getByLabel('Status').selectOption('Confirmed');
-  await dialog.getByLabel('Notes').fill('Two-way travel');
-  await dialog.getByRole('button', { name: 'Assign transport' }).click();
+  await expect(page.getByText('State Junior Open', { exact: true })).toBeVisible();
+  const tournamentRow = sheets.workbook['Upcoming Tournaments'].find(row => row[0] === 'State Junior Open');
+  expect(tournamentRow?.[2]).toBe('2026-09-14');
+  expect(tournamentRow?.[5]).toBe('750');
+  expect(tournamentRow?.[12]).toMatch(/^TRN-[A-Z0-9]{8}$/);
 
-  await expect(page.getByText('State Junior Open')).toBeVisible();
-  const append = sheets.writes.find(write => write.operation === 'append' && write.range.includes('Van Allotment'));
-  expect(append?.values[0]).toEqual([
-    expect.stringMatching(/^VAN-[A-Z0-9]{6}$/),
-    'Diya Shah', 'State Junior Open', '9123456780', 'KAFT Academy', '07:30', 'KAFT Academy', '18:00',
-    'Rajesh', '9876543210', '750', 'Confirmed', 'Two-way travel',
-  ]);
+  await page.getByRole('button', { name: /State Junior Open/ }).first().click();
+  await page.getByLabel('Aarav Kumar playing').check();
+  await page.getByLabel('Aarav Kumar fee paid').check();
+  await page.getByLabel('Diya Shah playing').check();
+  await page.getByRole('button', { name: 'Save roster' }).click();
+  await expect(page.getByText('State Junior Open roster was saved.')).toBeVisible();
+
+  const registrations = sheets.workbook['Tournament Registrations'];
+  const aarav = registrations.find(row => row[4] === 'Aarav Kumar');
+  const diya = registrations.find(row => row[4] === 'Diya Shah');
+  expect(aarav?.slice(1, 8)).toEqual(['State Junior Open', '2026-09-14', '2026-09', 'Aarav Kumar', 'Yes', 'Yes', '750']);
+  expect(diya?.[5]).toBe('Yes');
+  expect(diya?.[6]).toBe('No');
+
+  await openApp(page, '#/students');
+  await page.getByRole('button', { name: /Aarav Kumar/ }).click();
+  await expect(page.getByText('Tournament Attendance')).toBeVisible();
+  await expect(page.getByText('State Junior Open', { exact: true })).toBeVisible();
+  await expect(page.getByText('September 2026')).toBeVisible();
+  await expect(page.getByText(/Fee paid.*₹750/)).toBeVisible();
+
+  await openApp(page, '#/timeline');
+  await page.locator('#timeline-student').selectOption('Aarav Kumar');
+  await page.getByText('Tournament history').click();
+  await expect(page.getByText('State Junior Open', { exact: true })).toBeVisible();
+  await expect(page.getByText('Fee paid: Yes')).toBeVisible();
+
+  await openApp(page, '#/van');
+  await page.getByRole('button', { name: 'Edit State Junior Open' }).click();
+  const editDialog = page.getByRole('dialog');
+  await editDialog.getByLabel('Tournament name').fill('State Junior Championship');
+  await editDialog.getByLabel('Entry fee (₹)').fill('900');
+  await editDialog.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('State Junior Championship', { exact: true })).toBeVisible();
+  expect(aarav?.[1]).toBe('State Junior Championship');
+  expect(aarav?.[7]).toBe('900');
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove State Junior Championship' }).click();
+  await expect(page.getByText('State Junior Championship', { exact: true })).toHaveCount(0);
+  expect(tournamentRow?.every(value => value === '')).toBe(true);
+  expect(aarav?.every(value => value === '')).toBe(true);
 });

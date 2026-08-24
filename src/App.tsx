@@ -18,7 +18,6 @@ const Van = lazy(() => import('./pages/Van').then(module => ({ default: module.V
 const Timetable = lazy(() => import('./pages/Timetable').then(module => ({ default: module.Timetable })));
 const More = lazy(() => import('./pages/More').then(module => ({ default: module.More })));
 const MonthlyReport = lazy(() => import('./pages/MonthlyReport').then(module => ({ default: module.MonthlyReport })));
-const UpcomingTournaments = lazy(() => import('./pages/UpcomingTournaments').then(module => ({ default: module.UpcomingTournaments })));
 const Resources = lazy(() => import('./pages/Resources').then(module => ({ default: module.Resources })));
 const Leaderboard = lazy(() => import('./pages/Leaderboard').then(module => ({ default: module.Leaderboard })));
 const StudentProgress = lazy(() => import('./pages/StudentProgress').then(module => ({ default: module.StudentProgress })));
@@ -61,7 +60,7 @@ function AppRoutes() {
         <Route path="/attendance"        element={<Attendance />} />
         <Route path="/fees"              element={<Fees />} />
         <Route path="/tournaments"       element={<Tournaments />} />
-        <Route path="/upcoming"          element={<UpcomingTournaments />} />
+        <Route path="/upcoming"          element={<Van />} />
         <Route path="/van"               element={<Van />} />
         <Route path="/timetable"         element={<Timetable />} />
         <Route path="/resources"         element={<Resources />} />

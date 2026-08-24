@@ -6,8 +6,8 @@ test('uploads a native PDF to Drive and stores its metadata in Resources', async
   await openApp(page, '#/resources');
   await page.getByRole('button', { name: '+ Add', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Upload PDF').setInputFiles({ name: 'academy-guide.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
-  await dialog.getByLabel('Allow anyone with the link to view this PDF').check();
+  await dialog.getByLabel('Upload PDF or Image').setInputFiles({ name: 'academy-guide.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
+  await dialog.getByLabel('Allow anyone with the link to view this file').check();
   await dialog.getByLabel('Description').fill('Academy training guide');
   await dialog.getByRole('button', { name: 'Add Resource', exact: true }).click();
 
@@ -29,8 +29,8 @@ test('keeps an uploaded PDF when public sharing is blocked and supports deletion
   await openApp(page, '#/resources');
   await page.getByRole('button', { name: '+ Add', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Upload PDF').setInputFiles({ name: 'private-guide.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
-  await dialog.getByLabel('Allow anyone with the link to view this PDF').check();
+  await dialog.getByLabel('Upload PDF or Image').setInputFiles({ name: 'private-guide.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
+  await dialog.getByLabel('Allow anyone with the link to view this file').check();
   await dialog.getByRole('button', { name: 'Add Resource', exact: true }).click();
 
   await expect(page.getByText('private-guide', { exact: true })).toBeVisible();

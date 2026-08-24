@@ -4,6 +4,7 @@ import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
+import { monthLabel, rowToRegistration } from '../lib/tournamentManagement';
 import { SHEET_ID, TABS } from '../config';
 
 type EventKind = 'fee' | 'tournament' | 'attendance';
@@ -34,8 +35,9 @@ export function StudentTimeline() {
       readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
       readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
       readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
+      readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
       readSheet(token, SHEET_ID, `'${TABS.MONTHLY_ATT}'!A:E`),
-    ]).then(([studentRows, feeRows, tournamentRows, attendanceRows]) => {
+    ]).then(([studentRows, feeRows, tournamentRows, registrationRows, attendanceRows]) => {
       const names = studentRows.slice(1).map(row => row[0]).filter(Boolean);
       setStudents(names);
       setSelected(current => current || names[0] || '');
@@ -52,6 +54,14 @@ export function StudentTimeline() {
         ...tournamentRows.slice(1).filter(row => row[1]).map((row, index): StudentEvent => ({
           key: `tournament-${index}`, student: row[1], date: row[6] || row[0] || '', title: row[4] || 'Tournament', kind: 'tournament',
           details: compactDetails([row[16], row[12] ? `Position: ${row[12]}` : undefined, row[13] ? `Score: ${row[13]}` : undefined]),
+        })),
+        ...registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing).map((item): StudentEvent => ({
+          key: `registration-${item.rowIndex}`, student: item.studentName, date: item.tournamentDate || item.month,
+          title: item.tournamentName || 'Tournament', kind: 'tournament',
+          details: compactDetails([
+            `Attending: Yes`, `Month: ${monthLabel(item.month)}`,
+            `Entry fee: ₹${item.entryFee || '0'}`, `Fee paid: ${item.feePaid ? 'Yes' : 'No'}`,
+          ]),
         })),
         ...attendanceRows.slice(1).filter(row => row[0]).map((row, index): StudentEvent => ({
           key: `attendance-${index}`, student: row[0], date: row[1] || '', title: row[1] || 'Monthly attendance', kind: 'attendance',

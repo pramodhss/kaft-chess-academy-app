@@ -52,3 +52,35 @@ export async function uploadPdf(token: string, file: File, shareByLink: boolean)
 export async function deleteDriveFile(token: string, fileId: string): Promise<void> {
   await driveCall(token, `${DRIVE_FILES}/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
 }
+
+export function validateImage(file: File): string {
+  if (!file.type.startsWith('image/')) return 'Choose an image file (JPG, PNG, GIF, WEBP).';
+  if (file.size === 0) return 'The selected image is empty.';
+  if (file.size > MAX_PDF_BYTES) return 'Image files must be 25 MB or smaller.';
+  return '';
+}
+
+export async function uploadFileToDrive(token: string, file: File, shareByLink: boolean): Promise<UploadedDriveFile> {
+  const metadata = { name: file.name, mimeType: file.type || 'application/octet-stream', appProperties: { kaftResource: 'true' } };
+  const body = new FormData();
+  body.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  body.append('file', file);
+  const uploaded = await driveCall(token, `${DRIVE_UPLOAD}?uploadType=multipart&fields=id,name,webViewLink,webContentLink`, { method: 'POST', body }) as Partial<UploadedDriveFile>;
+  if (!uploaded.id) throw new Error('Drive did not return an ID for the uploaded file.');
+  let sharingEnabled = false;
+  if (shareByLink) {
+    try {
+      await driveCall(token, `${DRIVE_FILES}/${encodeURIComponent(uploaded.id)}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) });
+      sharingEnabled = true;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'TOKEN_EXPIRED') throw error;
+    }
+  }
+  return {
+    id: uploaded.id,
+    name: uploaded.name || file.name,
+    webViewLink: uploaded.webViewLink || `https://drive.google.com/file/d/${encodeURIComponent(uploaded.id)}/view`,
+    webContentLink: uploaded.webContentLink || `https://drive.google.com/uc?export=download&id=${encodeURIComponent(uploaded.id)}`,
+    sharingEnabled,
+  };
+}

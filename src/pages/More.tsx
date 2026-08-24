@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  BookOpenCheck, Bus, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
+  BookOpenCheck, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
   ExternalLink, Gauge, Library, LogOut, Medal,
   Moon, ReceiptText, Sun, Trophy, Workflow,
   Type,
@@ -13,16 +13,21 @@ import { useDensity } from '../hooks/useDensity';
 import { useTextSize } from '../hooks/useTextSize';
 import { ACADEMY_LINKS, SOCIAL } from '../config';
 
-const ITEMS = [
-  { to:'/operations', Icon:Workflow, label:'Operations & Data', desc:'Follow-ups, quality, settings and exports', hi:true },
-  { to:'/progress',       Icon:ChartNoAxesCombined, label:'Student Insights', desc:'Progress, timeline and PDF reports' },
-  { to:'/leaderboard',    Icon:Medal, label:'Leaderboard', desc:'Tournament rankings by medals and wins' },
-  { to:'/upcoming',       Icon:CalendarDays, label:'Upcoming Tournaments', desc:'Post and view upcoming events' },
-  { to:'/resources',      Icon:Library, label:'Resources & eBooks', desc:'Share study material and links' },
-  { to:'/curriculum',     Icon:BookOpenCheck, label:'Curriculum', desc:'Beginner to advanced chess syllabus' },
-  { to:'/tournaments',    Icon:Trophy, label:'Tournament Results', desc:'Past results, ratings and medals' },
-  { to:'/van',            Icon:Bus, label:'Tournament Transport', desc:'Assign students, vans and drivers' },
-  { to:'/timetable',      Icon:CalendarDays, label:'Weekly Classes', desc:'Allocate batches, coaches, times and rooms' },
+const GROUPS = [
+  { title:'Academy', items:[
+    { to:'/operations', Icon:Workflow, label:'Operations & Data', desc:'Follow-ups, settings and exports' },
+    { to:'/progress', Icon:ChartNoAxesCombined, label:'Student Insights', desc:'Progress, timeline and reports' },
+    { to:'/timetable', Icon:CalendarDays, label:'Weekly Classes', desc:'Batches, coaches, times and rooms' },
+  ]},
+  { title:'Tournaments', items:[
+    { to:'/van', Icon:Trophy, label:'Tournament Management', desc:'Events, player rosters and fee status' },
+    { to:'/tournaments', Icon:Trophy, label:'Results', desc:'Scores, ratings, medals and prizes' },
+    { to:'/leaderboard', Icon:Medal, label:'Leaderboard', desc:'Rankings by medals and wins' },
+  ]},
+  { title:'Learning', items:[
+    { to:'/resources', Icon:Library, label:'Resources & eBooks', desc:'Study material and shared links' },
+    { to:'/curriculum', Icon:BookOpenCheck, label:'Curriculum', desc:'Beginner to advanced syllabus' },
+  ]},
 ];
 
 const SOCIALS = [
@@ -53,24 +58,20 @@ export function More() {
   return (
     <Layout title="More">
       <div className="space-y-4 p-4 md:p-6">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {ITEMS.map(({ to, Icon, label, desc, hi }) => (
-            <button type="button" key={to} onClick={() => navigate(to)}
-              className={`surface-card flex w-full items-center gap-3 p-3 text-left transition-colors hover:border-chess-blue/30 ${hi ? 'border-l-[3px] border-l-chess-blue' : ''}`}>
-              <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${hi ? 'bg-navy text-chess-light' : 'bg-gray-100 text-navy'}`}>
-                <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-semibold text-gray-900">{label}</p>
-                <p className="truncate text-xs text-gray-400">{desc}</p>
-              </div>
-              <ChevronRight size={17} className="ml-auto flex-shrink-0 text-gray-300" aria-hidden="true" />
-            </button>
-          ))}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {GROUPS.map(group => <section key={group.title} className="surface-card overflow-hidden">
+            <h2 className="section-label border-b border-gray-100 px-3 py-2.5 text-navy">{group.title}</h2>
+            {group.items.map(({ to, Icon, label, desc }) => <button type="button" key={to} onClick={() => navigate(to)}
+              className="flex w-full items-center gap-3 border-b border-gray-100 p-3 text-left transition-colors last:border-0 hover:bg-gray-50">
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-navy"><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-gray-900">{label}</span><span className="block truncate text-xs text-gray-400">{desc}</span></span>
+              <ChevronRight size={16} className="flex-shrink-0 text-gray-300" aria-hidden="true" />
+            </button>)}
+          </section>)}
         </div>
-        <div className="surface-card p-4">
-          <p className="section-label mb-3 text-navy">Useful Chess Links</p>
-          <div className="space-y-2">
+        <details className="surface-card overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-3 p-4"><span className="min-w-0 flex-1"><strong className="section-label block text-navy">Useful Chess Links</strong><span className="text-xs text-gray-400">Ratings, pairings, events and payments</span></span><ChevronRight size={17} className="text-gray-400" /></summary>
+          <div className="space-y-2 border-t border-gray-100 p-4">
             {USEFUL_LINKS.map(({ key, label, desc, Icon, url }) => (
               <a key={key} href={url} target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 transition-colors hover:border-chess-blue/30">
@@ -85,7 +86,7 @@ export function More() {
               </a>
             ))}
           </div>
-        </div>
+        </details>
         {SOCIALS.length > 0 && (
           <div className="surface-card p-4">
             <p className="section-label mb-3 text-navy">Academy Social Media</p>

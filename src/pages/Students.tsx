@@ -10,6 +10,7 @@ import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, DEFAULT_LEVELS, loadStudentOptions } from '../lib/studentOptions';
+import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
 import {
   dateValidationError,
   digitsOnly,
@@ -57,6 +58,7 @@ type FormData = {
   emergencyContact:string; emergencyPhone:string; address:string; photoConsent:string; notes:string;
   school:string; standard:string; tnscaId:string; fideId:string; aicfId:string;
   ratingClassical:string; ratingRapid:string; ratingBlitz:string; coachName:string;
+  chessComUsername:string; lichessUsername:string;
 };
 
 const EMPTY: FormData = {
@@ -66,6 +68,7 @@ const EMPTY: FormData = {
   address:'', photoConsent:'Yes', notes:'',
   school:'', standard:'', tnscaId:'', fideId:'', aicfId:'',
   ratingClassical:'', ratingRapid:'', ratingBlitz:'', coachName:'',
+  chessComUsername:'', lichessUsername:'',
 };
 
 function rowToStudent(row: string[], rowIndex: number): Student {
@@ -78,7 +81,7 @@ function rowToStudent(row: string[], rowIndex: number): Student {
     photoConsent:row[18]??'', thisMonthAttended:row[19]??'', notes:row[20]??'',
     school:row[21]??'', standard:row[22]??'', tnscaId:row[23]??'', fideId:row[24]??'',
     aicfId:row[25]??'', ratingClassical:row[26]??'', ratingRapid:row[27]??'', ratingBlitz:row[28]??'',
-    coachName:row[29]??'',
+    coachName:row[29]??'', chessComUsername:row[30]??'', lichessUsername:row[31]??'',
     rowIndex,
   };
 }
@@ -92,7 +95,7 @@ function studentToForm(s: Student): FormData {
     emergencyPhone:s.emergencyPhone, address:s.address, photoConsent:s.photoConsent, notes:s.notes,
     school:s.school, standard:s.standard, tnscaId:s.tnscaId, fideId:s.fideId, aicfId:s.aicfId,
     ratingClassical:s.ratingClassical, ratingRapid:s.ratingRapid, ratingBlitz:s.ratingBlitz,
-    coachName:s.coachName,
+    coachName:s.coachName, chessComUsername:s.chessComUsername, lichessUsername:s.lichessUsername,
   };
 }
 
@@ -164,8 +167,17 @@ function studentRowValues(form: FormData, row: number) {
     form.notes, form.school, form.standard,
     form.tnscaId, form.fideId, form.aicfId,
     form.ratingClassical, form.ratingRapid, form.ratingBlitz,
-    form.coachName,
+    form.coachName, form.chessComUsername.trim(), form.lichessUsername.trim(),
   ];
+}
+
+function onlineUsernameValidationError(value: string, platform: string, maxLength: number) {
+  const username = value.trim();
+  if (!username) return '';
+  if (username.length > maxLength || !/^[A-Za-z0-9_-]+$/.test(username)) {
+    return `${platform} username must use only letters, numbers, underscores, or hyphens and be ${maxLength} characters or fewer.`;
+  }
+  return '';
 }
 
 function formValidationError(form: FormData) {
@@ -194,6 +206,9 @@ function formValidationError(form: FormData) {
   ];
   const ratingError = ratingErrors.find(Boolean);
   if (ratingError) return ratingError;
+  const usernameError = onlineUsernameValidationError(form.chessComUsername, 'Chess.com', 25)
+    || onlineUsernameValidationError(form.lichessUsername, 'Lichess', 20);
+  if (usernameError) return usernameError;
   const joiningDateError = dateValidationError(form.joiningDate, 'Joining date');
   if (joiningDateError) return joiningDateError;
   if (form.joiningDate && form.joiningDate < form.dob) return 'Joining date cannot be before the student’s date of birth.';
@@ -219,6 +234,8 @@ function studentDetailsText(student: Student): string {
   add('TNSCA ID', student.tnscaId);
   add('FIDE ID', student.fideId);
   add('AICF ID', student.aicfId);
+  add('Chess.com', student.chessComUsername);
+  add('Lichess', student.lichessUsername);
   add('Parent / Guardian', student.parent1Name);
   add('Parent Phone', student.parent1Phone);
   add('Parent WhatsApp', student.parent1WhatsApp);
@@ -242,7 +259,7 @@ async function confirmUniqueStudentAppend(
   const firstMatchingRow = confirmedNames.findIndex((nameRow, index) => index > 0
     && normalizedName(nameRow[0] ?? '') === normalizedName(studentName));
   if (firstMatchingRow >= 0 && firstMatchingRow + 1 !== appendedRow) {
-    await clearSheetRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A${appendedRow}:AD${appendedRow}`);
+    await clearSheetRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A${appendedRow}:AF${appendedRow}`);
     onDuplicateRemoved();
     throw new Error('This student was added on another device at the same time. The duplicate row was removed.');
   }
@@ -288,16 +305,17 @@ function StudentDetailActions({ student, onEdit, onBack }: Readonly<{
 }
 
 async function ensureStudentSchema(token: string) {
-  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, 30);
-  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1`);
-  if (!header[0]?.[0]?.trim()) {
-    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1`, [['Coach Name']]);
+  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, 32);
+  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AF1`);
+  const expected = ['Coach Name', 'Chess.com Username', 'Lichess Username'];
+  if (expected.some((value, index) => header[0]?.[index]?.trim() !== value)) {
+    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AF1`, [expected]);
   }
 }
 
 async function loadStudentRows(token: string) {
   try {
-    return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`);
+    return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AF`);
   } catch (readError) {
     if (navigator.onLine) throw readError;
     return readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
@@ -308,6 +326,7 @@ export function Students() {
   const { token, logout } = useAuth();
   const { coachName } = useCoachName();
   const [students, setStudents] = useState<Student[]>([]);
+  const [tournamentRegistrations, setTournamentRegistrations] = useState<TournamentRegistration[]>([]);
   const [filtered, setFiltered] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -329,14 +348,16 @@ export function Students() {
     setLoading(true); setError('');
     try {
       if (navigator.onLine) await ensureStudentSchema(token);
-      const [rows, options] = await Promise.all([
+      const [rows, options, registrationRows] = await Promise.all([
         loadStudentRows(token),
         loadStudentOptions(token, SHEET_ID),
+        readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
       ]);
       const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(student => student.name.trim());
       setStudents(data); setFiltered(data);
       setBatches(options.batches.values);
       setLevels(options.levels.values);
+      setTournamentRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
     } catch(e:any) {
       if(e.message==='TOKEN_EXPIRED'){logout();return;}
       setError(e.message);
@@ -370,7 +391,7 @@ export function Students() {
         return;
       }
       await ensureStudentSchema(token);
-      rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`, [[
+      rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AF`, [[
         form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
         form.gender, form.grade, form.batch, form.level,
         form.joiningDate, form.status, form.parent1Name, phoneForSheet(form.parent1Phone),
@@ -380,6 +401,7 @@ export function Students() {
         form.notes,
         form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
         form.ratingClassical, form.ratingRapid, form.ratingBlitz, form.coachName,
+        form.chessComUsername.trim(), form.lichessUsername.trim(),
       ]]);
       await confirmUniqueStudentAppend(token, form.name, rowIndex, () => { rowIndex = null; });
       const savedRow = rowIndex;
@@ -387,7 +409,7 @@ export function Students() {
       const attendanceSynced = await syncStudentProfile(
         token,
         SHEET_ID,
-        `'${TABS.STUDENTS}'!A${savedRow}:AD${savedRow}`,
+        `'${TABS.STUDENTS}'!A${savedRow}:AF${savedRow}`,
         values,
         { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
         { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
@@ -421,7 +443,7 @@ export function Students() {
     try {
       const row = selected.rowIndex; const tab = TABS.STUDENTS;
       const [currentRows, currentNames] = await Promise.all([
-        readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`),
+        readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`),
         readSheetLive(token, SHEET_ID, `'${tab}'!A:A`),
       ]);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
@@ -451,13 +473,13 @@ export function Students() {
       const attendanceSynced = await syncStudentProfile(
         token,
         SHEET_ID,
-        `'${tab}'!A${row}:AD${row}`,
+        `'${tab}'!A${row}:AF${row}`,
         studentRowValues(mergedForm, row),
         { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
         { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
       );
       const updated = formToStudent(mergedForm, row, currentStudent);
-      const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
+      const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`);
       const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
       if (!sameStudentForm(studentToForm(confirmed), studentToForm(updated))) {
         setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
@@ -486,13 +508,13 @@ export function Students() {
     try {
       const row = selected.rowIndex;
       const tab = TABS.STUDENTS;
-      const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
+      const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
       if (!sameStudentForm(studentToForm(currentStudent), studentToForm(selected))) {
         toast.info('This student was changed on another device. Reload the list before removing it.');
         return;
       }
-      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AD${row}`);
+      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`);
       setStudents(prev => prev.filter(student => student.rowIndex !== row));
       void recordAudit(token, 'DELETE', 'Students', selected.name, `Row ${row}`).catch(() => undefined);
       setSelected(null);
@@ -559,10 +581,18 @@ export function Students() {
             <Row label="TNSCA ID" value={selected.tnscaId}/>
             <Row label="FIDE ID"  value={selected.fideId}/>
             <Row label="AICF ID"  value={selected.aicfId}/>
+            <Row label="Chess.com">
+              {selected.chessComUsername ? <a href={`https://www.chess.com/member/${encodeURIComponent(selected.chessComUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.chessComUsername}</a> : null}
+            </Row>
+            <Row label="Lichess">
+              {selected.lichessUsername ? <a href={`https://lichess.org/@/${encodeURIComponent(selected.lichessUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.lichessUsername}</a> : null}
+            </Row>
             <Row label="Joined"   value={selected.joiningDate}/>
             <Row label="Coach"    value={selected.coachName}/>
             <Row label="This Month" value={`${selected.thisMonthAttended||0} days`}/>
           </InfoSection>
+
+          <TournamentAttendance studentName={selected.name} registrations={tournamentRegistrations} />
 
           {/* Personal */}
           <InfoSection title="Personal">
@@ -670,7 +700,7 @@ export function Students() {
                 <p className="font-semibold text-gray-900">{s.name}</p>
                 <div className="flex gap-x-2 gap-y-1 mt-1 flex-wrap items-center">
                   <span className="text-xs text-gray-600 break-words">{s.batch}</span>
-                  {cat && <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
+                  {cat && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
                   {s.fideId && <span className="text-xs text-gray-500 whitespace-nowrap">FIDE: {s.fideId}</span>}
                 </div>
               </div>
@@ -781,6 +811,11 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
         <Field label="AICF ID"><input value={form.aicfId} onChange={f('aicfId')} className="input" placeholder="All India Chess Federation ID"/></Field>
       </Section>
 
+      <Section title="Online Chess">
+        <Field label="Chess.com Username"><input maxLength={25} autoCapitalize="none" autoCorrect="off" value={form.chessComUsername} onChange={f('chessComUsername')} className="input" placeholder="e.g. hikaru"/></Field>
+        <Field label="Lichess Username"><input maxLength={20} autoCapitalize="none" autoCorrect="off" value={form.lichessUsername} onChange={f('lichessUsername')} className="input" placeholder="e.g. DrNykterstein"/></Field>
+      </Section>
+
       {/* Parents */}
       <Section title="Parent / Guardian">
         <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
@@ -842,6 +877,18 @@ function RatingBox({ label, value }: Readonly<{ label: string; value: string }>)
       <p className="font-bold text-navy text-lg">{value}</p>
     </div>
   );
+}
+function TournamentAttendance({ studentName, registrations }: Readonly<{ studentName: string; registrations: TournamentRegistration[] }>) {
+  const attended = registrations
+    .filter(item => normalizedName(item.studentName) === normalizedName(studentName))
+    .sort((left, right) => (right.tournamentDate || right.month).localeCompare(left.tournamentDate || left.month));
+  return <InfoSection title="Tournament Attendance">
+    {attended.length === 0 && <p className="text-xs text-gray-400">No tournament attendance recorded.</p>}
+    {attended.map(item => <div key={`${item.tournamentId}-${item.rowIndex}`} className="border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+      <div className="flex items-start justify-between gap-3"><p className="text-sm font-semibold text-gray-900">{item.tournamentName}</p><span className="flex-none text-xs font-semibold text-chess-blue">{monthLabel(item.month)}</span></div>
+      <p className="mt-1 text-xs text-gray-500">{item.tournamentDate || 'Date not recorded'} · Fee {item.feePaid ? 'paid' : 'pending'}{item.entryFee ? ` · ₹${item.entryFee}` : ''}</p>
+    </div>)}
+  </InfoSection>;
 }
 function Modal({ title, onClose, children }: Readonly<{ title: string; onClose: () => void; children: React.ReactNode }>) {
   return (

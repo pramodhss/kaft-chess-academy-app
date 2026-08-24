@@ -16,6 +16,8 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   await dialog.getByLabel('Parent / Guardian Name *').fill('Anita Rao');
   await dialog.getByLabel('Phone *', { exact: true }).fill('9988776655');
   await dialog.getByLabel('Assigned Coach').fill('Coach Meera');
+  await dialog.getByLabel('Chess.com Username').fill('ishaan_rook');
+  await dialog.getByLabel('Lichess Username').fill('ishaan-knight');
   await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
 
   await expect(page.getByText('Ishaan Rao', { exact: true })).toBeVisible();
@@ -27,6 +29,14 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   expect(student?.[9]).toBe('Anita Rao');
   expect(student?.[10]).toBe('9988776655');
   expect(student?.[29]).toBe('Coach Meera');
+  expect(student?.[30]).toBe('ishaan_rook');
+  expect(student?.[31]).toBe('ishaan-knight');
+
+  await page.getByRole('button', { name: /Ishaan Rao/ }).click();
+  await expect(page.getByRole('link', { name: 'ishaan_rook' })).toHaveAttribute('href', 'https://www.chess.com/member/ishaan_rook');
+  await expect(page.getByRole('link', { name: 'ishaan-knight' })).toHaveAttribute('href', 'https://lichess.org/@/ishaan-knight');
+  await expect(page.getByRole('link', { name: 'ishaan_rook' })).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('link', { name: 'ishaan-knight' })).toHaveAttribute('target', '_blank');
 });
 
 test('blocks duplicate student names before writing', async ({ page, sheets }) => {
@@ -77,5 +87,8 @@ test('filters phone input and validates email and ratings', async ({ page, sheet
   await dialog.getByLabel('Email').fill('parent@example.com');
   await dialog.getByLabel('Classical Rating').fill('1200.5');
   await expect(dialog.getByRole('alert')).toContainText('whole number');
+  await dialog.getByLabel('Classical Rating').fill('1200');
+  await dialog.getByLabel('Chess.com Username').fill('https://chess.com/member/player');
+  await expect(dialog.getByRole('alert')).toContainText('Chess.com username must use only letters');
   expect(sheets.writes).toHaveLength(0);
 });

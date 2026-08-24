@@ -376,6 +376,21 @@ html.dark .badge-blue   { background-color: #1e3a5f !important; color: #93c5fd !
 html.dark .badge-green  { background-color: #14532d !important; color: #86efac !important; }
 html.dark .badge-amber  { background-color: #451a03 !important; color: #fde68a !important; }
 html.dark .badge-red    { background-color: #450a0a !important; color: #fca5a5 !important; }
+/* Category badge dark mode — maps the Tailwind bg/text pairs used in CATEGORY_COLOR */
+html.dark .bg-blue-100     { background-color: #1e3a5f !important; }
+html.dark .bg-cyan-100     { background-color: #164e63 !important; }
+html.dark .bg-green-100    { background-color: #14532d !important; }
+html.dark .bg-emerald-100  { background-color: #064e3b !important; }
+html.dark .bg-amber-100    { background-color: #451a03 !important; }
+html.dark .bg-orange-100   { background-color: #431407 !important; }
+html.dark .bg-red-100      { background-color: #450a0a !important; }
+html.dark .bg-purple-100   { background-color: #3b0764 !important; }
+html.dark .text-cyan-800   { color: #a5f3fc !important; }
+html.dark .text-green-800  { color: #86efac !important; }
+html.dark .text-emerald-800 { color: #6ee7b7 !important; }
+html.dark .text-amber-800  { color: #fde68a !important; }
+html.dark .text-orange-800 { color: #fdba74 !important; }
+html.dark .text-purple-800 { color: #d8b4fe !important; }
 html.dark .bottom-nav { background: rgba(31, 41, 55, 0.96); }
 html.dark .skeleton { background: linear-gradient(90deg, #293241 25%, #374151 50%, #293241 75%); background-size: 200% 100%; }
 /* ── Chess animations ─────────────────────────────────────────────────────── */

@@ -29,6 +29,8 @@ export interface Student {
   ratingRapid: string;
   ratingBlitz: string;
   coachName: string;
+  chessComUsername: string;
+  lichessUsername: string;
   rowIndex: number;
 }
 

@@ -178,9 +178,9 @@ async function fulfillSheetsRequest(route: Route, mock: SheetsMock) {
 function defaultWorkbook(): Workbook {
   return {
     'Students & Parents': [
-      ['Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status', 'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone', 'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'This Month Attended', 'Notes', 'School', 'Standard', 'TNSCA ID', 'FIDE ID', 'AICF ID', 'Classical Rating', 'Rapid Rating', 'Blitz Rating', 'Coach Name'],
-      ['Aarav Kumar', '10/05/2014', '11', 'Male', '6th, Sunrise School', 'Beginner A', 'Beginner', '01/01/2026', 'Active', 'Priya Kumar', '9876543210', '9876543210', 'priya@example.com', '', '', '', '', 'Chennai', 'Yes', '3', '', 'Sunrise School', '6th', 'TN100', '1234567', '', '1200', '1100', '1000', 'Coach Meera'],
-      ['Diya Shah', '20/08/2013', '12', 'Female', '7th, Valley School', 'Intermediate', 'Intermediate', '01/02/2026', 'Active', 'Ravi Shah', '9123456780', '9123456780', '', '', '', '', '', '', 'Yes', '4', '', 'Valley School', '7th', '', '', '', '1150', '1080', '990', 'Coach Meera'],
+      ['Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status', 'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone', 'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'This Month Attended', 'Notes', 'School', 'Standard', 'TNSCA ID', 'FIDE ID', 'AICF ID', 'Classical Rating', 'Rapid Rating', 'Blitz Rating', 'Coach Name', 'Chess.com Username', 'Lichess Username'],
+      ['Aarav Kumar', '10/05/2014', '11', 'Male', '6th, Sunrise School', 'Beginner A', 'Beginner', '01/01/2026', 'Active', 'Priya Kumar', '9876543210', '9876543210', 'priya@example.com', '', '', '', '', 'Chennai', 'Yes', '3', '', 'Sunrise School', '6th', 'TN100', '1234567', '', '1200', '1100', '1000', 'Coach Meera', '', ''],
+      ['Diya Shah', '20/08/2013', '12', 'Female', '7th, Valley School', 'Intermediate', 'Intermediate', '01/02/2026', 'Active', 'Ravi Shah', '9123456780', '9123456780', '', '', '', '', '', '', 'Yes', '4', '', 'Valley School', '7th', '', '', '', '1150', '1080', '990', 'Coach Meera', '', ''],
     ],
     'Weekend Attendance': [
       ['Student Name', 'Batch', '2026-08-02'],
@@ -214,7 +214,8 @@ function defaultWorkbook(): Workbook {
       ['student_batches', '["Beginner A","Intermediate"]', 'v1', '', 'Coach Meera', '2026-08-01T00:00:00.000Z'],
       ['student_levels', '["Beginner","Intermediate"]', 'v1', '', 'Coach Meera', '2026-08-01T00:00:00.000Z'],
     ],
-    'Upcoming Tournaments': [['Name', 'Date', 'Venue', 'Registration Deadline', 'Category', 'Status']],
+    'Upcoming Tournaments': [['Tournament Name', 'Type', 'Date', 'Reg Deadline', 'Venue', 'Entry Fee', 'Eligibility', 'Link', 'Notes', 'Status', 'Added By', 'Added On', 'Tournament ID']],
+    'Tournament Registrations': [['Tournament ID', 'Tournament Name', 'Tournament Date', 'Month', 'Student Name', 'Playing', 'Fee Paid', 'Entry Fee', 'Updated By', 'Updated At']],
     Resources: [['Title', 'Type', 'URL', 'Description', 'Level']],
     Timetable: [
       ['Day', 'Time', 'Batch', 'Coach', 'Location'],

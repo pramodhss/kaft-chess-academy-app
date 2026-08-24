@@ -1,169 +1,367 @@
 import { useEffect, useState } from 'react';
-import { Bus, Clock3, MapPin, Phone, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Pencil, Plus, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { appendRows, clearSheetRange, ensureSheet, readSheet, readSheetLive, writeRange } from '../lib/sheets';
-import { phoneValidationError } from '../lib/validation';
+import { useCoachName } from '../hooks/useCoachName';
+import { appendRows, batchWriteRanges, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
+import { phoneValidationError } from '../lib/validation';
+import {
+  EMPTY_TOURNAMENT, REGISTRATION_HEADERS, TOURNAMENT_HEADERS, registrationValues,
+  rowToManagedTournament, rowToRegistration, tournamentMonth, tournamentValidationError, tournamentValues,
+  type ManagedTournament, type TournamentDraft, type TournamentRegistration,
+} from '../lib/tournamentManagement';
 import { SHEET_ID, TABS } from '../config';
 
-const HEADERS = ['Van ID', 'Student Name', 'Tournament', 'Parent / Contact', 'Pickup Location', 'Pickup Time', 'Return Location', 'Return Time', 'Driver Name', 'Driver Phone', 'Transport Fee', 'Status', 'Notes'];
-const EMPTY = { studentName: '', tournament: '', contact: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', driverName: '', driverPhone: '', fee: '', status: 'Assigned', notes: '' };
-type AssignmentDraft = typeof EMPTY;
-interface VanAssignment extends AssignmentDraft { vanId: string; rowIndex: number }
+interface RosterChoice { playing: boolean; feePaid: boolean; vanRequired: boolean; notes: string }
 
-function rowToAssignment(row: string[], rowIndex: number): VanAssignment {
-  return {
-    vanId: row[0] ?? '', studentName: row[1] ?? '', tournament: row[2] ?? '', contact: row[3] ?? '',
-    pickupLocation: row[4] ?? '', pickupTime: row[5] ?? '', returnLocation: row[6] ?? '', returnTime: row[7] ?? '',
-    driverName: row[8] ?? '', driverPhone: row[9] ?? '', fee: row[10] ?? '', status: row[11] ?? '', notes: row[12] ?? '', rowIndex,
-  };
+function newTournamentId() { return `TRN-${crypto.randomUUID().slice(0, 8).toUpperCase()}`; }
+function sameTournament(left: ManagedTournament, right: ManagedTournament) { return JSON.stringify(tournamentValues(left)) === JSON.stringify(tournamentValues(right)); }
+function formattedDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'Date not set';
+  return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
 }
 
-function migrateLegacyRows(rows: string[][]): string[][] {
-  return rows.slice(1).map(row => {
-    const legacyBatch = row[2]?.trim();
-    const legacyNote = legacyBatch ? `Previous batch: ${legacyBatch}` : '';
-    return [
-      row[0] ?? '', row[1] ?? '', 'Legacy transport assignment', row[3] ?? '', row[4] ?? '', row[5] ?? '',
-      row[6] ?? '', row[7] ?? '', row[8] ?? '', row[9] ?? '', row[10] ?? '', row[11] ?? '',
-      [row[12], legacyNote].filter(Boolean).join(' · '),
-    ];
-  });
+async function ensureTournamentSheets(token: string) {
+  await ensureSheet(token, SHEET_ID, TABS.UPCOMING, TOURNAMENT_HEADERS);
+  await ensureSheetColumns(token, SHEET_ID, TABS.UPCOMING, TOURNAMENT_HEADERS.length);
+  const idHeader = await readSheetLive(token, SHEET_ID, `'${TABS.UPCOMING}'!M1`);
+  if (idHeader[0]?.[0] !== 'Tournament ID') await writeRange(token, SHEET_ID, `'${TABS.UPCOMING}'!M1`, [['Tournament ID']]);
+  await ensureSheet(token, SHEET_ID, TABS.TOURNAMENT_REGISTRATIONS, REGISTRATION_HEADERS);
+  await ensureSheetColumns(token, SHEET_ID, TABS.TOURNAMENT_REGISTRATIONS, REGISTRATION_HEADERS.length);
 }
 
-function assignmentValidationError(form: AssignmentDraft): string {
-  if (!form.studentName) return 'Select a student.';
-  if (!form.tournament.trim()) return 'Select or enter a tournament.';
-  if (!form.pickupLocation.trim()) return 'Enter a pickup location.';
-  if (!form.driverName.trim()) return 'Enter the driver name.';
-  return phoneValidationError(form.driverPhone, 'Driver phone');
+async function addMissingIds(token: string, tournaments: ManagedTournament[]) {
+  const missing = tournaments.filter(t => !t.id);
+  if (missing.length === 0) return tournaments;
+  const generated = missing.map(t => ({ tournament: t, id: newTournamentId() }));
+  await batchWriteRanges(token, SHEET_ID, generated.map(({ tournament, id }) => ({ range: `'${TABS.UPCOMING}'!M${tournament.rowIndex}`, values: [[id]] })));
+  const idByRow = new Map(generated.map(({ tournament, id }) => [tournament.rowIndex, id]));
+  return tournaments.map(t => ({ ...t, id: t.id || idByRow.get(t.rowIndex) || '' }));
+}
+
+function createRoster(students: string[], registrations: TournamentRegistration[], tournamentId: string) {
+  const saved = new Map(registrations.filter(r => r.tournamentId === tournamentId).map(r => [r.studentName, r]));
+  return Object.fromEntries(students.map(s => [s, {
+    playing: saved.get(s)?.playing ?? false,
+    feePaid: saved.get(s)?.feePaid ?? false,
+    vanRequired: saved.get(s)?.vanRequired ?? false,
+    notes: saved.get(s)?.studentNotes ?? '',
+  }]));
 }
 
 export function Van() {
   const { token, logout } = useAuth();
+  const { coachName } = useCoachName();
   const toast = useToast();
-  const [entries, setEntries] = useState<VanAssignment[]>([]);
-  const [students, setStudents] = useState<{ name: string; contact: string }[]>([]);
-  const [tournaments, setTournaments] = useState<string[]>([]);
+  const [tournaments, setTournaments] = useState<ManagedTournament[]>([]);
+  const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
+  const [students, setStudents] = useState<string[]>([]);
+  const [selected, setSelected] = useState<ManagedTournament | null>(null);
+  const [roster, setRoster] = useState<Record<string, RosterChoice>>({});
+  const [query, setQuery] = useState('');
+  const [form, setForm] = useState<TournamentDraft>({ ...EMPTY_TOURNAMENT });
+  const [editing, setEditing] = useState<ManagedTournament | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState<AssignmentDraft>({ ...EMPTY });
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [legacyWarning, setLegacyWarning] = useState('');
 
   const load = async () => {
     if (!token) return;
     setLoading(true); setError('');
     try {
-      await ensureSheet(token, SHEET_ID, TABS.VAN, HEADERS);
-      const [vanRows, studentRows, tournamentRows] = await Promise.all([
-        readSheet(token, SHEET_ID, `'${TABS.VAN}'!A:M`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:L`),
-        readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:E`).catch(() => []),
+      await ensureTournamentSheets(token);
+      const [tournamentRows, studentRows, registrationRows, legacyVanRows] = await Promise.all([
+        readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:M`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
+        readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:L`),
+        readSheet(token, SHEET_ID, `'${TABS.VAN}'!A:M`).catch(() => []),
       ]);
-      const assignmentRows = vanRows.length > 0 && vanRows[0][2] !== 'Tournament' ? migrateLegacyRows(vanRows) : vanRows.slice(1);
-      if (vanRows.length > 0 && vanRows[0][2] !== 'Tournament') {
-        await writeRange(token, SHEET_ID, `'${TABS.VAN}'!A1:M${assignmentRows.length + 1}`, [HEADERS, ...assignmentRows]);
-      }
-      setEntries(assignmentRows.map((row, index) => rowToAssignment(row, index + 2)).filter(entry => entry.studentName.trim()));
-      setStudents(studentRows.slice(1).filter(row => row[0]?.trim()).map(row => ({ name: row[0], contact: row[11] || row[10] || '' })));
-      setTournaments(tournamentRows.slice(1).map(row => row[0]).filter(Boolean));
-    } catch (loadError: any) {
-      if (loadError.message === 'TOKEN_EXPIRED') { logout(); return; }
-      setError(loadError.message);
+      const parsed = tournamentRows.slice(1).map((row, i) => rowToManagedTournament(row, i + 2)).filter(t => t.name.trim());
+      setTournaments(await addMissingIds(token, parsed));
+      setStudents(studentRows.slice(1).map(r => r[0]?.trim()).filter((n): n is string => Boolean(n)));
+      setRegistrations(registrationRows.slice(1).map((r, i) => rowToRegistration(r, i + 2)).filter(r => r.tournamentId && r.studentName));
+      setLegacyWarning(legacyVanRows.slice(1).map(r => phoneValidationError(r[9] ?? '', 'Driver phone')).find(Boolean) ?? '');
+    } catch (e: any) {
+      if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
+      setError(e.message);
     } finally { setLoading(false); }
   };
 
   useEffect(() => { void load(); }, [token]);
 
-  const addAssignment = async () => {
+  const openRoster = (t: ManagedTournament) => { setSelected(t); setRoster(createRoster(students, registrations, t.id)); setQuery(''); };
+  const openCreate = () => { setEditing(null); setForm({ ...EMPTY_TOURNAMENT }); setShowForm(true); };
+  const openEdit = (t: ManagedTournament) => { setEditing(t); setForm({ name: t.name, date: t.date, fee: t.fee }); setShowForm(true); };
+
+  const createTournament = async () => {
     if (!token) return;
-    const validationError = assignmentValidationError(form);
-    if (validationError) { toast.error(validationError); return; }
+    const created: ManagedTournament = {
+      id: newTournamentId(), name: form.name.trim(), date: form.date, fee: form.fee,
+      type: 'Open', deadline: '', venue: '', eligibility: 'All Levels', link: '', notes: '', status: 'Upcoming',
+      addedBy: coachName || 'Coach', addedOn: new Date().toISOString(), rowIndex: 0,
+    };
+    const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.UPCOMING}'!A:M`, [tournamentValues(created)]);
+    const saved = { ...created, rowIndex };
+    setTournaments(c => [...c, saved]);
+    void recordAudit(token, 'CREATE', 'Tournament Management', saved.name, saved.date).catch(() => undefined);
+    toast.success(`${saved.name} was created. Open it to select players.`);
+  };
+
+  const updateTournament = async (original: ManagedTournament) => {
+    if (!token) return;
+    const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.UPCOMING}'!A${original.rowIndex}:M${original.rowIndex}`);
+    if (!sameTournament(rowToManagedTournament(liveRows[0] ?? [], original.rowIndex), original)) throw new Error('This tournament changed on another device. Reload and try again.');
+    const updated = { ...original, name: form.name.trim(), date: form.date, fee: form.fee };
+    const linked = registrations.filter(r => r.tournamentId === original.id);
+    const updatedRegs = linked.map(r => ({ ...r, tournamentName: updated.name, tournamentDate: updated.date, month: tournamentMonth(updated.date), entryFee: updated.fee }));
+    await batchWriteRanges(token, SHEET_ID, [
+      { range: `'${TABS.UPCOMING}'!A${original.rowIndex}:M${original.rowIndex}`, values: [tournamentValues(updated)] },
+      ...updatedRegs.map(r => ({ range: `'${TABS.TOURNAMENT_REGISTRATIONS}'!A${r.rowIndex}:L${r.rowIndex}`, values: [registrationValues(r)] })),
+    ]);
+    setTournaments(c => c.map(t => t.id === updated.id ? updated : t));
+    setRegistrations(c => c.map(r => updatedRegs.find(u => u.rowIndex === r.rowIndex) ?? r));
+    if (selected?.id === updated.id) setSelected(updated);
+    void recordAudit(token, 'UPDATE', 'Tournament Management', updated.name, updated.date).catch(() => undefined);
+    toast.success(`${updated.name} was updated.`);
+  };
+
+  const saveTournament = async () => {
+    if (!token) return;
+    const err = tournamentValidationError(form);
+    if (err) { toast.error(err); return; }
     setSaving(true);
-    try {
-      const vanId = `VAN-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.VAN}'!A:M`, [[
-        vanId, form.studentName, form.tournament, form.contact, form.pickupLocation, form.pickupTime,
-        form.returnLocation, form.returnTime, form.driverName, form.driverPhone, form.fee, form.status, form.notes,
-      ]]);
-      setEntries(current => [...current, { ...form, vanId, rowIndex }]);
-      void recordAudit(token, 'CREATE', 'Tournament Transport', vanId, `${form.studentName} · ${form.tournament}`).catch(() => undefined);
-      setForm({ ...EMPTY }); setShowAdd(false);
-      toast.success(`${form.studentName} was assigned tournament transport.`);
-    } catch (saveError: any) { toast.error(`Save failed: ${saveError.message}`); }
+    try { if (editing) await updateTournament(editing); else await createTournament(); setShowForm(false); }
+    catch (e: any) { toast.error(`Save failed: ${e.message}`); }
     finally { setSaving(false); }
   };
 
-  const removeEntry = async (entry: VanAssignment) => {
-    if (!token || !window.confirm(`Remove tournament transport for ${entry.studentName}?`)) return;
-    setDeleting(entry.rowIndex);
+  const removeTournament = async (t: ManagedTournament) => {
+    if (!token || !window.confirm(`Remove ${t.name} and its player checklist? Tournament result history will be kept.`)) return;
+    setSaving(true);
     try {
-      const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.VAN}'!A${entry.rowIndex}:M${entry.rowIndex}`);
-      if (JSON.stringify(rowToAssignment(currentRows[0] ?? [], entry.rowIndex)) !== JSON.stringify(entry)) {
-        toast.info('This assignment changed on another device. Reload before removing it.'); return;
-      }
-      await clearSheetRange(token, SHEET_ID, `'${TABS.VAN}'!A${entry.rowIndex}:M${entry.rowIndex}`);
-      setEntries(current => current.filter(item => item.rowIndex !== entry.rowIndex));
-      void recordAudit(token, 'DELETE', 'Tournament Transport', entry.vanId, entry.studentName).catch(() => undefined);
-      toast.success(`${entry.studentName}'s tournament transport was removed.`);
-    } catch (removeError: any) { toast.error(`Remove failed: ${removeError.message}`); }
-    finally { setDeleting(null); }
+      const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.UPCOMING}'!A${t.rowIndex}:M${t.rowIndex}`);
+      if (!sameTournament(rowToManagedTournament(liveRows[0] ?? [], t.rowIndex), t)) { toast.info('This tournament changed on another device. Reload before removing it.'); return; }
+      const linked = registrations.filter(r => r.tournamentId === t.id);
+      await Promise.all([
+        clearSheetRange(token, SHEET_ID, `'${TABS.UPCOMING}'!A${t.rowIndex}:M${t.rowIndex}`),
+        ...linked.map(r => clearSheetRange(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A${r.rowIndex}:L${r.rowIndex}`)),
+      ]);
+      setTournaments(c => c.filter(x => x.id !== t.id));
+      setRegistrations(c => c.filter(x => x.tournamentId !== t.id));
+      void recordAudit(token, 'DELETE', 'Tournament Management', t.name, t.date).catch(() => undefined);
+      toast.success(`${t.name} was removed.`);
+    } catch (e: any) { toast.error(`Remove failed: ${e.message}`); }
+    finally { setSaving(false); }
   };
 
-  const chooseStudent = (name: string) => {
-    const student = students.find(item => item.name === name);
-    setForm(current => ({ ...current, studentName: name, contact: student?.contact ?? current.contact }));
-  };
-  const update = (key: keyof AssignmentDraft) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm(current => ({ ...current, [key]: event.target.value }));
-  const query = search.trim().toLowerCase();
-  const filtered = entries.filter(entry => !query || [entry.studentName, entry.tournament, entry.vanId, entry.driverName].some(value => value.toLowerCase().includes(query)));
-  const importedPhoneErrors = entries
-    .map(entry => phoneValidationError(entry.driverPhone, 'Driver phone'))
-    .filter((message): message is string => Boolean(message));
+  const togglePlaying = (s: string) => setRoster(c => {
+    const playing = !c[s]?.playing;
+    return { ...c, [s]: { ...c[s], playing, feePaid: playing ? c[s]?.feePaid ?? false : false, vanRequired: playing ? c[s]?.vanRequired ?? false : false } };
+  });
+  const toggleFee = (s: string) => setRoster(c => ({ ...c, [s]: { ...c[s], feePaid: !c[s]?.feePaid } }));
+  const toggleVan = (s: string) => setRoster(c => ({ ...c, [s]: { ...c[s], vanRequired: !c[s]?.vanRequired } }));
+  const setStudentNotes = (s: string, notes: string) => setRoster(c => ({ ...c, [s]: { ...c[s], notes } }));
 
-  if (loading) return <Layout title="Tournament Transport"><PageSkeleton /></Layout>;
-  return <Layout title="Tournament Transport" action={<button type="button" onClick={() => setShowAdd(true)} className="header-action" aria-label="Add transport assignment"><Plus size={15} /> Add</button>}>
-    <div className="page-stack">
-      {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
-      {importedPhoneErrors.length > 0 && <div role="alert" className="error-state"><p>{[...new Set(importedPhoneErrors)].join(' ')}</p></div>}
-      <div className="surface-card flex items-center gap-3 p-3"><span className="icon-tile"><Bus size={18} /></span><div><h2 className="text-sm font-semibold text-gray-900">Tournament travel</h2><p className="text-xs text-gray-500">Assign students, pickup points and drivers.</p></div></div>
-      <input className="input" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search student, tournament or van" aria-label="Search transport assignments" />
-      {filtered.length === 0 && <div className="empty-state"><Bus size={24} /><p>{entries.length === 0 ? 'No tournament transport assigned yet.' : 'No matching assignments.'}</p></div>}
-      <div className="space-y-2">{filtered.map(entry => <article key={entry.rowIndex} className="surface-card p-3">
-        <div className="flex items-start gap-3"><span className="icon-tile"><Bus size={18} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><h2 className="text-sm font-semibold text-gray-900">{entry.studentName}</h2><p className="text-xs font-medium text-chess-blue">{entry.tournament || 'Tournament not set'}</p></div><span className={entry.status === 'Confirmed' ? 'badge-green' : 'badge-blue'}>{entry.status || 'Assigned'}</span></div>
-          <div className="mt-2 grid gap-1.5 text-xs text-gray-600 sm:grid-cols-2">
-            <Info Icon={MapPin}>{entry.pickupLocation}{entry.pickupTime ? ` · ${entry.pickupTime}` : ''}</Info>
-            {entry.returnLocation && <Info Icon={Clock3}>{entry.returnLocation}{entry.returnTime ? ` · ${entry.returnTime}` : ''}</Info>}
-            <Info Icon={UserRound}>{entry.driverName}</Info>
-            {entry.driverPhone && <Info Icon={Phone}><a href={`tel:${entry.driverPhone}`}>{entry.driverPhone}</a></Info>}
+  const saveRoster = async () => {
+    if (!token || !selected) return;
+    setSaving(true);
+    try {
+      const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:L`);
+      const live = liveRows.slice(1).map((r, i) => rowToRegistration(r, i + 2));
+      const existingByStudent = new Map(live.filter(r => r.tournamentId === selected.id).map(r => [r.studentName, r]));
+      const timestamp = new Date().toISOString();
+      const desired = students.map(student => ({
+        tournamentId: selected.id, tournamentName: selected.name, tournamentDate: selected.date,
+        month: tournamentMonth(selected.date), studentName: student,
+        playing: roster[student]?.playing ?? false,
+        feePaid: roster[student]?.playing ? roster[student]?.feePaid ?? false : false,
+        vanRequired: roster[student]?.playing ? roster[student]?.vanRequired ?? false : false,
+        studentNotes: roster[student]?.notes ?? '',
+        entryFee: selected.fee, updatedBy: coachName || 'Coach', updatedAt: timestamp,
+        rowIndex: existingByStudent.get(student)?.rowIndex ?? 0,
+      }));
+      const existing = desired.filter(r => r.rowIndex > 0);
+      const missing = desired.filter(r => r.rowIndex === 0);
+      if (existing.length > 0) await batchWriteRanges(token, SHEET_ID, existing.map(r => ({
+        range: `'${TABS.TOURNAMENT_REGISTRATIONS}'!A${r.rowIndex}:L${r.rowIndex}`, values: [registrationValues(r)],
+      })));
+      let firstNewRow = 0;
+      if (missing.length > 0) firstNewRow = await appendRows(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:L`, missing.map(registrationValues));
+      const saved = [...existing, ...missing.map((r, i) => ({ ...r, rowIndex: firstNewRow + i }))];
+      setRegistrations(c => [...c.filter(r => r.tournamentId !== selected.id), ...saved]);
+      void recordAudit(token, 'UPDATE', 'Tournament Roster', selected.name, `${saved.filter(r => r.playing).length} players`).catch(() => undefined);
+      toast.success(`${selected.name} roster was saved.`);
+    } catch (e: any) { toast.error(`Roster save failed: ${e.message}`); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <Layout title="Tournament Management"><PageSkeleton /></Layout>;
+  if (selected) return <RosterView tournament={selected} students={students} roster={roster} query={query} saving={saving}
+    setQuery={setQuery} togglePlaying={togglePlaying} toggleFee={toggleFee} toggleVan={toggleVan}
+    setStudentNotes={setStudentNotes} save={saveRoster} close={() => setSelected(null)} />;
+
+  return (
+    <Layout title="Tournament Management" action={<button type="button" onClick={openCreate} className="header-action" aria-label="Add tournament"><Plus size={15} /> Add</button>}>
+      <div className="page-stack">
+        {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
+        {legacyWarning && <div role="alert" className="error-state"><p><Bus size={14} className="inline mr-1" />{legacyWarning} Legacy transport data was left unchanged.</p></div>}
+        <div className="surface-card flex items-center gap-3 p-3">
+          <span className="icon-tile"><Trophy size={18} /></span>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Tournament rosters</h2>
+            <p className="text-xs text-gray-500">Create an event, then mark players, fees and van needs.</p>
           </div>
-        </div><button type="button" onClick={() => removeEntry(entry)} disabled={deleting === entry.rowIndex} className="icon-button-danger ml-auto mt-2" aria-label={`Remove transport for ${entry.studentName}`}><Trash2 size={16} /></button></div>
-      </article>)}</div>
-    </div>
-    {showAdd && <div className="modal-backdrop items-end justify-center sm:items-center"><dialog open aria-labelledby="transport-modal-title" className="modal-panel max-h-[92vh] max-w-lg overflow-y-auto p-4">
-      <div className="mb-3 flex items-center justify-between"><h2 id="transport-modal-title" className="text-base font-semibold text-navy">Assign tournament transport</h2><button type="button" onClick={() => setShowAdd(false)} className="icon-button" aria-label="Close"><X size={18} /></button></div>
-      <div className="form-grid">
-        <Field label="Student"><select className="input" value={form.studentName} onChange={event => chooseStudent(event.target.value)}><option value="">Select student</option>{students.map(student => <option key={student.name}>{student.name}</option>)}</select></Field>
-        <Field label="Tournament"><input className="input" list="tournament-list" value={form.tournament} onChange={update('tournament')} placeholder="Select or type tournament" /><datalist id="tournament-list">{tournaments.map(name => <option key={name} value={name} />)}</datalist></Field>
-        <Field label="Parent / contact"><input className="input" value={form.contact} onChange={update('contact')} inputMode="tel" /></Field>
-        <Field label="Pickup location"><input className="input" value={form.pickupLocation} onChange={update('pickupLocation')} /></Field>
-        <div className="grid grid-cols-2 gap-2"><Field label="Pickup time"><input type="time" className="input" value={form.pickupTime} onChange={update('pickupTime')} /></Field><Field label="Return time"><input type="time" className="input" value={form.returnTime} onChange={update('returnTime')} /></Field></div>
-        <Field label="Return location"><input className="input" value={form.returnLocation} onChange={update('returnLocation')} /></Field>
-        <div className="grid grid-cols-2 gap-2"><Field label="Driver"><input className="input" value={form.driverName} onChange={update('driverName')} /></Field><Field label="Driver phone"><input className="input" value={form.driverPhone} onChange={update('driverPhone')} inputMode="tel" /></Field></div>
-        <div className="grid grid-cols-2 gap-2"><Field label="Transport fee"><input type="number" min="0" className="input" value={form.fee} onChange={update('fee')} /></Field><Field label="Status"><select className="input" value={form.status} onChange={update('status')}><option>Assigned</option><option>Confirmed</option><option>Completed</option></select></Field></div>
-        <Field label="Notes"><textarea className="input" rows={2} value={form.notes} onChange={update('notes')} /></Field>
+        </div>
+        {tournaments.length === 0 && !error && (
+          <div className="empty-state"><CalendarDays size={25} /><p>No tournaments yet.</p>
+            <button type="button" onClick={openCreate} className="primary-action"><Plus size={15} /> Create tournament</button>
+          </div>
+        )}
+        <div className="space-y-2">
+          {[...tournaments].sort((a, b) => b.date.localeCompare(a.date)).map(t => {
+            const playing = registrations.filter(r => r.tournamentId === t.id && r.playing);
+            return <TournamentCard key={t.id} tournament={t} playing={playing.length}
+              paid={playing.filter(r => r.feePaid).length} van={playing.filter(r => r.vanRequired).length}
+              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)} saving={saving} />;
+          })}
+        </div>
       </div>
-      {assignmentValidationError(form) && <p role="alert" className="mt-3 text-xs text-red-600">{assignmentValidationError(form)}</p>}
-      <button type="button" onClick={addAssignment} disabled={saving} className="primary-action mt-3 w-full">{saving ? 'Assigning…' : 'Assign transport'}</button>
-    </dialog></div>}
-  </Layout>;
+      {showForm && <TournamentForm form={form} setForm={setForm} editing={Boolean(editing)} saving={saving} close={() => setShowForm(false)} save={saveTournament} />}
+    </Layout>
+  );
 }
 
-function Info({ Icon, children }: Readonly<{ Icon: typeof MapPin; children: React.ReactNode }>) { return <span className="flex min-w-0 items-center gap-1.5"><Icon size={14} className="flex-none text-gray-400" /><span className="truncate">{children}</span></span>; }
-function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) { return <label className="block"><span className="field-label">{label}</span>{children}</label>; }
+function TournamentCard({ tournament, playing, paid, van, open, edit, remove, saving }: Readonly<{
+  tournament: ManagedTournament; playing: number; paid: number; van: number;
+  open: () => void; edit: () => void; remove: () => void; saving: boolean;
+}>) {
+  return (
+    <article className="surface-card overflow-hidden">
+      <button type="button" onClick={open} className="w-full p-3 text-left">
+        <div className="flex items-start gap-3">
+          <span className="icon-tile"><Trophy size={18} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-sm font-semibold text-gray-900">{tournament.name}</h2>
+            <p className="mt-0.5 text-xs text-gray-500">{formattedDate(tournament.date)} · ₹{tournament.fee || '0'}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="badge-blue"><Users size={12} className="inline mr-0.5" />{playing} playing</span>
+              <span className="badge-green"><CircleDollarSign size={12} className="inline mr-0.5" />{paid} paid</span>
+              {van > 0 && <span className="badge-amber"><Bus size={12} className="inline mr-0.5" />{van} van</span>}
+            </div>
+          </div>
+          <ChevronRight size={16} className="mt-1 flex-shrink-0 text-gray-400" />
+        </div>
+      </button>
+      <div className="flex justify-end gap-1.5 border-t border-gray-100 px-3 py-2">
+        <button type="button" onClick={edit} className="icon-button" aria-label={`Edit ${tournament.name}`}><Pencil size={15} /></button>
+        <button type="button" onClick={remove} disabled={saving} className="icon-button-danger" aria-label={`Remove ${tournament.name}`}><Trash2 size={15} /></button>
+      </div>
+    </article>
+  );
+}
+
+function RosterView({ tournament, students, roster, query, saving, setQuery, togglePlaying, toggleFee, toggleVan, setStudentNotes, save, close }: Readonly<{
+  tournament: ManagedTournament; students: string[]; roster: Record<string, RosterChoice>; query: string; saving: boolean;
+  setQuery: (value: string) => void; togglePlaying: (student: string) => void; toggleFee: (student: string) => void;
+  toggleVan: (student: string) => void; setStudentNotes: (student: string, notes: string) => void; save: () => void; close: () => void;
+}>) {
+  const [notesStudent, setNotesStudent] = useState<string | null>(null);
+  const [notesText, setNotesText] = useState('');
+  const visible = students.filter(s => s.toLowerCase().includes(query.trim().toLowerCase()));
+  const playing = students.filter(s => roster[s]?.playing).length;
+  const paid = students.filter(s => roster[s]?.playing && roster[s]?.feePaid).length;
+  const van = students.filter(s => roster[s]?.playing && roster[s]?.vanRequired).length;
+  const openNotes = (s: string) => { setNotesStudent(s); setNotesText(roster[s]?.notes ?? ''); };
+  const saveNotes = () => { if (notesStudent) { setStudentNotes(notesStudent, notesText); setNotesStudent(null); } };
+  return (
+    <Layout title={tournament.name} action={<button type="button" onClick={close} className="header-action">Done</button>}>
+      <div className="page-stack">
+        <div className="surface-card p-3">
+          <p className="text-sm font-semibold text-gray-900">{formattedDate(tournament.date)}</p>
+          <p className="mt-0.5 text-xs text-gray-500">Entry fee: ₹{tournament.fee || '0'}</p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <span className="badge-blue"><Users size={12} className="inline mr-1" />{playing} playing</span>
+            <span className="badge-green"><CircleDollarSign size={12} className="inline mr-1" />{paid} paid</span>
+            <span className="badge-amber"><Bus size={12} className="inline mr-1" />{van} van</span>
+          </div>
+        </div>
+        <div className="relative">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input className="input input-with-icon" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search students…" aria-label="Search students" />
+        </div>
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+          <div className="grid grid-cols-[minmax(0,1fr)_52px_52px_52px_36px] items-center gap-1 border-b border-gray-200 bg-gray-50 px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+            <span>Student</span>
+            <span className="text-center">Play</span>
+            <span className="text-center">Fee</span>
+            <span className="text-center">Van</span>
+            <span />
+          </div>
+          {visible.map(s => (
+            <div key={s} className="grid grid-cols-[minmax(0,1fr)_52px_52px_52px_36px] items-center gap-1 border-b border-gray-100 px-3 py-2.5 last:border-0">
+              <span className="truncate text-sm font-medium text-gray-900">{s}</span>
+              <label className="flex justify-center" title="Playing"><span className="sr-only">{s} playing</span><input type="checkbox" checked={roster[s]?.playing ?? false} onChange={() => togglePlaying(s)} className="h-5 w-5 cursor-pointer accent-navy" /></label>
+              <label className="flex justify-center" title="Fee paid"><span className="sr-only">{s} fee paid</span><input type="checkbox" checked={roster[s]?.feePaid ?? false} onChange={() => toggleFee(s)} disabled={!roster[s]?.playing} className="h-5 w-5 cursor-pointer accent-green-700 disabled:opacity-30" /></label>
+              <label className="flex justify-center" title="Van required"><span className="sr-only">{s} van required</span><input type="checkbox" checked={roster[s]?.vanRequired ?? false} onChange={() => toggleVan(s)} disabled={!roster[s]?.playing} className="h-5 w-5 cursor-pointer accent-amber-500 disabled:opacity-30" /></label>
+              <button type="button" onClick={() => openNotes(s)} title="Notes" aria-label={`Notes for ${s}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 ${roster[s]?.notes ? 'text-chess-blue' : 'text-gray-300'}`}>
+                <StickyNote size={14} />
+              </button>
+            </div>
+          ))}
+          {visible.length === 0 && <p className="p-5 text-center text-sm text-gray-400">No matching students.</p>}
+        </div>
+        <button type="button" onClick={save} disabled={saving} className="primary-action w-full">{saving ? 'Saving roster…' : 'Save roster'}</button>
+      </div>
+      {notesStudent && (
+        <div className="modal-backdrop items-end justify-center sm:items-center">
+          <dialog open aria-labelledby="notes-overlay-title" className="modal-panel max-w-md p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 id="notes-overlay-title" className="text-sm font-semibold text-navy"><StickyNote size={15} className="inline mr-1.5" />Notes — {notesStudent}</h3>
+              <button type="button" onClick={() => setNotesStudent(null)} className="icon-button" aria-label="Close"><X size={17} /></button>
+            </div>
+            <textarea className="input" rows={4} value={notesText} onChange={e => setNotesText(e.target.value)} placeholder="Pickup point, travel details, special requirements…" autoFocus />
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => setNotesStudent(null)} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700">Cancel</button>
+              <button type="button" onClick={saveNotes} className="primary-action flex-1">Save note</button>
+            </div>
+          </dialog>
+        </div>
+      )}
+    </Layout>
+  );
+}
+
+function TournamentForm({ form, setForm, editing, saving, close, save }: Readonly<{
+  form: TournamentDraft; setForm: React.Dispatch<React.SetStateAction<TournamentDraft>>; editing: boolean; saving: boolean; close: () => void; save: () => void;
+}>) {
+  let buttonLabel = 'Create tournament';
+  if (editing) buttonLabel = 'Save changes';
+  if (saving) buttonLabel = 'Saving…';
+  return (
+    <div className="modal-backdrop items-end justify-center sm:items-center">
+      <dialog open aria-labelledby="tournament-form-title" className="modal-panel max-w-md p-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="tournament-form-title" className="text-base font-semibold text-navy">{editing ? 'Edit tournament' : 'Create tournament'}</h2>
+          <button type="button" onClick={close} className="icon-button" aria-label="Close"><X size={18} /></button>
+        </div>
+        <div className="space-y-3">
+          <Field label="Tournament name"><input className="input" maxLength={120} value={form.name} onChange={e => setForm(c => ({ ...c, name: e.target.value }))} /></Field>
+          <Field label="Tournament date"><input type="date" className="input" value={form.date} onChange={e => setForm(c => ({ ...c, date: e.target.value }))} /></Field>
+          <Field label="Entry fee (₹)"><input type="number" min="0" step="0.01" className="input" value={form.fee} onChange={e => setForm(c => ({ ...c, fee: e.target.value }))} /></Field>
+        </div>
+        {tournamentValidationError(form) && <p role="alert" className="mt-3 text-xs text-red-600">{tournamentValidationError(form)}</p>}
+        <button type="button" onClick={save} disabled={saving} className="primary-action mt-4 w-full">{buttonLabel}</button>
+      </dialog>
+    </div>
+  );
+}
+
+function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
+  return <label className="block"><span className="field-label">{label}</span>{children}</label>;
+}

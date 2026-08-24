@@ -1,5 +1,5 @@
-import { cloneElement, isValidElement, useEffect, useId, useState } from 'react';
-import { BookOpen, Download, ExternalLink, Eye, FileText, Library, Link2, Newspaper, Paperclip, Plus, Share2, Trash2, Video, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, Eye, FileImage, FileText, Library, Link2, Plus, Share2, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -7,12 +7,12 @@ import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import { useCoachName } from '../hooks/useCoachName';
-import { deleteDriveFile, uploadPdf, validatePdf } from '../lib/drive';
+import { deleteDriveFile, uploadFileToDrive, uploadPdf, validateImage, validatePdf } from '../lib/drive';
 import { recordAudit } from '../lib/audit';
 
 const HEADERS = ['Name','Type','URL','Description','Added By','Date Added','Drive File ID'];
-const TYPES = ['eBook','PDF','Video','Article','Link','Other'];
-const TYPE_ICON = { eBook: BookOpen, PDF: FileText, Video, Article: Newspaper, Link: Link2, Other: Paperclip };
+const TYPES = ['PDF','Image','Link'];
+const TYPE_ICON: Record<string, React.ElementType> = { PDF: FileText, Image: FileImage, Link: Link2 };
 const EMPTY = { name:'', type:'PDF', url:'', description:'' };
 
 function isWebUrl(value: string): boolean {
@@ -48,7 +48,7 @@ export function Resources() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
-  const [pdf, setPdf] = useState<File | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [shareByLink, setShareByLink] = useState(false);
   const coachName = savedCoachName || 'Coach';
 
@@ -66,19 +66,20 @@ export function Resources() {
   useEffect(() => { load(); }, [token]);
 
   const handleAdd = async () => {
-    if (!token || !form.name.trim() || (!form.url.trim() && !pdf)) return;
-    if (!pdf && !isWebUrl(form.url.trim())) { toast.error('Enter a valid http:// or https:// resource URL.'); return; }
+    if (!token || !form.name.trim() || (!form.url.trim() && !uploadFile)) return;
+    if (!uploadFile && !isWebUrl(form.url.trim())) { toast.error('Enter a valid http:// or https:// resource URL.'); return; }
     setSaving(true);
     try {
       let url = form.url.trim();
       let fileId = '';
-      if (pdf) {
-        const validationError = await validatePdf(pdf);
+      if (uploadFile) {
+        const isPdf = uploadFile.type === 'application/pdf' || uploadFile.name.toLowerCase().endsWith('.pdf');
+        const validationError = isPdf ? await validatePdf(uploadFile) : validateImage(uploadFile);
         if (validationError) { toast.error(validationError); return; }
-        const uploaded = await uploadPdf(token, pdf, shareByLink);
+        const uploaded = isPdf ? await uploadPdf(token, uploadFile, shareByLink) : await uploadFileToDrive(token, uploadFile, shareByLink);
         url = uploaded.webViewLink;
         fileId = uploaded.id;
-        if (shareByLink && !uploaded.sharingEnabled) toast.info('PDF uploaded, but this Google account does not allow public link sharing. Signed-in users can still open it.');
+        if (shareByLink && !uploaded.sharingEnabled) toast.info('File uploaded, but this Google account does not allow public link sharing. Signed-in users can still open it.');
       }
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.RESOURCES}'!A:G`, [[
         form.name, form.type, url, form.description, coachName, new Date().toLocaleDateString('en-IN'), fileId,
@@ -87,7 +88,7 @@ export function Resources() {
       setItems(prev => [...prev, { ...form, url, fileId, addedBy: coachName, dateAdded, rowIndex }]);
       setShowAdd(false);
       setForm({ ...EMPTY });
-      setPdf(null);
+      setUploadFile(null);
       setShareByLink(false);
       void recordAudit(token, 'CREATE', 'Resources', form.name, fileId ? 'Drive PDF' : 'External link').catch(() => undefined);
       toast.success(`${form.name} was added to Resources.`);
@@ -130,6 +131,7 @@ export function Resources() {
       toast.error('Unable to share this resource.');
     }
   };
+  const displayTypes = [...new Set(items.map(i => i.type))];
   const visible = filter ? items.filter(i => i.type === filter) : items;
 
   if (loading) return <Layout title="Resources"><PageSkeleton /></Layout>;
@@ -141,18 +143,18 @@ export function Resources() {
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {['', ...TYPES].map(t => (
+          {['', ...displayTypes].map(t => (
             <button type="button" key={t} onClick={() => setFilter(t)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium ${filter===t?'bg-navy text-white':'bg-gray-100 text-gray-600'}`}>
-              {t || 'All'} {t ? `(${items.filter(i=>i.type===t).length})` : `(${items.length})`}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${filter===t?'bg-navy text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {t || 'All'} ({t ? items.filter(i=>i.type===t).length : items.length})
             </button>
           ))}
         </div>
         {visible.length===0 && <div className="flex flex-col items-center py-14 text-center text-gray-400"><span className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-500"><Library size={23} aria-hidden="true" /></span><p className="font-medium text-gray-600">No resources yet</p><p className="mt-1 max-w-xs text-sm">Add a link, PDF, video, or eBook for the academy.</p></div>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {visible.map(r => {
-          const TypeIcon = TYPE_ICON[r.type as keyof typeof TYPE_ICON] ?? Paperclip;
-          const isPdf = r.type === 'PDF' || r.type === 'eBook';
+          const TypeIcon = TYPE_ICON[r.type] ?? FileText;
+          const isDriveFile = Boolean(r.fileId);
           const downloadUrl = r.fileId ? `https://drive.google.com/uc?export=download&id=${encodeURIComponent(r.fileId)}` : r.url;
           return (
           <div key={r.rowIndex} className="surface-card p-4">
@@ -163,10 +165,9 @@ export function Resources() {
                 <span className="badge-blue text-xs">{r.type}</span>
                 {r.description && <p className="text-xs text-gray-500 mt-1">{r.description}</p>}
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="resource-action bg-navy text-white"><Eye size={14} aria-hidden="true" />{r.type === 'Video' ? 'Watch' : 'View'}</a>
-                  {isPdf && <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download className="resource-action border border-gray-200 bg-white text-gray-700"><Download size={14} aria-hidden="true" />Download</a>}
+                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="resource-action bg-navy text-white"><Eye size={14} aria-hidden="true" />View</a>
+                  {isDriveFile && <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download className="resource-action border border-gray-200 bg-white text-gray-700"><Download size={14} aria-hidden="true" />Download</a>}
                   <button type="button" onClick={() => shareResource(r)} className="resource-action border border-gray-200 bg-white text-gray-700"><Share2 size={14} aria-hidden="true" />Share</button>
-                  {!isPdf && <ExternalLink size={14} className="self-center text-gray-300" aria-hidden="true" />}
                 </div>
               </div>
             </div>
@@ -192,15 +193,26 @@ export function Resources() {
             </div>
             <div className="space-y-3">
               <F label="Name *"><input value={form.name} onChange={u('name')} className="input" placeholder="e.g. Chess Tactics for Beginners" /></F>
-              <F label="Type"><select value={form.type} onChange={u('type')} className="input">{TYPES.map(o=><option key={o}>{o}</option>)}</select></F>
-              <F label="Upload PDF"><input type="file" accept="application/pdf,.pdf" onChange={event => { const file = event.target.files?.[0] ?? null; setPdf(file); if (file && !form.name.trim()) setForm(current => ({ ...current, name: file.name.replace(/\.pdf$/i, ''), type: 'PDF' })); }} className="input file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1 file:text-xs file:font-semibold" /></F>
-              {pdf && <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={shareByLink} onChange={event => setShareByLink(event.target.checked)} /> Allow anyone with the link to view this PDF</label>}
+              <F label="Type"><select value={form.type} onChange={u('type')} className="input">{TYPES.map(o => <option key={o}>{o}</option>)}</select></F>
+              <F label="Upload PDF or Image">
+                <input type="file" accept="application/pdf,.pdf,image/jpeg,image/png,image/gif,image/webp"
+                  onChange={event => {
+                    const file = event.target.files?.[0] ?? null;
+                    setUploadFile(file);
+                    if (file && !form.name.trim()) {
+                      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+                      setForm(current => ({ ...current, name: file.name.replace(/\.(pdf|jpe?g|png|gif|webp)$/i, ''), type: isPdf ? 'PDF' : 'Image' }));
+                    }
+                  }}
+                  className="input cursor-pointer file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-navy file:px-3 file:py-1 file:text-xs file:font-semibold file:text-white hover:file:bg-navy/80" />
+              </F>
+              {uploadFile && <label className="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={shareByLink} onChange={event => setShareByLink(event.target.checked)} className="h-4 w-4" /> Allow anyone with the link to view this file</label>}
               <div className="flex items-center gap-2 text-xs text-gray-400"><span className="h-px flex-1 bg-gray-200" />or add a link<span className="h-px flex-1 bg-gray-200" /></div>
               <F label="URL / Link"><input value={form.url} onChange={u('url')} className="input" placeholder="https://drive.google.com/… or any URL" /></F>
               <F label="Description"><textarea value={form.description} onChange={u('description')} className="input" rows={2} /></F>
               <p className="text-xs text-gray-400">Will be added by: <strong>{coachName}</strong></p>
             </div>
-            <button type="button" onClick={handleAdd} disabled={saving||!form.name.trim()||(!form.url.trim()&&!pdf)}
+            <button type="button" onClick={handleAdd} disabled={saving||!form.name.trim()||(!form.url.trim()&&!uploadFile)}
               className="primary-action mt-4 w-full">
               {saving && <span className="button-spinner" aria-hidden="true"/>}
               {saving ? 'Adding resource…' : 'Add Resource'}
@@ -212,6 +224,5 @@ export function Resources() {
   );
 }
 function F({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
-  const id = useId();
-  return <div><label htmlFor={id} className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>{isValidElement(children) ? cloneElement(children as React.ReactElement<{ id?: string }>, { id }) : children}</div>;
+  return <label className="block"><span className="text-xs font-medium text-gray-500 mb-1 block">{label}</span>{children}</label>;
 }

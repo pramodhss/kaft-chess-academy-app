@@ -13,6 +13,7 @@ export const TABS = {
   METRICS:     "Monthly Metrics",
   TOURNAMENTS: "Tournament Achievements",
   UPCOMING:    "Upcoming Tournaments",
+  TOURNAMENT_REGISTRATIONS: "Tournament Registrations",
   RESOURCES:   "Resources",
   SETTINGS:    "App Settings",
   AUDIT:       "Audit Log",
