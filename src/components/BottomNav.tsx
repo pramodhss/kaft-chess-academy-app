@@ -18,8 +18,8 @@ export function BottomNav() {
           to={to}
           end={to === '/'}
           className={({ isActive }) =>
-            `bottom-nav-item relative flex flex-1 flex-col items-center justify-center py-1.5 text-[11px] font-medium transition-colors
-             ${isActive ? 'text-navy' : 'text-gray-400'}`
+            `bottom-nav-item relative flex flex-1 flex-col items-center justify-center py-1.5 text-[11px] font-semibold transition-colors
+             ${isActive ? 'text-chess-blue' : 'text-gray-400'}`
           }
         >
           {({ isActive }) => <>
