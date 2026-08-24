@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Pencil, Plus, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
+import { Bus, CalendarDays, ChevronRight, CircleDollarSign, MessageCircle, Pencil, Plus, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -77,7 +77,7 @@ export function Van() {
       await ensureTournamentSheets(token);
       const [tournamentRows, studentRows, registrationRows, legacyVanRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:M`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:L`),
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:L`),
         readSheet(token, SHEET_ID, `'${TABS.VAN}'!A:M`).catch(() => []),
       ]);
@@ -128,6 +128,22 @@ export function Van() {
     if (selected?.id === updated.id) setSelected(updated);
     void recordAudit(token, 'UPDATE', 'Tournament Management', updated.name, updated.date).catch(() => undefined);
     toast.success(`${updated.name} was updated.`);
+  };
+
+  const notifyTournament = (tournament: ManagedTournament) => {
+    const playing = students.filter(s => registrations.some(r => r.tournamentId === tournament.id && r.playing && r.studentName === s));
+    const lines = [
+      `🏆 *Tournament: ${tournament.name}*`,
+      `📅 Date: ${formattedDate(tournament.date)}`,
+      tournament.fee ? `💰 Entry fee: \u20b9${tournament.fee}` : '',
+      '',
+      playing.length > 0 ? `*Participating students (${playing.length}):*` : '',
+      ...playing.map(s => `\u2022 ${s}`),
+      '',
+      'Please confirm participation and arrange fee payment.',
+      '\u2014 KAFT Chess Academy',
+    ].filter(Boolean).join('\n');
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank', 'noopener,noreferrer');
   };
 
   const saveTournament = async () => {
@@ -227,7 +243,7 @@ export function Van() {
             const playing = registrations.filter(r => r.tournamentId === t.id && r.playing);
             return <TournamentCard key={t.id} tournament={t} playing={playing.length}
               paid={playing.filter(r => r.feePaid).length} van={playing.filter(r => r.vanRequired).length}
-              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)} saving={saving} />;
+              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)} notify={() => notifyTournament(t)} saving={saving} />;
           })}
         </div>
       </div>
@@ -236,9 +252,9 @@ export function Van() {
   );
 }
 
-function TournamentCard({ tournament, playing, paid, van, open, edit, remove, saving }: Readonly<{
+function TournamentCard({ tournament, playing, paid, van, open, edit, remove, notify, saving }: Readonly<{
   tournament: ManagedTournament; playing: number; paid: number; van: number;
-  open: () => void; edit: () => void; remove: () => void; saving: boolean;
+  open: () => void; edit: () => void; remove: () => void; notify: () => void; saving: boolean;
 }>) {
   return (
     <article className="surface-card overflow-hidden">
@@ -257,9 +273,12 @@ function TournamentCard({ tournament, playing, paid, van, open, edit, remove, sa
           <ChevronRight size={16} className="mt-1 flex-shrink-0 text-gray-400" />
         </div>
       </button>
-      <div className="flex justify-end gap-1.5 border-t border-gray-100 px-3 py-2">
-        <button type="button" onClick={edit} className="icon-button" aria-label={`Edit ${tournament.name}`}><Pencil size={15} /></button>
-        <button type="button" onClick={remove} disabled={saving} className="icon-button-danger" aria-label={`Remove ${tournament.name}`}><Trash2 size={15} /></button>
+      <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
+        <button type="button" onClick={notify} className="flex items-center gap-1.5 text-xs font-semibold text-green-700"><MessageCircle size={14} />Notify parents</button>
+        <div className="flex gap-1.5">
+          <button type="button" onClick={edit} className="icon-button" aria-label={`Edit ${tournament.name}`}><Pencil size={15} /></button>
+          <button type="button" onClick={remove} disabled={saving} className="icon-button-danger" aria-label={`Remove ${tournament.name}`}><Trash2 size={15} /></button>
+        </div>
       </div>
     </article>
   );

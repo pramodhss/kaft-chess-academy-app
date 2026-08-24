@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarCheck, ChevronDown, Download, ReceiptIndianRupee, Trophy } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
@@ -22,6 +23,7 @@ function compactDetails(values: Array<string | undefined>) {
 
 export function StudentTimeline() {
   const { token, logout } = useAuth();
+  const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<string[]>([]);
   const [selected, setSelected] = useState('');
   const [events, setEvents] = useState<StudentEvent[]>([]);
@@ -40,7 +42,8 @@ export function StudentTimeline() {
     ]).then(([studentRows, feeRows, tournamentRows, registrationRows, attendanceRows]) => {
       const names = studentRows.slice(1).map(row => row[0]).filter(Boolean);
       setStudents(names);
-      setSelected(current => current || names[0] || '');
+      const preselected = searchParams.get('student') ?? '';
+      setSelected(current => current || (names.includes(preselected) ? preselected : '') || names[0] || '');
       setEvents([
         ...feeRows.slice(1).filter(row => row[1]).map((row, index): StudentEvent => ({
           key: `fee-${index}`, student: row[1], date: row[9] || row[8] || row[3] || '', title: row[4] || 'Fee payment', kind: 'fee',

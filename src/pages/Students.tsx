@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronRight, Copy, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Camera, Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -58,7 +58,7 @@ type FormData = {
   emergencyContact:string; emergencyPhone:string; address:string; photoConsent:string; notes:string;
   school:string; standard:string; tnscaId:string; fideId:string; aicfId:string;
   ratingClassical:string; ratingRapid:string; ratingBlitz:string; coachName:string;
-  chessComUsername:string; lichessUsername:string;
+  chessComUsername:string; lichessUsername:string; photoUrl:string;
 };
 
 const EMPTY: FormData = {
@@ -68,7 +68,7 @@ const EMPTY: FormData = {
   address:'', photoConsent:'Yes', notes:'',
   school:'', standard:'', tnscaId:'', fideId:'', aicfId:'',
   ratingClassical:'', ratingRapid:'', ratingBlitz:'', coachName:'',
-  chessComUsername:'', lichessUsername:'',
+  chessComUsername:'', lichessUsername:'', photoUrl:'',
 };
 
 function rowToStudent(row: string[], rowIndex: number): Student {
@@ -82,6 +82,7 @@ function rowToStudent(row: string[], rowIndex: number): Student {
     school:row[21]??'', standard:row[22]??'', tnscaId:row[23]??'', fideId:row[24]??'',
     aicfId:row[25]??'', ratingClassical:row[26]??'', ratingRapid:row[27]??'', ratingBlitz:row[28]??'',
     coachName:row[29]??'', chessComUsername:row[30]??'', lichessUsername:row[31]??'',
+    photoUrl:row[32]??'',
     rowIndex,
   };
 }
@@ -96,6 +97,7 @@ function studentToForm(s: Student): FormData {
     school:s.school, standard:s.standard, tnscaId:s.tnscaId, fideId:s.fideId, aicfId:s.aicfId,
     ratingClassical:s.ratingClassical, ratingRapid:s.ratingRapid, ratingBlitz:s.ratingBlitz,
     coachName:s.coachName, chessComUsername:s.chessComUsername, lichessUsername:s.lichessUsername,
+    photoUrl:s.photoUrl,
   };
 }
 
@@ -168,6 +170,7 @@ function studentRowValues(form: FormData, row: number) {
     form.tnscaId, form.fideId, form.aicfId,
     form.ratingClassical, form.ratingRapid, form.ratingBlitz,
     form.coachName, form.chessComUsername.trim(), form.lichessUsername.trim(),
+    form.photoUrl,
   ];
 }
 
@@ -259,7 +262,7 @@ async function confirmUniqueStudentAppend(
   const firstMatchingRow = confirmedNames.findIndex((nameRow, index) => index > 0
     && normalizedName(nameRow[0] ?? '') === normalizedName(studentName));
   if (firstMatchingRow >= 0 && firstMatchingRow + 1 !== appendedRow) {
-    await clearSheetRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A${appendedRow}:AF${appendedRow}`);
+    await clearSheetRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A${appendedRow}:AG${appendedRow}`);
     onDuplicateRemoved();
     throw new Error('This student was added on another device at the same time. The duplicate row was removed.');
   }
@@ -305,26 +308,40 @@ function StudentDetailActions({ student, onEdit, onBack }: Readonly<{
 }
 
 async function ensureStudentSchema(token: string) {
-  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, 32);
-  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AF1`);
-  const expected = ['Coach Name', 'Chess.com Username', 'Lichess Username'];
+  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, 33);
+  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AG1`);
+  const expected = ['Coach Name', 'Chess.com Username', 'Lichess Username', 'Photo URL'];
   if (expected.some((value, index) => header[0]?.[index]?.trim() !== value)) {
-    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AF1`, [expected]);
+    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AG1`, [expected]);
   }
 }
 
 async function loadStudentRows(token: string) {
   try {
-    return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AF`);
+    return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
   } catch (readError) {
     if (navigator.onLine) throw readError;
     return readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
   }
 }
 
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function uploadStudentPhoto(token: string, file: File): Promise<string> {
+  const { validateImage, uploadFileToDrive } = await import('../lib/drive');
+  const err = validateImage(file);
+  if (err) throw new Error(err);
+  const uploaded = await uploadFileToDrive(token, file, true);
+  return uploaded.webViewLink;
+}
+
 export function Students() {
   const { token, logout } = useAuth();
   const { coachName } = useCoachName();
+  const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [tournamentRegistrations, setTournamentRegistrations] = useState<TournamentRegistration[]>([]);
   const [filtered, setFiltered] = useState<Student[]>([]);
@@ -374,6 +391,15 @@ export function Students() {
     ));
   }, [search, students]);
 
+  const handlePhotoUpload = async (file: File | null) => {
+    if (!file || !token) return;
+    try {
+      const url = await uploadStudentPhoto(token, file);
+      setForm(current => ({ ...current, photoUrl: url }));
+      toast.success('Photo uploaded.');
+    } catch (e: any) { toast.error('Photo upload failed: ' + e.message); }
+  };
+
   const handleAdd = async () => {
     if (!token) return;
     const validationError = formValidationError(form);
@@ -391,7 +417,7 @@ export function Students() {
         return;
       }
       await ensureStudentSchema(token);
-      rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AF`, [[
+      rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, [[
         form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
         form.gender, form.grade, form.batch, form.level,
         form.joiningDate, form.status, form.parent1Name, phoneForSheet(form.parent1Phone),
@@ -401,7 +427,7 @@ export function Students() {
         form.notes,
         form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
         form.ratingClassical, form.ratingRapid, form.ratingBlitz, form.coachName,
-        form.chessComUsername.trim(), form.lichessUsername.trim(),
+        form.chessComUsername.trim(), form.lichessUsername.trim(), form.photoUrl,
       ]]);
       await confirmUniqueStudentAppend(token, form.name, rowIndex, () => { rowIndex = null; });
       const savedRow = rowIndex;
@@ -409,7 +435,7 @@ export function Students() {
       const attendanceSynced = await syncStudentProfile(
         token,
         SHEET_ID,
-        `'${TABS.STUDENTS}'!A${savedRow}:AF${savedRow}`,
+        `'${TABS.STUDENTS}'!A${savedRow}:AG${savedRow}`,
         values,
         { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
         { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
@@ -443,7 +469,7 @@ export function Students() {
     try {
       const row = selected.rowIndex; const tab = TABS.STUDENTS;
       const [currentRows, currentNames] = await Promise.all([
-        readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`),
+        readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`),
         readSheetLive(token, SHEET_ID, `'${tab}'!A:A`),
       ]);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
@@ -473,13 +499,13 @@ export function Students() {
       const attendanceSynced = await syncStudentProfile(
         token,
         SHEET_ID,
-        `'${tab}'!A${row}:AF${row}`,
+        `'${tab}'!A${row}:AG${row}`,
         studentRowValues(mergedForm, row),
         { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
         { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
       );
       const updated = formToStudent(mergedForm, row, currentStudent);
-      const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`);
+      const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
       const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
       if (!sameStudentForm(studentToForm(confirmed), studentToForm(updated))) {
         setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
@@ -508,13 +534,13 @@ export function Students() {
     try {
       const row = selected.rowIndex;
       const tab = TABS.STUDENTS;
-      const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`);
+      const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
       const currentStudent = rowToStudent(currentRows[0] ?? [], row);
       if (!sameStudentForm(studentToForm(currentStudent), studentToForm(selected))) {
         toast.info('This student was changed on another device. Reload the list before removing it.');
         return;
       }
-      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AF${row}`);
+      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
       setStudents(prev => prev.filter(student => student.rowIndex !== row));
       void recordAudit(token, 'DELETE', 'Students', selected.name, `Row ${row}`).catch(() => undefined);
       setSelected(null);
@@ -532,7 +558,7 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} />
+          <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} onPhotoUpload={handlePhotoUpload} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
@@ -556,6 +582,7 @@ export function Students() {
           onBack={() => setSelected(null)} />
       }>
         <div className="p-4 space-y-3">
+          {selected.photoUrl && <div className="flex justify-center"><img src={selected.photoUrl} alt={selected.name} className="h-20 w-20 rounded-full object-cover border-4 border-white shadow-md" /></div>}
           {/* Chess Profile */}
           <InfoSection title="Chess Profile">
             <div className="grid grid-cols-2 gap-2 mb-3">
@@ -638,6 +665,9 @@ export function Students() {
           )}
           {selected.address && <InfoSection title="Address"><p className="text-sm text-gray-700 break-words leading-5">{selected.address}</p></InfoSection>}
           {selected.notes && <InfoSection title="Notes"><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
+          <button type="button" onClick={() => navigate(`/timeline?student=${encodeURIComponent(selected.name)}`)} className="w-full border border-chess-blue/30 text-chess-blue py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2">
+            <FileChartColumn size={16} /> View Timeline &amp; Export PDF
+          </button>
           <button type="button" onClick={handleDelete} disabled={deleting}
             className="w-full border border-red-200 text-red-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
             <Trash2 size={18} aria-hidden="true" />
@@ -693,12 +723,17 @@ export function Students() {
             return 0;
           }).map(s => {
           const cat = getCategory(s.age);
+          const cm = currentMonthKey();
+          const hasTournament = tournamentRegistrations.some(r => r.month === cm && normalizedName(r.studentName) === normalizedName(s.name));
           return (
             <button type="button" key={s.name+s.rowIndex} onClick={() => setSelected(s)}
               className="card-btn w-full bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
-              <StudentAvatar name={s.name} />
+              <StudentAvatar name={s.name} photoUrl={s.photoUrl} />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-gray-900">{s.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold text-gray-900">{s.name}</p>
+                  {hasTournament && <span title="Playing tournament this month" className="text-sm leading-none">🏆</span>}
+                </div>
                 <div className="flex gap-x-2 gap-y-1 mt-0.5 flex-wrap items-center">
                   <span className="text-xs text-gray-600 break-words">{s.batch}</span>
                   {cat && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
@@ -716,7 +751,7 @@ export function Students() {
       {showAdd && (
         <Modal title="Add Student" onClose={() => setShowAdd(false)}>
           <div className="max-h-[65vh] overflow-y-auto pr-1">
-            <StudentForm form={form} setForm={setForm} batches={batches} levels={levels}/>
+            <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} onPhotoUpload={handlePhotoUpload}/>
           </div>
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mt-3">{formValidationError(form)}</p>}
           <button type="button" onClick={handleAdd} disabled={saving}
@@ -730,11 +765,12 @@ export function Students() {
   );
 }
 
-function StudentForm({ form, setForm, batches, levels }: Readonly<{
+function StudentForm({ form, setForm, batches, levels, onPhotoUpload }: Readonly<{
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
   levels: string[];
+  onPhotoUpload?: (file: File | null) => void;
 }>) {
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
@@ -817,6 +853,21 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
         <Field label="Lichess Username"><input maxLength={20} autoCapitalize="none" autoCorrect="off" value={form.lichessUsername} onChange={f('lichessUsername')} className="input" placeholder="e.g. DrNykterstein"/></Field>
       </Section>
 
+      <Section title="Profile Photo">
+        <div className="flex items-center gap-3">
+          {form.photoUrl
+            ? <img src={form.photoUrl} alt="" className="h-14 w-14 flex-none rounded-full object-cover border-2 border-gray-200" />
+            : <span className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-gray-100 text-gray-400"><Camera size={22} /></span>}
+          <div>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-500 hover:border-chess-blue hover:text-chess-blue">
+              <Camera size={13} />{form.photoUrl ? 'Change photo' : 'Upload photo'}
+              <input type="file" accept="image/*" className="sr-only" onChange={e => onPhotoUpload?.(e.target.files?.[0] ?? null)} />
+            </label>
+            {form.photoUrl && <button type="button" onClick={() => setForm({ ...form, photoUrl: '' })} className="ml-2 text-xs text-red-500">Remove</button>}
+          </div>
+        </div>
+      </Section>
+
       {/* Parents */}
       <Section title="Parent / Guardian">
         <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
@@ -853,9 +904,10 @@ function Field({ label, children }: Readonly<{ label: string; children: React.Re
   return <label className="block"><span className="text-xs font-medium text-gray-500 mb-1 block">{label}</span>{children}</label>;
 }
 const AVATAR_PALETTE = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#EC4899','#84CC16'];
-function StudentAvatar({ name }: Readonly<{ name: string }>) {
+function StudentAvatar({ name, photoUrl }: Readonly<{ name: string; photoUrl?: string }>) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
   const bg = AVATAR_PALETTE[name.charCodeAt(0) % AVATAR_PALETTE.length];
+  if (photoUrl) return <img src={photoUrl} alt="" className="h-10 w-10 flex-none rounded-full object-cover border border-gray-200" />;
   return (
     <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: bg }}>
       {initials}

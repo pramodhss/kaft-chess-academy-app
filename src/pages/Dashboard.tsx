@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CalendarCheck, ChevronRight, Clock3, LayoutGrid, MapPin, ReceiptIndianRupee, Trophy, UserRound, Users } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, LayoutGrid, MapPin, ReceiptIndianRupee, Trophy, UserRound, Users } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber } from '../lib/values';
 import { normalizeTimetableRows, upcomingClasses } from '../lib/timetable';
+import { useCoachName } from '../hooks/useCoachName';
 import { SHEET_ID, TABS } from '../config';
 
 const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -64,9 +65,11 @@ const QUICK_LINKS = [
 export function Dashboard() {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
+  const { coachName } = useCoachName();
   const [stats, setStats] = useState<{ total: number; active: number; collected: number; outstanding: number } | null>(null);
   const [birthdays, setBirthdays] = useState<{ name: string; dob: string; daysLeft: number }[]>([]);
   const [classes, setClasses] = useState<ReturnType<typeof upcomingClasses>>([]);
+  const [overdueCount, setOverdueCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const nextSession = nextWeekendDate();
@@ -89,7 +92,14 @@ export function Dashboard() {
         });
         setStats({ total: data.length, active, collected, outstanding });
         setBirthdays(upcomingBirthdays(studentRows));
-        setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
+        setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 6));
+        const overdueMap = new Map<string, number>();
+        feeRows.slice(1).forEach(r => {
+          const name = (r[0] ?? '').trim();
+          const balance = nonNegativeSheetNumber(r[6] ?? '');
+          if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);
+        });
+        setOverdueCount(overdueMap.size);
       } catch (e: any) {
         if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
         setError(e.message);
@@ -104,6 +114,11 @@ export function Dashboard() {
     content = <p className="p-4 text-red-600 text-sm">{error}</p>;
   } else if (stats) {
     const nextDate = classes[0]?.date ?? nextSession;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const myClassesToday = classes.filter(({ entry, date }) => {
+      const d = new Date(date); d.setHours(0,0,0,0);
+      return d.getTime() === today.getTime() && coachName && entry.coach.toLowerCase().includes(coachName.split(' ')[0]?.toLowerCase() ?? '');
+    });
     content = (
       <div className="space-y-4 p-3 sm:p-4 md:p-6">
         {/* Stat cards */}
@@ -130,6 +145,23 @@ export function Dashboard() {
             })}
           </div>
         )}
+
+        {myClassesToday.length > 0 && <section className="space-y-2">
+          <h2 className="section-label">My Classes Today</h2>
+          <div className="grid gap-2 md:grid-cols-3">{myClassesToday.map(({ entry, date }) => <article key={`${entry.rowIndex}-${date.toISOString()}`} className="surface-card p-3 border-l-[3px] border-l-chess-blue">
+            <div className="flex items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-gray-900">{entry.batch}</h3><p className="text-xs font-medium text-chess-blue">Today</p></div><span className="badge-green">{entry.status || 'Active'}</span></div>
+            <div className="mt-2 space-y-1 text-xs text-gray-600"><p className="flex items-center gap-1.5"><Clock3 size={13} />{entry.start} – {entry.end}</p>{entry.room && <p className="flex items-center gap-1.5"><MapPin size={13} />{entry.room}</p>}</div>
+          </article>)}</div>
+        </section>}
+
+        {overdueCount > 0 && <button type="button" onClick={() => navigate('/operations')} className="card-btn surface-card flex w-full items-center gap-3 p-4 text-left">
+          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-amber-50 text-amber-600"><AlertCircle size={18} /></span>
+          <div className="flex-1 min-w-0">
+            <strong className="block text-sm text-gray-900">{overdueCount} student{overdueCount !== 1 ? 's' : ''} with pending fees</strong>
+            <span className="text-xs text-gray-500">Open Operations › Reminders to send WhatsApp alerts</span>
+          </div>
+          <ChevronRight size={16} className="hover-arrow text-gray-400" />
+        </button>}
 
         {classes.length > 0 && <section className="space-y-2">
           <div className="flex items-center justify-between"><h2 className="section-label">Upcoming Classes</h2><button type="button" onClick={() => navigate('/timetable')} className="flex items-center gap-1 text-xs font-semibold text-chess-blue">Manage <ChevronRight size={13} /></button></div>

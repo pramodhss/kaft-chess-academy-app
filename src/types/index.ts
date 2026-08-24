@@ -31,6 +31,7 @@ export interface Student {
   coachName: string;
   chessComUsername: string;
   lichessUsername: string;
+  photoUrl: string;
   rowIndex: number;
 }
 
