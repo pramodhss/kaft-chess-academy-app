@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, ClipboardCheck, Download, MessageCircle, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle, ClipboardCheck, Download, MessageCircle, Settings, ShieldCheck } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +29,7 @@ function downloadJson(filename: string, value: unknown) {
 }
 
 export function OperationsCenter() {
+  const navigate = useNavigate();
   const { token, logout } = useAuth();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('actions');
@@ -48,7 +50,7 @@ export function OperationsCenter() {
     }).catch((error: Error) => { if (error.message === 'TOKEN_EXPIRED') logout(); else toast.error(error.message); }).finally(() => setLoading(false));
   }, [token, logout]);
 
-  if (loading) return <Layout title="Operations Center" showBack><PageSkeleton /></Layout>;
+  if (loading) return <Layout title="Operations & Data" showBack><PageSkeleton /></Layout>;
   const pendingFees = fees.filter(fee => fee.balance > 0);
   const quality = students.flatMap(student => [
     !student.dob ? `${student.name}: missing date of birth` : '',
@@ -84,10 +86,10 @@ export function OperationsCenter() {
 
   const tabs: { key: Tab; label: string }[] = [{ key: 'actions', label: 'Actions' }, { key: 'reminders', label: 'Reminders' }, { key: 'quality', label: 'Data Quality' }, { key: 'audit', label: 'Audit' }, { key: 'backup', label: 'Export' }];
   return (
-    <Layout title="Operations Center" showBack>
+    <Layout title="Operations & Data" showBack>
       <div className="space-y-4 p-4 md:p-6">
         <div className="flex gap-2 overflow-x-auto no-scrollbar">{tabs.map(item => <button type="button" key={item.key} onClick={() => setTab(item.key)} className={`flex-shrink-0 rounded-lg px-3 py-2 text-xs font-semibold ${tab === item.key ? 'bg-navy text-white' : 'bg-white text-gray-600'}`}>{item.label}</button>)}</div>
-        {tab === 'actions' && <div className="grid gap-3 md:grid-cols-3"><Metric icon={ClipboardCheck} label="Active students" value={students.filter(student => student.status.toLowerCase() === 'active').length} /><Metric icon={MessageCircle} label="Fee follow-ups" value={pendingFees.length} /><Metric icon={ShieldCheck} label="Data issues" value={quality.length} /></div>}
+        {tab === 'actions' && <div className="space-y-3"><div className="grid gap-3 md:grid-cols-3"><Metric icon={ClipboardCheck} label="Active students" value={students.filter(student => student.status.toLowerCase() === 'active').length} /><Metric icon={MessageCircle} label="Fee follow-ups" value={pendingFees.length} /><Metric icon={ShieldCheck} label="Data issues" value={quality.length} /></div><button type="button" onClick={() => navigate('/admin-settings')} className="surface-card flex w-full items-center gap-3 p-4 text-left"><span className="icon-tile"><Settings size={18} /></span><span><strong className="block text-sm text-gray-900">Batch and level settings</strong><span className="text-xs text-gray-500">Manage the options used in student and class records</span></span></button></div>}
         {tab === 'reminders' && <List title="Coach-reviewed fee reminders" empty="No pending fee reminders.">{pendingFees.map(fee => <button type="button" key={`${fee.student}-${fee.dueDate}`} onClick={() => openReminder(fee)} className="surface-card flex w-full items-center justify-between p-4 text-left"><span><strong className="block text-sm text-gray-900">{fee.student}</strong><span className="text-xs text-gray-500">₹{fee.balance.toLocaleString('en-IN')} pending</span></span><MessageCircle size={18} className="text-green-600" /></button>)}</List>}
         {tab === 'quality' && <List title="Records requiring attention" empty="No data-quality issues found.">{quality.map(issue => <div key={issue} className="surface-card flex items-start gap-3 p-4 text-sm text-gray-700"><AlertCircle size={18} className="mt-0.5 flex-none text-amber-600" />{issue}</div>)}</List>}
         {tab === 'audit' && <List title="Recent changes" empty="No audited changes yet.">{auditRows.map((row, index) => <article key={`${row[0]}-${index}`} className="surface-card p-4"><div className="flex items-center justify-between gap-2"><strong className="text-sm text-gray-900">{row[2]} · {row[3]}</strong><time className="text-[10px] text-gray-400">{row[0] ? new Date(row[0]).toLocaleString('en-IN') : ''}</time></div><p className="mt-1 text-xs text-gray-500">{row[4]}{row[5] ? ` · ${row[5]}` : ''}</p><p className="mt-1 text-[10px] text-gray-400">{row[1]}</p></article>)}</List>}

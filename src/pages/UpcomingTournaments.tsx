@@ -136,8 +136,8 @@ export function UpcomingTournaments() {
         ))}
       </div>
       {showAdd && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setShowAdd(false)}>
-          <div className="bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="modal-backdrop items-end justify-center sm:items-center" onClick={() => setShowAdd(false)}>
+          <div className="modal-panel max-h-[92vh] max-w-lg overflow-y-auto p-4" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-lg text-navy">Add Tournament</h2>
               <button onClick={() => setShowAdd(false)} className="text-gray-400 text-2xl">×</button>

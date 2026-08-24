@@ -15,6 +15,8 @@
   --app-navy: #0d0d1a;
   --app-gold: #c9970a;
   --app-header-height: 64px;
+  --app-text-scale: 100%;
+  font-size: var(--app-text-scale);
 }
 
 html, body, #root {
@@ -96,7 +98,7 @@ html.compact .app-main .p-4 { padding: 0.75rem; }
 }
 
 .header-action {
-  @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 text-xs font-semibold text-white;
+  @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 text-xs font-semibold text-white;
 }
 
 .section-label {
@@ -106,11 +108,22 @@ html.compact .app-main .p-4 { padding: 0.75rem; }
 
 .surface-card {
   @apply rounded-lg border border-gray-100 bg-white shadow-sm;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .primary-action {
-  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-navy px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-navy px-3.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50;
 }
+
+.page-stack { @apply space-y-3 p-3 sm:p-4 md:p-6; }
+.form-grid { @apply space-y-2.5; }
+.field-label { @apply mb-1 block text-[11px] font-semibold text-gray-500; }
+.icon-tile { @apply flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-gray-100 text-navy; }
+.icon-button { @apply flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600; }
+.icon-button-danger { @apply flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-red-50 text-red-700 disabled:opacity-50; }
+.error-state { @apply rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700; }
+.error-state button { @apply mt-2 font-semibold underline; }
+.empty-state { @apply flex flex-col items-center gap-2 rounded-lg border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500; }
 
 .modal-backdrop {
   @apply fixed inset-0 z-50 flex bg-black/55 p-3;
@@ -135,13 +148,28 @@ html.compact .app-main .p-4 { padding: 0.75rem; }
 .badge-gray   { @apply bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full; }
 
 .input {
-  @apply w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm
+  @apply w-full min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm
          focus:outline-none focus:border-chess-blue bg-white;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .input:focus {
   box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.16);
+}
+.input-with-icon { padding-left: 2.25rem !important; }
+
+.timeline-chevron { transition: transform 180ms ease; }
+.timeline-section[open] .timeline-chevron { transform: rotate(180deg); }
+.timeline-section[open] .timeline-content { animation: section-expand 180ms ease-out; }
+
+.text-size-slider {
+  accent-color: var(--app-gold);
+  cursor: pointer;
+}
+
+.text-size-slider:focus-visible {
+  outline: 3px solid rgba(201, 151, 10, 0.2);
+  outline-offset: 3px;
 }
 
 button, a {
@@ -154,6 +182,27 @@ button:not(:disabled) {
 
 button:not(:disabled):active {
   transform: scale(0.985);
+}
+
+@media (max-width: 639px) {
+  :root { --app-header-height: 56px; }
+  .app-header-inner { padding-inline: 12px; gap: 8px; }
+  .app-header-inner h1 { font-size: 14px; }
+  .app-header-inner > button,
+  .app-header-inner > div:last-child > button { min-height: 34px; height: 34px; }
+  .surface-card { border-radius: 7px; }
+  .input { min-height: 38px; padding: 0.45rem 0.65rem; font-size: 13px; }
+  select.input { padding-right: 1.75rem; }
+  textarea.input { min-height: 64px; }
+  .primary-action { min-height: 40px; font-size: 13px; }
+  .modal-panel { border-radius: 12px 12px 0 0; }
+  .stat-card { min-height: 82px; }
+  .quick-link { min-height: 76px; }
+  .badge-green, .badge-red, .badge-amber, .badge-blue, .badge-gray { font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 
 .stat-card {
@@ -379,6 +428,10 @@ html.dark .skeleton { background: linear-gradient(90deg, #293241 25%, #374151 50
 @keyframes modal-enter {
   from { transform: translateY(10px) scale(0.985); opacity: 0; }
   to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes section-expand {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes chess-slide-down {
   from { transform: translateY(-12px); opacity: 0; }

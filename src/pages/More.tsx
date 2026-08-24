@@ -1,29 +1,28 @@
 import { useNavigate } from 'react-router-dom';
 import {
   BookOpenCheck, Bus, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
-  ExternalLink, FileChartColumn, Gauge, Library, LogOut, Medal,
-  History, Moon, ReceiptText, Settings, Sun, Trophy, Workflow,
+  ExternalLink, Gauge, Library, LogOut, Medal,
+  Moon, ReceiptText, Sun, Trophy, Workflow,
+  Type,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { useTheme } from '../hooks/useTheme';
 import { useDensity } from '../hooks/useDensity';
+import { useTextSize } from '../hooks/useTextSize';
 import { ACADEMY_LINKS, SOCIAL } from '../config';
 
 const ITEMS = [
-  { to:'/operations', Icon:Workflow, label:'Operations Center', desc:'Actions, reminders, quality and exports', hi:true },
-  { to:'/admin-settings', Icon:Settings, label:'Admin Settings', desc:'Manage student types and chess levels' },
-  { to:'/progress',       Icon:ChartNoAxesCombined, label:'Student Progress', desc:'Attendance and skill rating trends' },
-  { to:'/timeline',       Icon:History, label:'Student Timeline', desc:'Fees, attendance and tournament history' },
+  { to:'/operations', Icon:Workflow, label:'Operations & Data', desc:'Follow-ups, quality, settings and exports', hi:true },
+  { to:'/progress',       Icon:ChartNoAxesCombined, label:'Student Insights', desc:'Progress, timeline and PDF reports' },
   { to:'/leaderboard',    Icon:Medal, label:'Leaderboard', desc:'Tournament rankings by medals and wins' },
-  { to:'/monthly-report', Icon:FileChartColumn, label:'Monthly Report', desc:'Attendance, fees and achievements' },
   { to:'/upcoming',       Icon:CalendarDays, label:'Upcoming Tournaments', desc:'Post and view upcoming events' },
   { to:'/resources',      Icon:Library, label:'Resources & eBooks', desc:'Share study material and links' },
   { to:'/curriculum',     Icon:BookOpenCheck, label:'Curriculum', desc:'Beginner to advanced chess syllabus' },
   { to:'/tournaments',    Icon:Trophy, label:'Tournament Results', desc:'Past results, ratings and medals' },
-  { to:'/van',            Icon:Bus, label:'Van Allotment', desc:'Transport and route details' },
-  { to:'/timetable',      Icon:CalendarDays, label:'Timetable', desc:'Weekend class schedule' },
+  { to:'/van',            Icon:Bus, label:'Tournament Transport', desc:'Assign students, vans and drivers' },
+  { to:'/timetable',      Icon:CalendarDays, label:'Weekly Classes', desc:'Allocate batches, coaches, times and rooms' },
 ];
 
 const SOCIALS = [
@@ -50,6 +49,7 @@ export function More() {
   const { coachName, setShowPrompt } = useCoachName();
   const { dark, toggle } = useTheme();
   const { density, toggleDensity } = useDensity();
+  const { textSize, setTextSize } = useTextSize();
   return (
     <Layout title="More">
       <div className="space-y-4 p-4 md:p-6">
@@ -117,6 +117,11 @@ export function More() {
             <button type="button" onClick={toggleDensity} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700">
               {density === 'compact' ? 'Compact' : 'Comfortable'}
             </button>
+          </div>
+          <div className="mt-3 border-t border-gray-100 pt-3">
+            <div className="mb-2 flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-sm text-gray-600"><Type size={16} />Text size</span><output className="text-xs font-semibold text-gray-600">{textSize}%</output></div>
+            <input type="range" min="90" max="110" step="5" value={textSize} onChange={event => setTextSize(Number(event.target.value))} aria-label="Text size" className="text-size-slider w-full" />
+            <div className="mt-1 flex justify-between text-[10px] text-gray-400"><span>Smaller</span><span>Larger</span></div>
           </div>
         </div>
         <button type="button" onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-100 p-3 text-sm font-medium text-gray-600">

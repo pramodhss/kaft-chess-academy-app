@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, CalendarCheck, LayoutGrid, ReceiptIndianRupee, Trophy, Users } from 'lucide-react';
+import { BookOpen, CalendarCheck, Clock3, LayoutGrid, MapPin, ReceiptIndianRupee, Trophy, UserRound, Users } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber } from '../lib/values';
+import { normalizeTimetableRows, upcomingClasses } from '../lib/timetable';
 import { SHEET_ID, TABS } from '../config';
 
 const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -65,6 +66,7 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<{ total: number; active: number; collected: number; outstanding: number } | null>(null);
   const [birthdays, setBirthdays] = useState<{ name: string; dob: string; daysLeft: number }[]>([]);
+  const [classes, setClasses] = useState<ReturnType<typeof upcomingClasses>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const nextSession = nextWeekendDate();
@@ -73,9 +75,10 @@ export function Dashboard() {
     if (!token) return;
     (async () => {
       try {
-        const [studentRows, feeRows] = await Promise.all([
+        const [studentRows, feeRows, timetableRows] = await Promise.all([
           readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:J`),
           readSheet(token, SHEET_ID, `'${TABS.FEES}'!B:I`),
+          readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`).catch(() => []),
         ]);
         const data = studentRows.slice(1).filter(r => r[0]?.trim());
         const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
@@ -86,6 +89,7 @@ export function Dashboard() {
         });
         setStats({ total: data.length, active, collected, outstanding });
         setBirthdays(upcomingBirthdays(studentRows));
+        setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
       } catch (e: any) {
         if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
         setError(e.message);
@@ -103,7 +107,7 @@ export function Dashboard() {
       <div className="space-y-5 p-4 md:p-6">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatCard label="Active Students" value={stats.active} sub={`of ${stats.total} enrolled`} color="bg-navy text-white" />
-          <StatCard label="Next Session" value={`${DAYS_S[nextSession.getDay()]} ${nextSession.getDate()} ${MONTHS_S[nextSession.getMonth()]}`} color="bg-chess-blue text-white" />
+          <StatCard label="Next Session" value={`${DAYS_S[(classes[0]?.date ?? nextSession).getDay()]} ${(classes[0]?.date ?? nextSession).getDate()} ${MONTHS_S[(classes[0]?.date ?? nextSession).getMonth()]}`} color="bg-chess-blue text-white" />
           <StatCard label="Fees Collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} color="bg-green-600 text-white" />
           <StatCard label="Outstanding" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} color="bg-amber-500 text-white" />
         </div>
@@ -125,8 +129,16 @@ export function Dashboard() {
           </div>
         )}
 
+        {classes.length > 0 && <section className="space-y-2">
+          <div className="flex items-center justify-between"><h2 className="section-label">Upcoming Classes</h2><button type="button" onClick={() => navigate('/timetable')} className="text-xs font-semibold text-chess-blue">Manage</button></div>
+          <div className="grid gap-2 md:grid-cols-3">{classes.map(({ entry, date }) => <article key={`${entry.rowIndex}-${date.toISOString()}`} className="surface-card p-3">
+            <div className="flex items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-gray-900">{entry.batch}</h3><p className="text-xs font-medium text-chess-blue">{date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</p></div><span className="badge-green">{entry.status || 'Active'}</span></div>
+            <div className="mt-2 space-y-1 text-xs text-gray-600"><p className="flex items-center gap-1.5"><Clock3 size={13} />{entry.start} - {entry.end}</p><p className="flex items-center gap-1.5"><UserRound size={13} />{entry.coach}</p>{entry.room && <p className="flex items-center gap-1.5"><MapPin size={13} />{entry.room}</p>}</div>
+          </article>)}</div>
+        </section>}
+
         <button type="button" onClick={() => navigate('/operations')} className="surface-card flex w-full items-center justify-between border-l-[3px] border-l-chess-blue p-4 text-left">
-          <span><strong className="block text-sm text-gray-900">Operations Center</strong><span className="text-xs text-gray-500">Review follow-ups, data quality and exports</span></span>
+          <span><strong className="block text-sm text-gray-900">Operations & Data</strong><span className="text-xs text-gray-500">Review follow-ups, data quality and exports</span></span>
           <span className="text-sm font-semibold text-chess-blue">Open</span>
         </button>
 

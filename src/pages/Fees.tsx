@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -453,16 +453,16 @@ export function Fees() {
 
   return (
     <Layout title="Fees">
-      <div className="w-full max-w-4xl mx-auto p-4 space-y-3">
-        {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
+      <div className="page-stack mx-auto w-full max-w-4xl">
+        {error && <div role="alert" className="error-state">{error}</div>}
 
-        <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
           <input type="month" value={selectedMonth} onChange={event=>{setSelectedMonth(event.target.value);setDrafts(new Map());setExpandedStudent(null);}}
             aria-label="Fee month" className="input min-w-0" />
           <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
             aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
-            className="h-11 flex items-center justify-center rounded-lg bg-navy text-white">
-            <Plus size={19} aria-hidden="true" />
+            className="flex h-10 items-center justify-center rounded-lg bg-navy text-white">
+            <Plus size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -477,9 +477,9 @@ export function Fees() {
           </div>
         </div>
 
-        <input value={feeSearch} onChange={e=>setFeeSearch(e.target.value)}
-          placeholder="Search students"
-          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-chess-blue"/>
+        <label className="relative block"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={feeSearch} onChange={e=>setFeeSearch(e.target.value)}
+          placeholder="Search students" aria-label="Search students"
+          className="input input-with-icon"/></label>
 
         <div className="flex items-end justify-between gap-3 pt-1">
           <div>
@@ -527,7 +527,7 @@ export function Fees() {
               </div>
 
               {expanded && <div id={`fee-details-${student}`} className="p-3 pt-2 border-t border-gray-100">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2 min-[380px]:grid-cols-2">
                 <label className="block">
                   <span className="text-[11px] font-medium text-gray-500 block mb-1">Fee amount</span>
                   <div className="h-10 flex rounded-lg border border-gray-200 overflow-hidden focus-within:border-chess-blue">
@@ -546,7 +546,7 @@ export function Fees() {
                       className="min-w-0 flex-1 px-2 bg-transparent text-sm outline-none" /></div>
                 </label>
               </div>
-              <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-gray-100">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2">
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input type="checkbox" checked={draft.paid} aria-label={`${student} paid in full`}
                     onChange={event=>updateDraft(student,{...draft,paid:event.target.checked,amountPaid:event.target.checked?draft.amountDue:'0'})}
@@ -554,7 +554,7 @@ export function Fees() {
                   {' '}
                   Paid in full
                 </label>
-                <div className="flex items-center gap-1.5">
+                <div className="ml-auto flex items-center gap-1.5">
                   <span className={`text-xs mr-1 ${balance>0?'text-amber-700':'text-green-700'}`}>{balance>0?`Balance ${formatCurrency(balance)}`:'No balance'}</span>
                   {changed && <button type="button" onClick={()=>saveRosterFee(student)} disabled={rosterSaving===student}
                     className="h-9 px-3 rounded-lg bg-navy text-white text-xs font-semibold disabled:opacity-50">
@@ -623,24 +623,24 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,coachName}:
   const isEdit = title.startsWith('Edit');
   const buttonLabel = paymentButtonLabel(isEdit, saving);
   return (
-    <div className="fixed inset-0 flex items-end z-50">
-      <button type="button" onClick={onClose} aria-label="Close payment form" className="absolute inset-0 w-full h-full bg-black/50" />
-      <dialog open aria-labelledby="fee-modal-title" className="relative m-0 border-0 bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="fee-modal-title" className="font-bold text-lg text-navy">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 text-2xl leading-none">×</button>
+    <div className="modal-backdrop items-end justify-center sm:items-center">
+      <button type="button" onClick={onClose} aria-label="Close payment form" className="absolute inset-0 h-full w-full" />
+      <dialog open aria-labelledby="fee-modal-title" className="modal-panel relative m-0 max-h-[92vh] max-w-lg overflow-y-auto p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="fee-modal-title" className="text-base font-semibold text-navy">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="icon-button"><X size={18} /></button>
         </div>
-        <div className="space-y-3">
+        <div className="form-grid">
           <F label="Student *"><select value={form.studentName} onChange={u('studentName')} className="input"><option value="">Select…</option>{students.map(s=><option key={s}>{s}</option>)}</select></F>
           <F label="Fee Month"><input type="month" value={form.feeMonth} onChange={u('feeMonth')} className="input"/></F>
           <F label="Fee Type"><select value={form.feeType} onChange={u('feeType')} className="input">{['Monthly Tuition','Admission','Tournament','Van','Materials','Other'].map(o=><option key={o}>{o}</option>)}</select></F>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 min-[380px]:grid-cols-2">
             <F label="Amount Due *"><input type="number" min="0.01" max="10000000" step="0.01" value={form.amountDue} onChange={u('amountDue')} className="input" placeholder="₹"/></F>
             <F label="Amount Paid"><input type="number" min="0" max="10000000" step="0.01" value={form.amountPaid} onChange={u('amountPaid')} className="input" placeholder="₹"/></F>
           </div>
           <F label="Payment Method"><select value={form.paymentMethod} onChange={u('paymentMethod')} className="input">{['Cash','UPI','Bank Transfer','Card','Cheque'].map(o=><option key={o}>{o}</option>)}</select></F>
           <F label="Payment Status"><select value={form.paymentStatus} onChange={u('paymentStatus')} className="input">{['Paid','Partial','Pending','Overdue','Waived'].map(o=><option key={o}>{o}</option>)}</select></F>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 min-[380px]:grid-cols-2">
             <F label="Due Date"><input type="date" value={form.dueDate} onChange={u('dueDate')} className="input"/></F>
             <F label="Payment Date"><input type="date" value={form.paymentDate} onChange={u('paymentDate')} className="input"/></F>
           </div>
@@ -648,7 +648,7 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,coachName}:
           <p className="text-xs text-gray-400">Will be tracked to: <strong>{coachName}</strong></p>
           {feeFormValidationError(form) && <p role="alert" className="text-xs text-red-600">{feeFormValidationError(form)}</p>}
         </div>
-        <button type="button" onClick={onSave} disabled={saving} className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
+        <button type="button" onClick={onSave} disabled={saving} className="primary-action mt-3 w-full">
           <span className="inline-flex items-center justify-center gap-2">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {buttonLabel}
@@ -659,5 +659,5 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,coachName}:
   );
 }
 function F({label,children}:Readonly<{label:string;children:React.ReactNode}>) {
-  return <label className="block"><span className="text-xs font-medium text-gray-500 mb-1 block">{label}</span>{children}</label>;
+  return <label className="block"><span className="field-label">{label}</span>{children}</label>;
 }

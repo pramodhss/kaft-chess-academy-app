@@ -34,6 +34,8 @@ test.describe('route regression matrix', () => {
 
       await openApp(page, hash);
       await expect(page.locator('main')).toBeVisible();
+      if (hash === '#/') await expect(page.getByRole('button', { name: 'Go back' })).toHaveCount(0);
+      else await expect(page.getByRole('button', { name: 'Go back' })).toBeVisible();
       await expect.poll(() => errors).toEqual([]);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow).toBeLessThanOrEqual(1);

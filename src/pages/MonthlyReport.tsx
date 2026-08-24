@@ -287,7 +287,7 @@ export function MonthlyReport() {
               <SumCard label="Avg Attendance"
                 value={avgAttendance === null ? '—' : avgAttendanceLabel}
                 color="bg-chess-blue text-white" />
-              <SumCard label="Achievements" value={reports.reduce((s,r)=>s+r.medals.length,0)} color="bg-purple-600 text-white" />
+              <SumCard label="Achievements" value={reports.reduce((s,r)=>s+r.medals.length,0)} color="bg-navy text-white" />
             </div>
 
             {/* At-risk section */}
@@ -394,8 +394,8 @@ export function MonthlyReport() {
 
       {/* Email modal */}
       {showEmailModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50 no-print" onClick={() => setShowEmailModal(false)}>
-          <div className="bg-white w-full rounded-t-2xl p-5" onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop items-end justify-center sm:items-center no-print" onClick={() => setShowEmailModal(false)}>
+          <div className="modal-panel max-w-lg p-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-lg text-navy">📧 Send Monthly Report</h2>
               <button onClick={() => setShowEmailModal(false)} className="text-gray-400 text-2xl leading-none">×</button>

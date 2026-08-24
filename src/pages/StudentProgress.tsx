@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarCheck, Download, FileChartColumn, History, Star } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
@@ -54,17 +56,18 @@ function LineChart({ data, color, label, max: maxProp }: Readonly<{ data: number
   }));
   const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
   const area = `${path} L ${pts[pts.length-1].x.toFixed(1)} ${H} L ${pts[0].x.toFixed(1)} ${H} Z`;
+  const gradientId = `chart-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return (
     <div>
       <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 64 }}>
         <defs>
-          <linearGradient id={`grad-${label}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
             <stop offset="100%" stopColor={color} stopOpacity="0"/>
           </linearGradient>
         </defs>
-        <path d={area} fill={`url(#grad-${label})`}/>
+        <path d={area} fill={`url(#${gradientId})`}/>
         <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
         {pts.map(p => (
           <g key={`${p.x}-${p.y}-${p.v}`}>
@@ -81,12 +84,14 @@ function LineChart({ data, color, label, max: maxProp }: Readonly<{ data: number
 }
 
 export function StudentProgress() {
+  const navigate = useNavigate();
   const { token, logout } = useAuth();
   const [students, setStudents] = useState<string[]>([]);
   const [selected, setSelected] = useState('');
   const [data, setData] = useState<MonthData[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   // Load student list
   useEffect(() => {
@@ -119,9 +124,23 @@ export function StudentProgress() {
     finally { setLoading(false); }
   };
 
+  const downloadReport = async () => {
+    if (!selected || data.length === 0) return;
+    setDownloading(true);
+    try {
+      const { downloadStudentProgressPdf } = await import('../lib/studentInsightsPdf');
+      downloadStudentProgressPdf(selected, data);
+    } finally { setDownloading(false); }
+  };
+
   return (
-    <Layout title="Student Progress" showBack>
+    <Layout title="Student Progress" showBack action={selected && data.length > 0 ? <button type="button" onClick={downloadReport} disabled={downloading} className="header-action"><Download size={15} />{downloading ? 'Preparing…' : 'PDF'}</button> : undefined}>
       <div className="p-4 space-y-4">
+        <nav aria-label="Student insights" className="grid grid-cols-3 gap-1 rounded-lg border border-gray-200 bg-white p-1">
+          <button type="button" className="flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-navy px-2 text-xs font-semibold text-white"><Star size={14} />Progress</button>
+          <button type="button" onClick={() => navigate('/timeline')} className="flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100"><History size={14} />Timeline</button>
+          <button type="button" onClick={() => navigate('/monthly-report')} className="flex min-h-9 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-semibold text-gray-600 hover:bg-gray-100"><FileChartColumn size={14} />Monthly</button>
+        </nav>
         {/* Student selector */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <label htmlFor="progress-student" className="text-xs font-medium text-gray-500 mb-2 block">Select Student</label>
@@ -142,14 +161,14 @@ export function StudentProgress() {
           <>
             {/* Attendance trend */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 animate-chess-slide">
-              <h2 className="text-sm font-bold text-navy mb-3">📅 Attendance Trend (%)</h2>
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-navy"><CalendarCheck size={17} />Attendance Trend (%)</h2>
               <LineChart data={data.map(d => d.attendance)} color="#16a34a" label="Attendance %" max={100}/>
             </div>
 
             {/* Skill ratings */}
             {data.some(d => d.overall > 0) && (
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 animate-chess-slide">
-                <h2 className="text-sm font-bold text-navy mb-3">⭐ Overall Skill Rating (out of 5)</h2>
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-navy"><Star size={17} />Overall Skill Rating (out of 5)</h2>
                 <LineChart data={data.map(d => d.overall)} color="#C9970A" label="Overall Rating" max={5}/>
               </div>
             )}

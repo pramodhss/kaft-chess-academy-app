@@ -214,7 +214,10 @@ function defaultWorkbook(): Workbook {
     ],
     'Upcoming Tournaments': [['Name', 'Date', 'Venue', 'Registration Deadline', 'Category', 'Status']],
     Resources: [['Title', 'Type', 'URL', 'Description', 'Level']],
-    Timetable: [['Day', 'Time', 'Batch', 'Coach', 'Location']],
+    Timetable: [
+      ['Day', 'Time', 'Batch', 'Coach', 'Location'],
+      ['Saturday', '10:00 - 12:00', 'Intermediate', 'Coach Meera', 'Main Hall'],
+    ],
   };
 }
 

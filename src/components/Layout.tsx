@@ -19,19 +19,20 @@ export function Layout({ title, children, action, showBack }: LayoutProps) {
   const online = useOnline();
   const navigate = useNavigate();
   const location = useLocation();
+  const displayBack = showBack ?? location.pathname !== '/';
   const { coachName: coach } = useCoachName();
   return (
     <div className="app-shell flex h-full flex-col md:pl-60">
       <Sidebar />
       <header className="app-header flex-shrink-0 text-white">
         <div className="app-header-inner flex items-center gap-3">
-          {showBack && (
+          {displayBack && (
             <button type="button" onClick={() => navigate(-1)} aria-label="Go back" title="Go back"
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:bg-white/10">
               <ArrowLeft size={19} aria-hidden="true" />
             </button>
           )}
-          <img src="logo.jpg" alt="" className="app-logo h-9 w-9 flex-shrink-0 rounded-lg object-cover" />
+          <img src="logo.jpg" alt="" className={`app-logo h-9 w-9 flex-shrink-0 rounded-lg object-cover ${displayBack ? 'hidden sm:block' : ''}`} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] font-semibold leading-tight">{title}</h1>
             {coach && <p className="mt-0.5 truncate text-[11px] font-medium text-yellow-200/75">{coach}</p>}

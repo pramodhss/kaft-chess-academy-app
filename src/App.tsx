@@ -8,7 +8,6 @@ import { Login }                from './pages/Login';
 import { ErrorBoundary }         from './components/ErrorBoundary';
 import { PageSkeleton }          from './components/Skeleton';
 import { ToastProvider }         from './context/ToastContext';
-import { RoleProvider, useRole } from './context/RoleContext';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Students = lazy(() => import('./pages/Students').then(module => ({ default: module.Students })));
@@ -27,11 +26,6 @@ const Curriculum = lazy(() => import('./pages/Curriculum').then(module => ({ def
 const AdminSettings = lazy(() => import('./pages/AdminSettings').then(module => ({ default: module.AdminSettings })));
 const OperationsCenter = lazy(() => import('./pages/OperationsCenter').then(module => ({ default: module.OperationsCenter })));
 const StudentTimeline = lazy(() => import('./pages/StudentTimeline').then(module => ({ default: module.StudentTimeline })));
-
-function RoleRoute({ allowed, children }: Readonly<{ allowed: string[]; children: React.ReactNode }>) {
-  const { role } = useRole();
-  return allowed.includes(role) ? children : <Navigate to="/" replace />;
-}
 
 function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
   const [val, setVal] = useState('');
@@ -63,20 +57,22 @@ function AppRoutes() {
       {showPrompt && <CoachNameModal onSave={saveCoachName} />}
       <Suspense fallback={<PageSkeleton />}><Routes>
         <Route path="/"                  element={<Dashboard />} />
-        <Route path="/students"          element={<RoleRoute allowed={['admin','coach']}><Students /></RoleRoute>} />
-        <Route path="/attendance"        element={<RoleRoute allowed={['admin','coach']}><Attendance /></RoleRoute>} />
-        <Route path="/fees"              element={<RoleRoute allowed={['admin','finance']}><Fees /></RoleRoute>} />
+        <Route path="/students"          element={<Students />} />
+        <Route path="/attendance"        element={<Attendance />} />
+        <Route path="/fees"              element={<Fees />} />
         <Route path="/tournaments"       element={<Tournaments />} />
         <Route path="/upcoming"          element={<UpcomingTournaments />} />
-        <Route path="/van"               element={<RoleRoute allowed={['admin','transport']}><Van /></RoleRoute>} />
+        <Route path="/van"               element={<Van />} />
         <Route path="/timetable"         element={<Timetable />} />
         <Route path="/resources"         element={<Resources />} />
         <Route path="/curriculum"        element={<Curriculum />} />
-        <Route path="/admin-settings"    element={<RoleRoute allowed={['admin']}><AdminSettings /></RoleRoute>} />
-        <Route path="/operations"        element={<RoleRoute allowed={['admin','coach','finance']}><OperationsCenter /></RoleRoute>} />
+        <Route path="/admin-settings"    element={<AdminSettings />} />
+        <Route path="/operations"        element={<OperationsCenter />} />
         <Route path="/timeline"          element={<StudentTimeline />} />
-        <Route path="/monthly-report"    element={<MonthlyReport />} />        <Route path="/leaderboard"      element={<Leaderboard />} />
-        <Route path="/progress"         element={<StudentProgress />} />        <Route path="/more"              element={<More />} />
+        <Route path="/monthly-report"    element={<MonthlyReport />} />
+        <Route path="/leaderboard"       element={<Leaderboard />} />
+        <Route path="/progress"          element={<StudentProgress />} />
+        <Route path="/more"              element={<More />} />
         <Route path="*"                  element={<Navigate to="/" replace />} />
       </Routes></Suspense>
     </>
@@ -89,13 +85,11 @@ export default function App() {
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <AuthProvider>
           <ToastProvider>
-            <RoleProvider>
-              <CoachNameProvider>
-                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                  <AppRoutes />
-                </HashRouter>
-              </CoachNameProvider>
-            </RoleProvider>
+            <CoachNameProvider>
+              <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <AppRoutes />
+              </HashRouter>
+            </CoachNameProvider>
           </ToastProvider>
         </AuthProvider>
       </GoogleOAuthProvider>
