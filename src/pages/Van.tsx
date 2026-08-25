@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bus, CalendarDays, ChevronRight, CircleDollarSign, MessageCircle, Pencil, Plus, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
+import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Copy, MessageCircle, Pencil, Plus, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -145,7 +145,25 @@ export function Van() {
     ].filter(Boolean).join('\n');
     window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank', 'noopener,noreferrer');
   };
-
+  const copyTournamentRoster = (tournament: ManagedTournament) => {
+    const regs = registrations.filter(r => r.tournamentId === tournament.id && r.playing);
+    const lines = [
+      `\ud83c\udfc6 *${tournament.name}*`,
+      `\ud83d\udcc5 ${formattedDate(tournament.date)}${tournament.fee ? ` \u00b7 Entry: \u20b9${tournament.fee}` : ''}`,
+      ``,
+      `*Roster (${regs.length} players)*`,
+      ...regs.map(r => {
+        const tags = [r.feePaid ? '\ud83d\udcb3 Paid' : '\u23f3 Fee pending', r.vanRequired ? '\ud83d\ude8c Van' : null].filter(Boolean);
+        return `\u2022 ${r.studentName}${tags.length ? ` \u2014 ${tags.join(', ')}` : ''}`;
+      }),
+      ``,
+      `\u2014 KAFT Chess Academy`,
+    ].join('\n');
+    void navigator.clipboard.writeText(lines).then(
+      () => toast.success('Roster copied \u2014 ready to paste in WhatsApp.'),
+      () => toast.error('Could not copy to clipboard.')
+    );
+  };
   const saveTournament = async () => {
     if (!token) return;
     const err = tournamentValidationError(form);
@@ -243,7 +261,7 @@ export function Van() {
             const playing = registrations.filter(r => r.tournamentId === t.id && r.playing);
             return <TournamentCard key={t.id} tournament={t} playing={playing.length}
               paid={playing.filter(r => r.feePaid).length} van={playing.filter(r => r.vanRequired).length}
-              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)} notify={() => notifyTournament(t)} saving={saving} />;
+              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)} notify={() => notifyTournament(t)} copy={() => copyTournamentRoster(t)} saving={saving} />;
           })}
         </div>
       </div>
@@ -252,9 +270,9 @@ export function Van() {
   );
 }
 
-function TournamentCard({ tournament, playing, paid, van, open, edit, remove, notify, saving }: Readonly<{
+function TournamentCard({ tournament, playing, paid, van, open, edit, remove, notify, copy, saving }: Readonly<{
   tournament: ManagedTournament; playing: number; paid: number; van: number;
-  open: () => void; edit: () => void; remove: () => void; notify: () => void; saving: boolean;
+  open: () => void; edit: () => void; remove: () => void; notify: () => void; copy: () => void; saving: boolean;
 }>) {
   return (
     <article className="surface-card overflow-hidden">
@@ -274,7 +292,10 @@ function TournamentCard({ tournament, playing, paid, van, open, edit, remove, no
         </div>
       </button>
       <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
-        <button type="button" onClick={notify} className="flex items-center gap-1.5 text-xs font-semibold text-green-700"><MessageCircle size={14} />Notify parents</button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={notify} className="flex items-center gap-1.5 text-xs font-semibold text-green-700"><MessageCircle size={14} />Notify</button>
+          <button type="button" onClick={copy} className="flex items-center gap-1.5 text-xs font-semibold text-gray-500" aria-label="Copy roster" title="Copy roster for WhatsApp"><Copy size={14} />Copy</button>
+        </div>
         <div className="flex gap-1.5">
           <button type="button" onClick={edit} className="icon-button" aria-label={`Edit ${tournament.name}`}><Pencil size={15} /></button>
           <button type="button" onClick={remove} disabled={saving} className="icon-button-danger" aria-label={`Remove ${tournament.name}`}><Trash2 size={15} /></button>
@@ -298,7 +319,7 @@ function RosterView({ tournament, students, roster, query, saving, setQuery, tog
   const openNotes = (s: string) => { setNotesStudent(s); setNotesText(roster[s]?.notes ?? ''); };
   const saveNotes = () => { if (notesStudent) { setStudentNotes(notesStudent, notesText); setNotesStudent(null); } };
   return (
-    <Layout title={tournament.name} action={<button type="button" onClick={close} className="header-action">Done</button>}>
+    <Layout title={tournament.name} onBack={close} action={<button type="button" onClick={close} className="header-action">Done</button>}>
       <div className="page-stack">
         <div className="surface-card p-3">
           <p className="text-sm font-semibold text-gray-900">{formattedDate(tournament.date)}</p>

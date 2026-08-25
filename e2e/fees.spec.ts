@@ -3,12 +3,25 @@ import { test } from './fixtures/test';
 import { openApp } from './fixtures/sheetsMock';
 
 async function selectAugust(page: import('@playwright/test').Page) {
-  await page.getByLabel('Fee month').fill('2026-08');
-  await expect(page.getByRole('button', { name: 'Edit fee for Aarav Kumar' })).toBeVisible();
+  // Navigate to August 2026 using the month arrows
+  const target = new Date(2026, 7, 1); // August 2026
+  for (let attempts = 0; attempts < 24; attempts++) {
+    const heading = page.getByTestId('fee-month-heading');
+    const text = await heading.textContent();
+    if (!text) break;
+    const [mon, yr] = text.trim().split(' ');
+    const current = new Date(`${mon} 1, ${yr}`);
+    const diff = (target.getFullYear() - current.getFullYear()) * 12 + (target.getMonth() - current.getMonth());
+    if (diff === 0) break;
+    await page.getByLabel(diff > 0 ? 'Next month' : 'Previous month').click();
+  }
+  await expect(page.locator('[aria-controls="fee-details-Aarav Kumar"]')).toBeVisible();
 }
 
 async function editAarav(page: import('@playwright/test').Page, amountPaid: string, status: string) {
-  await page.getByRole('button', { name: 'Edit fee for Aarav Kumar' }).click();
+  const expandBtn = page.locator('[aria-controls="fee-details-Aarav Kumar"]');
+  if ((await expandBtn.getAttribute('aria-expanded')) !== 'true') await expandBtn.click();
+  await page.getByLabel('Edit all fields for Aarav Kumar').click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Amount Paid').fill(amountPaid);
   await dialog.getByLabel('Payment Status').selectOption(status);

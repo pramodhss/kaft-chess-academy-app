@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Check, Trash2 } from 'lucide-react';
+import { CalendarDays, CalendarSearch, Check, ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetUnformatted, batchWrite, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
@@ -154,6 +153,7 @@ export function Attendance() {
   }, [attendanceDates, loadDate, selectedIdx]);
 
   const changeDate = (idx: number) => { setSelectedIdx(idx); };
+  void changeDate; // preserved for any future direct-index navigation
 
   const toggle = (sheetRow: number, current: boolean) => {
     const desired = !current;
@@ -289,133 +289,209 @@ export function Attendance() {
     });
   };
 
+  /* ─── helpers for prev/next navigation ────────────────────────────────── */
+  const goPrev = () => setSelectedIdx(i => Math.max(0, i - 1));
+  const goNext = () => setSelectedIdx(i => Math.min(attendanceDates.length - 1, i + 1));
+
+  /* Jump to a date chosen from the calendar picker — finds nearest available date */
+  const jumpToDate = (iso: string) => {
+    if (!iso) return;
+    const target = new Date(`${iso}T00:00:00`);
+    let best = 0, bestDiff = Infinity;
+    attendanceDates.forEach(({ date }, i) => {
+      const diff = Math.abs(date.getTime() - target.getTime());
+      if (diff < bestDiff) { bestDiff = diff; best = i; }
+    });
+    setSelectedIdx(best);
+  };
+
+  const dateLabel = `${DAYS[date.getDay()]}, ${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  const totalStudents = rows.filter(r => r.name).length;
+  const absentCount = totalStudents - presentCount;
+
+  const copyAttendanceReport = () => {
+    const presentNames = rows.filter(r => dirty.get(r.sheetRow) ?? r.present).map(r => r.name);
+    const absentNames  = rows.filter(r => !(dirty.get(r.sheetRow) ?? r.present)).map(r => r.name);
+    const lines = [
+      `*KAFT Chess Academy \u2013 Attendance*`,
+      `*Date:* ${dateLabel}`,
+      ``,
+      `*Present (${presentNames.length}/${totalStudents})*`,
+      ...presentNames.map(n => `\u2713 ${n}`),
+      absentNames.length ? `` : null,
+      absentNames.length ? `*Absent (${absentNames.length})*` : null,
+      ...absentNames.map(n => `\u2717 ${n}`),
+      ``,
+      `\u2014 KAFT Chess Academy`,
+    ].filter(l => l !== null) as string[];
+    void navigator.clipboard.writeText(lines.join('\n')).then(
+      () => toast.success('Attendance copied \u2014 ready to paste in WhatsApp.'),
+      () => toast.error('Could not copy to clipboard.')
+    );
+  };
+
+  /* ─── skeleton list while loading (shows structural chrome) ───────────── */
+  const SkeletonRows = () => (
+    <div className="flex-1 overflow-y-auto">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
+          <div className="space-y-1.5">
+            <div className="skeleton h-3.5 w-32 rounded" />
+            <div className="skeleton h-2.5 w-20 rounded" />
+          </div>
+          <div className="skeleton h-9 w-9 rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <Layout title="Attendance" action={
       dirty.size > 0 ? (
-        <button type="button" onClick={save} disabled={saving}
-          className="header-action disabled:opacity-50">
+        <button type="button" onClick={save} disabled={saving} className="header-action disabled:opacity-50">
           {!saving && <Check size={15} aria-hidden="true" />}{saving ? 'Saving…' : `Save ${dirty.size}`}
         </button>
-      ) : undefined
+      ) : (
+        <button type="button" onClick={() => setShowAddDate(true)} className="header-action" aria-label="Add class date" title="Add a new class date">
+          <Plus size={15} />
+        </button>
+      )
     }>
-      {loading ? <PageSkeleton /> : (
-        <div className="flex flex-col h-full">
-          {error && <p className="px-4 py-2 text-red-600 text-sm bg-red-50">{error}</p>}
+      <div className="flex flex-col h-full">
 
-          {/* Date strip */}
-          <div className="px-4 py-3 bg-white border-b border-gray-100">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p className="text-xs font-medium text-gray-500">
-                Select Date <span className="font-bold text-navy">· {date.getFullYear()}</span>
-              </p>
-              <div className="flex items-center gap-2">
-                {selectedDate && (
-                  <button type="button" onClick={removeAttendanceDate} disabled={deletingDate || dirty.size > 0}
-                    aria-label="Remove selected class date" title={dirty.size > 0 ? 'Save or discard attendance changes first' : 'Remove selected class date'}
-                    className="text-xs font-bold text-red-700 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 disabled:opacity-40">
-                    <Trash2 size={14} aria-hidden="true" /> Remove
-                  </button>
-                )}
-                <button type="button" onClick={() => setShowAddDate(true)}
-                  className="text-xs font-bold text-chess-blue flex items-center gap-1 px-2 py-1 rounded-lg bg-chess-light">
-                  <span className="text-base leading-none">+</span> Add Date
-                </button>
-              </div>
+        {/* ── Date navigation ──────────────────────────────────────────── */}
+        <div className="bg-white border-b border-gray-100">
+          <div className="flex items-center gap-2 px-3 py-3">
+            <button type="button" onClick={goPrev} disabled={selectedIdx <= 0}
+              className="icon-button disabled:opacity-30" aria-label="Previous date">
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex-1 text-center">
+              <p className="text-sm font-bold text-gray-900">{dateLabel}</p>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {attendanceDates.map(({ date: d, columnIndex }, i) => (
-                <button type="button" key={columnIndex} onClick={() => changeDate(i)}
-                  className={`flex-shrink-0 flex flex-col items-center px-2 py-2 rounded-xl min-w-[46px] transition-colors
-                    ${i === selectedIdx ? 'bg-navy text-white' : 'bg-gray-100 text-gray-700'}`}>
-                  <span className="text-lg font-bold leading-none">{d.getDate()}</span>
-                  <span className="text-[10px] font-medium mt-0.5">{MONTHS[d.getMonth()]}</span>
-                  <span className={`text-[10px] ${i === selectedIdx ? 'text-chess-light' : 'text-gray-400'}`}>{DAYS[d.getDay()]}</span>
-                </button>
-              ))}
-            </div>
+            {/* Calendar picker — jumps to nearest available date */}
+            <label className="icon-button cursor-pointer" aria-label="Pick a date">
+              <CalendarSearch size={17} />
+              <input type="date" className="sr-only" aria-hidden="true"
+                value={attendanceDates[selectedIdx] ? `${attendanceDates[selectedIdx].date.getFullYear()}-${String(attendanceDates[selectedIdx].date.getMonth()+1).padStart(2,'0')}-${String(attendanceDates[selectedIdx].date.getDate()).padStart(2,'0')}` : ''}
+                onChange={e => jumpToDate(e.target.value)} />
+            </label>
+            <button type="button" onClick={goNext} disabled={selectedIdx >= attendanceDates.length - 1}
+              className="icon-button disabled:opacity-30" aria-label="Next date">
+              <ChevronRight size={18} />
+            </button>
+            {selectedDate && (
+              <button type="button" onClick={removeAttendanceDate}
+                disabled={deletingDate || dirty.size > 0}
+                title={dirty.size > 0 ? 'Save changes first' : 'Remove this class date'}
+                className="icon-button text-red-500 disabled:opacity-30" aria-label="Remove class date">
+                {deletingDate ? <span className="button-spinner" aria-hidden="true"/> : <Trash2 size={17} />}
+              </button>
+            )}
           </div>
+        </div>
 
-          {/* Batch filter + bulk action */}
-          <div className="px-4 py-2 bg-white border-b border-gray-100 flex items-center gap-2">
+        {/* ── Stats + filter + bulk action ─────────────────────────────── */}
+        {!loading && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-100">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-xs font-bold text-green-700">{presentCount} present</span>
+              {absentCount > 0 && <span className="text-xs font-semibold text-red-600">{absentCount} absent</span>}
+            </div>
             <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-              className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none">
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none bg-white max-w-[110px]">
               {batches.map(b => <option key={b}>{b}</option>)}
             </select>
             <button type="button" onClick={markAllPresent}
-              className="flex-shrink-0 bg-green-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
-              ✓ All Present
+              className="flex-shrink-0 flex items-center gap-1 bg-green-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg">
+              <Check size={12} />✓ All
+            </button>
+            <button type="button" onClick={copyAttendanceReport}
+              className="icon-button" aria-label="Copy attendance for WhatsApp" title="Copy attendance report">
+              <Copy size={16} />
             </button>
           </div>
+        )}
 
-          {/* Summary */}
-          <div className="px-4 py-2 bg-chess-light flex items-center justify-between">
-            <span className="text-navy font-semibold text-sm">
-              {presentCount} / {rows.filter(r => r.name).length} Present
-            </span>
-            <span className="text-navy text-sm font-medium">
-              {DAYS[date.getDay()]}, {date.getDate()} {MONTHS[date.getMonth()]} {date.getFullYear()}
-            </span>
+        {/* ── Error ────────────────────────────────────────────────────── */}
+        {error && !loading && (
+          <div className="mx-3 mt-3 rounded-xl border border-red-200 bg-red-50 p-4 text-center">
+            <p className="text-sm font-semibold text-red-700 mb-1">{error}</p>
+            <button type="button" onClick={() => { setError(''); if (selectedDate) void loadDate(selectedDate); }}
+              className="text-xs font-bold text-red-600 underline">Retry</button>
           </div>
+        )}
 
-          {/* Student list */}
+        {/* ── Student list / skeleton ───────────────────────────────────── */}
+        {loading ? <SkeletonRows /> : (
           <div className="flex-1 overflow-y-auto">
+            {!error && visibleRows.length === 0 && (
+              <div className="flex flex-col items-center gap-2 py-16 text-center text-gray-400">
+                <CalendarDays size={28} className="opacity-50" />
+                <p className="text-sm font-medium text-gray-500">No students for this date</p>
+                <p className="text-xs text-gray-400">Add students in the Students section, or choose a different date.</p>
+              </div>
+            )}
             {visibleRows.map(r => {
               const isPresent = dirty.get(r.sheetRow) ?? r.present;
+              const changed = dirty.has(r.sheetRow);
               return (
                 <button type="button" key={r.sheetRow} onClick={() => toggle(r.sheetRow, isPresent)}
-                  className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-gray-100 active:bg-gray-50
-                    ${isPresent ? 'bg-green-50' : 'bg-white'}`}>
+                  className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-gray-100 transition-colors
+                    ${isPresent ? 'bg-green-50' : 'bg-white'} ${changed ? 'ring-1 ring-inset ring-chess-blue/20' : ''}`}>
                   <div className="text-left">
-                    <p className="font-medium text-gray-900">{r.name}</p>
-                    <p className="text-xs text-gray-400">{r.batch}</p>
+                    <p className={`font-medium ${changed ? 'text-chess-blue' : 'text-gray-900'}`}>{r.name}</p>
+                    {r.batch && <p className="text-xs text-gray-400 mt-0.5">{r.batch}</p>}
                   </div>
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-lg font-bold transition-colors
-                    ${isPresent ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base font-bold transition-all
+                    ${isPresent ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}>
                     {isPresent ? '✓' : '○'}
                   </div>
                 </button>
               );
             })}
           </div>
+        )}
 
-          {dirty.size > 0 && (
-            <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
-              <button type="button" onClick={save} disabled={saving}
-                className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
-                {saving && <span className="button-spinner" aria-hidden="true"/>}
-                {saving ? 'Saving attendance…' : `Save Attendance (${dirty.size} changes) — by ${coachName}`}
+        {/* ── Sticky save bar ──────────────────────────────────────────── */}
+        {dirty.size > 0 && (
+          <div className="sticky bottom-0 border-t border-gray-200 bg-white p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+            <button type="button" onClick={save} disabled={saving}
+              className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
+              {saving && <span className="button-spinner" aria-hidden="true"/>}
+              {saving ? 'Saving attendance…' : `Save Attendance (${dirty.size} changes) — ${coachName}`}
+            </button>
+          </div>
+        )}
+
+        {/* ── Add Date dialog ──────────────────────────────────────────── */}
+        {showAddDate && (
+          <dialog open aria-labelledby="add-date-title"
+            onCancel={event => { event.preventDefault(); if (!addingDate) setShowAddDate(false); }}
+            className="fixed inset-0 z-[60] m-0 p-0 w-full max-w-none h-full max-h-none bg-transparent flex items-end">
+            <button type="button" aria-label="Close" disabled={addingDate}
+              className="absolute inset-0 w-full h-full bg-black/50 rounded-none" onClick={() => setShowAddDate(false)} />
+            <div className="relative bg-white w-full rounded-t-2xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 id="add-date-title" className="font-bold text-lg text-navy">Add Class Date</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Visible to all coaches.</p>
+                </div>
+                <button type="button" onClick={() => setShowAddDate(false)} disabled={addingDate}
+                  className="text-gray-400 text-2xl leading-none">×</button>
+              </div>
+              <label className="field-label" htmlFor="attendance-extra-date">Class date</label>
+              <input id="attendance-extra-date" type="date" value={newDate}
+                onChange={event => setNewDate(event.target.value)} className="input" />
+              <button type="button" onClick={addAttendanceDate} disabled={addingDate || !newDate}
+                className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+                {addingDate && <span className="button-spinner" aria-hidden="true"/>}
+                {addingDate ? 'Adding…' : 'Add Class Date'}
               </button>
             </div>
-          )}
-
-          {showAddDate && (
-            <dialog open aria-labelledby="add-date-title"
-              onCancel={event => { event.preventDefault(); if (!addingDate) setShowAddDate(false); }}
-              className="fixed inset-0 z-[60] m-0 p-0 w-full max-w-none h-full max-h-none bg-transparent flex items-end">
-              <button type="button" aria-label="Close add date dialog" disabled={addingDate}
-                className="absolute inset-0 w-full h-full bg-black/50 rounded-none" onClick={() => setShowAddDate(false)} />
-              <div className="relative bg-white w-full rounded-t-2xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 id="add-date-title" className="font-bold text-lg text-navy">Add Extra Class Date</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">The date will be available to every coach.</p>
-                  </div>
-                  <button type="button" onClick={() => setShowAddDate(false)} disabled={addingDate}
-                    className="text-gray-400 text-2xl leading-none">×</button>
-                </div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block" htmlFor="attendance-extra-date">Class date</label>
-                <input id="attendance-extra-date" type="date" value={newDate}
-                  onChange={event => setNewDate(event.target.value)} className="input" />
-                <button type="button" onClick={addAttendanceDate} disabled={addingDate || !newDate}
-                  className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
-                  {addingDate && <span className="button-spinner" aria-hidden="true"/>}
-                  {addingDate ? 'Adding class date…' : 'Add Class Date'}
-                </button>
-              </div>
-            </dialog>
-          )}
-        </div>
-      )}
+          </dialog>
+        )}
+      </div>
     </Layout>
   );
 }

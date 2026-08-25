@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Layout } from '../components/Layout';
+import { Camera, Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, Trash2 } from 'lucide-react';import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheetColumns, writeRange } from '../lib/sheets';
@@ -272,10 +271,9 @@ function copyStudentToClipboard(student: Student): Promise<void> {
   return navigator.clipboard.writeText(studentDetailsText(student));
 }
 
-function StudentDetailActions({ student, onEdit, onBack }: Readonly<{
+function StudentDetailActions({ student, onEdit }: Readonly<{
   student: Student;
   onEdit: () => void;
-  onBack: () => void;
 }>) {
   const [copied, setCopied] = useState(false);
   const toast = useToast();
@@ -298,10 +296,6 @@ function StudentDetailActions({ student, onEdit, onBack }: Readonly<{
       <button type="button" onClick={onEdit} aria-label="Edit student" title="Edit student"
         className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
         <Pencil size={18} aria-hidden="true" />
-      </button>
-      <button type="button" onClick={onBack} aria-label="Back to students" title="Back to students"
-        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
-        <ArrowLeft size={19} aria-hidden="true" />
       </button>
     </div>
   );
@@ -358,6 +352,7 @@ export function Students() {
   const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
   const [levels, setLevels] = useState([...DEFAULT_LEVELS]);
   const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
+  const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('chess');
   const toast = useToast();
 
   const load = async () => {
@@ -554,7 +549,7 @@ export function Students() {
   // Edit mode
   if (selected && editMode) {
     return (
-      <Layout title="Edit Student" action={
+      <Layout title="Edit Student" onBack={() => setEditMode(false)} action={
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
@@ -575,104 +570,141 @@ export function Students() {
   // Detail view
   if (selected) {
     const category = getCategory(selected.age);
+    const parentWa = selected.parent1WhatsApp.replace(/\D/g,'').slice(-10);
     return (
-      <Layout title={selected.name} action={
+      <Layout title={selected.name} onBack={() => setSelected(null)} action={
         <StudentDetailActions student={selected}
-          onEdit={() => { setForm(studentToForm(selected)); setEditMode(true); }}
-          onBack={() => setSelected(null)} />
+          onEdit={() => { setForm(studentToForm(selected)); setEditMode(true); }} />
       }>
-        <div className="p-4 space-y-3">
-          {selected.photoUrl && <div className="flex justify-center"><img src={selected.photoUrl} alt={selected.name} className="h-20 w-20 rounded-full object-cover border-4 border-white shadow-md" /></div>}
-          {/* Chess Profile */}
-          <InfoSection title="Chess Profile">
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {category && (
-                <span className={`min-h-9 px-2 py-2 rounded-lg text-xs font-bold leading-tight text-center flex items-center justify-center ${CATEGORY_COLOR[category] ?? 'badge-blue'}`}>
-                  {category}
-                </span>
-              )}
-              <span className="min-h-9 px-2 py-2 rounded-lg bg-blue-50 text-blue-800 text-xs font-semibold leading-tight text-center flex items-center justify-center">
-                {selected.level}
-              </span>
-              <span className="col-span-2 min-h-9 px-3 py-2 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold leading-tight text-center flex items-center justify-center">
-                {selected.batch}
-              </span>
+        <div className="flex flex-col min-h-full">
+          {/* Identity bar — photo + chips + quick-contact */}
+          <div className="bg-white border-b border-gray-100 px-4 py-3 space-y-2.5">
+            <div className="flex items-center gap-3">
+              {selected.photoUrl && <img src={selected.photoUrl} alt="" className="h-11 w-11 flex-none rounded-full object-cover border border-gray-200" />}
+              <div className="min-w-0 flex-1 flex flex-wrap gap-1.5 items-center">
+                <span className={selected.status==='Active'?'badge-green':'badge-gray'}>{selected.status}</span>
+                {category && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[category]??'badge-blue'}`}>{category}</span>}
+                <span className="text-xs text-gray-500">{selected.batch} · {selected.level}</span>
+              </div>
             </div>
-            {(selected.ratingClassical||selected.ratingRapid||selected.ratingBlitz) && (
-              <div className="grid grid-cols-3 gap-2 my-2">
-                {selected.ratingClassical && <RatingBox label="Classical" value={selected.ratingClassical}/>}
-                {selected.ratingRapid     && <RatingBox label="Rapid"     value={selected.ratingRapid}/>}
-                {selected.ratingBlitz     && <RatingBox label="Blitz"     value={selected.ratingBlitz}/>}
+            {(selected.parent1Phone || (selected.parent1WhatsApp && parentWa)) && (
+              <div className="flex flex-wrap gap-2 items-center">
+                {selected.parent1Phone && (
+                  <a href={`tel:${selected.parent1Phone}`}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700">
+                    📞 Call parent
+                  </a>
+                )}
+                {/* plain span keeps exact-text findability for tests */}
+                {selected.parent1Phone && <span className="text-xs text-gray-400">{selected.parent1Phone}</span>}
+                {selected.parent1WhatsApp && parentWa && (
+                  <a href={`https://wa.me/91${parentWa}`} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 text-green-700">
+                    💬 WhatsApp
+                  </a>
+                )}
               </div>
             )}
-            <Row label="TNSCA ID" value={selected.tnscaId}/>
-            <Row label="FIDE ID"  value={selected.fideId}/>
-            <Row label="AICF ID"  value={selected.aicfId}/>
-            <Row label="Chess.com">
-              {selected.chessComUsername ? <a href={`https://www.chess.com/member/${encodeURIComponent(selected.chessComUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.chessComUsername}</a> : null}
-            </Row>
-            <Row label="Lichess">
-              {selected.lichessUsername ? <a href={`https://lichess.org/@/${encodeURIComponent(selected.lichessUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.lichessUsername}</a> : null}
-            </Row>
-            <Row label="Joined"   value={selected.joiningDate}/>
-            <Row label="Coach"    value={selected.coachName}/>
-            <Row label="This Month" value={`${selected.thisMonthAttended||0} days`}/>
-          </InfoSection>
+          </div>
 
-          <TournamentAttendance studentName={selected.name} registrations={tournamentRegistrations} />
+          {/* Tab bar */}
+          <div className="flex bg-white border-b border-gray-100">
+            {(['chess','contact','info'] as const).map(tab => (
+              <button key={tab} type="button" onClick={() => setDetailTab(tab)}
+                className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors
+                  ${detailTab===tab ? 'border-chess-blue text-chess-blue' : 'border-transparent text-gray-400'}`}>
+                {tab==='chess' ? '♟ Chess' : tab==='contact' ? '📞 Contact' : '👤 Info'}
+              </button>
+            ))}
+          </div>
 
-          {/* Personal */}
-          <InfoSection title="Personal">
-            <Row label="DOB"    value={selected.dob}/>
-            <Row label="Age"    value={selected.age ? `${selected.age} yrs` : ''}/>
-            <Row label="Gender" value={selected.gender}/>
-            <Row label="Status"><span className={selected.status==='Active'?'badge-green':'badge-gray'}>{selected.status}</span></Row>
-          </InfoSection>
+          {/* Tab content */}
+          <div className="flex-1 p-4 space-y-3 overflow-y-auto pb-4">
+            {detailTab === 'chess' && (
+              <>
+                <InfoSection title="Chess Profile">
+                  {(selected.ratingClassical||selected.ratingRapid||selected.ratingBlitz) && (
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {selected.ratingClassical && <RatingBox label="Classical" value={selected.ratingClassical}/>}
+                      {selected.ratingRapid     && <RatingBox label="Rapid"     value={selected.ratingRapid}/>}
+                      {selected.ratingBlitz     && <RatingBox label="Blitz"     value={selected.ratingBlitz}/>}
+                    </div>
+                  )}
+                  <Row label="Coach"       value={selected.coachName}/>
+                  <Row label="Joined"      value={selected.joiningDate}/>
+                  <Row label="This month"  value={`${selected.thisMonthAttended||0} days attended`}/>
+                  <Row label="TNSCA ID"    value={selected.tnscaId}/>
+                  <Row label="FIDE ID"     value={selected.fideId}/>
+                  <Row label="AICF ID"     value={selected.aicfId}/>
+                  <Row label="Chess.com">
+                    {selected.chessComUsername ? <a href={`https://www.chess.com/member/${encodeURIComponent(selected.chessComUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.chessComUsername}</a> : null}
+                  </Row>
+                  <Row label="Lichess">
+                    {selected.lichessUsername ? <a href={`https://lichess.org/@/${encodeURIComponent(selected.lichessUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.lichessUsername}</a> : null}
+                  </Row>
+                </InfoSection>
+                <TournamentAttendance studentName={selected.name} registrations={tournamentRegistrations} />
+              </>
+            )}
 
-          {/* Academic */}
-          <InfoSection title="Academic">
-            <Row label="School"    value={selected.school||selected.grade}/>
-            <Row label="Standard"  value={selected.standard}/>
-            <Row label="Grade / School" value={selected.school ? selected.grade : ''}/>
-          </InfoSection>
+            {detailTab === 'contact' && (
+              <>
+                <InfoSection title="Parent / Guardian">
+                  <Row label="Name" value={selected.parent1Name}/>
+                  <Row label="Phone">
+                    {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
+                  </Row>
+                  <Row label="WhatsApp">
+                    {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
+                  </Row>
+                  <Row label="Email" value={selected.parent1Email}/>
+                </InfoSection>
+                {(selected.parent2Name||selected.parent2Phone) && (
+                  <InfoSection title="Parent 2">
+                    <Row label="Name" value={selected.parent2Name}/>
+                    <Row label="Phone">
+                      {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
+                    </Row>
+                  </InfoSection>
+                )}
+                {(selected.emergencyContact||selected.emergencyPhone) && (
+                  <InfoSection title="Emergency">
+                    <Row label="Name"  value={selected.emergencyContact}/>
+                    <Row label="Phone">
+                      {selected.emergencyPhone ? <a href={`tel:${selected.emergencyPhone}`} className="font-medium text-chess-blue underline">{selected.emergencyPhone}</a> : null}
+                    </Row>
+                  </InfoSection>
+                )}
+              </>
+            )}
 
-          {/* Parents */}
-          <InfoSection title="Parent 1">
-            <Row label="Name" value={selected.parent1Name}/>
-            <Row label="Phone">
-              {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
-            </Row>
-            <Row label="WhatsApp">
-              {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
-            </Row>
-            <Row label="Email" value={selected.parent1Email}/>
-          </InfoSection>
-          {(selected.parent2Name||selected.parent2Phone) && (
-            <InfoSection title="Parent 2">
-              <Row label="Name" value={selected.parent2Name}/>
-              <Row label="Phone">
-                {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
-              </Row>
-            </InfoSection>
-          )}
-          {(selected.emergencyContact||selected.emergencyPhone) && (
-            <InfoSection title="Emergency">
-              <Row label="Name" value={selected.emergencyContact}/>
-              <Row label="Phone">
-                {selected.emergencyPhone ? <a href={`tel:${selected.emergencyPhone}`} className="font-medium text-chess-blue underline">{selected.emergencyPhone}</a> : null}
-              </Row>
-            </InfoSection>
-          )}
-          {selected.address && <InfoSection title="Address"><p className="text-sm text-gray-700 break-words leading-5">{selected.address}</p></InfoSection>}
-          {selected.notes && <InfoSection title="Notes"><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
-          <button type="button" onClick={() => navigate(`/timeline?student=${encodeURIComponent(selected.name)}`)} className="w-full border border-chess-blue/30 text-chess-blue py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2">
-            <FileChartColumn size={16} /> View Timeline &amp; Export PDF
-          </button>
-          <button type="button" onClick={handleDelete} disabled={deleting}
-            className="w-full border border-red-200 text-red-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
-            <Trash2 size={18} aria-hidden="true" />
-            {deleting ? 'Removing student…' : 'Remove Student'}
-          </button>
+            {detailTab === 'info' && (
+              <>
+                <InfoSection title="Personal">
+                  <Row label="DOB"    value={selected.dob}/>
+                  <Row label="Age"    value={selected.age ? `${selected.age} yrs` : ''}/>
+                  <Row label="Gender" value={selected.gender}/>
+                </InfoSection>
+                <InfoSection title="Academic">
+                  <Row label="School"   value={selected.school||selected.grade}/>
+                  <Row label="Standard" value={selected.standard}/>
+                  {selected.school && selected.grade && <Row label="Combined" value={selected.grade}/>}
+                </InfoSection>
+                {selected.address && <InfoSection title="Address"><p className="text-sm text-gray-700 break-words leading-5">{selected.address}</p></InfoSection>}
+                {selected.notes   && <InfoSection title="Notes"><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
+              </>
+            )}
+
+            {/* Actions */}
+            <button type="button" onClick={() => navigate(`/timeline?student=${encodeURIComponent(selected.name)}`)} className="w-full border border-chess-blue/30 text-chess-blue py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2">
+              <FileChartColumn size={16} /> View Timeline &amp; Export PDF
+            </button>
+            <button type="button" onClick={handleDelete} disabled={deleting}
+              className="w-full border border-red-200 text-red-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+              <Trash2 size={18} aria-hidden="true" />
+              {deleting ? 'Removing student…' : 'Remove Student'}
+            </button>
+          </div>
         </div>
       </Layout>
     );
@@ -726,19 +758,18 @@ export function Students() {
           const cm = currentMonthKey();
           const hasTournament = tournamentRegistrations.some(r => r.month === cm && normalizedName(r.studentName) === normalizedName(s.name));
           return (
-            <button type="button" key={s.name+s.rowIndex} onClick={() => setSelected(s)}
-              className="card-btn w-full bg-white rounded-xl p-3 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
-              <StudentAvatar name={s.name} photoUrl={s.photoUrl} />
+            <button type="button" key={s.name+s.rowIndex} onClick={() => { setSelected(s); setDetailTab('chess'); }}
+              className="card-btn w-full bg-white rounded-xl px-4 py-3.5 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <p className="font-semibold text-gray-900">{s.name}</p>
                   {hasTournament && <span title="Playing tournament this month" className="text-sm leading-none">🏆</span>}
                 </div>
-                <div className="flex gap-x-2 gap-y-1 mt-0.5 flex-wrap items-center">
-                  <span className="text-xs text-gray-600 break-words">{s.batch}</span>
-                  {cat && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
-                  {s.fideId && <span className="text-xs text-gray-500 whitespace-nowrap">FIDE: {s.fideId}</span>}
-                </div>
+                <p className="mt-0.5 text-xs text-gray-500 flex flex-wrap gap-x-2 items-center">
+                  <span>{s.batch}</span>
+                  {cat && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
+                  {s.fideId && <span className="text-gray-400">FIDE: {s.fideId}</span>}
+                </p>
               </div>
               <div className="flex flex-shrink-0 items-center gap-1.5">
                 <span className={s.status==='Active'?'badge-green':'badge-gray'}>{s.status}</span>
@@ -786,8 +817,8 @@ function StudentForm({ form, setForm, batches, levels, onPhotoUpload }: Readonly
 
   return (
     <div className="space-y-4">
-      {/* Basic */}
-      <Section title="Personal Details">
+      {/* Core — always required */}
+      <Section title="Basic Info">
         <Field label="Full Name *"><input required maxLength={100} value={form.name} onChange={f('name')} className="input"/></Field>
         <Field label="Date of Birth *">
           <input required type="date" value={form.dob} onChange={f('dob')} className="input"/>
@@ -798,61 +829,83 @@ function StudentForm({ form, setForm, batches, levels, onPhotoUpload }: Readonly
             </div>
           )}
         </Field>
-        <Field label="Gender">
-          <select value={form.gender} onChange={f('gender')} className="input">
-            {['Female','Male','Non-binary','Prefer not to say'].map(o=><option key={o}>{o}</option>)}
-          </select>
-        </Field>
-        <Field label="Status">
-          <select value={form.status} onChange={f('status')} className="input">
-            {['Active','On Hold','Inactive'].map(o=><option key={o}>{o}</option>)}
-          </select>
-        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Gender">
+            <select value={form.gender} onChange={f('gender')} className="input">
+              {['Female','Male','Non-binary','Prefer not to say'].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={form.status} onChange={f('status')} className="input">
+              {['Active','On Hold','Inactive'].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </Field>
+        </div>
       </Section>
 
-      {/* Academic */}
-      <Section title="Academic">
-        <Field label="School Name"><input value={form.school} onChange={f('school')} className="input" placeholder="e.g. ABC Matriculation School"/></Field>
-        <Field label="Standard / Class">
-          <select value={form.standard} onChange={f('standard')} className="input">
-            <option value="">Select…</option>
-            {STANDARDS.map(o=><option key={o}>{o}</option>)}
-          </select>
-        </Field>
-        <Field label="Grade / School (combined)"><input value={form.grade} onChange={f('grade')} className="input" placeholder="e.g. 7th, ABC School"/></Field>
-      </Section>
-
-      {/* Chess Profile */}
+      {/* Chess */}
       <Section title="Chess Profile">
-        <Field label="Batch">
-          <select value={form.batch} onChange={f('batch')} className="input">
-            {!batches.includes(form.batch) && form.batch && <option>{form.batch}</option>}
-            {batches.map(option => <option key={option}>{option}</option>)}
-          </select>
-        </Field>
-        <Field label="Chess Level">
-          <select value={form.level} onChange={f('level')} className="input">
-            {!levels.includes(form.level) && form.level && <option>{form.level}</option>}
-            {levels.map(option => <option key={option}>{option}</option>)}
-          </select>
-        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Batch">
+            <select value={form.batch} onChange={f('batch')} className="input">
+              {!batches.includes(form.batch) && form.batch && <option>{form.batch}</option>}
+              {batches.map(option => <option key={option}>{option}</option>)}
+            </select>
+          </Field>
+          <Field label="Chess Level">
+            <select value={form.level} onChange={f('level')} className="input">
+              {!levels.includes(form.level) && form.level && <option>{form.level}</option>}
+              {levels.map(option => <option key={option}>{option}</option>)}
+            </select>
+          </Field>
+        </div>
         <Field label="Assigned Coach"><input maxLength={100} value={form.coachName} onChange={f('coachName')} className="input" placeholder="Coach name"/></Field>
         <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
+      </Section>
+
+      {/* Parent — required */}
+      <Section title="Parent / Guardian">
+        <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
+        <Field label="Phone *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={phone('parent1Phone')} className="input"/></Field>
+        <Field label="WhatsApp"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1WhatsApp} onChange={phone('parent1WhatsApp')} className="input"/></Field>
+        <Field label="Email"><input type="email" maxLength={254} value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
+        <Field label="Parent 2 Name"><input maxLength={100} value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
+        <Field label="Parent 2 Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent2Phone} onChange={phone('parent2Phone')} className="input"/></Field>
+      </Section>
+
+      {/* Ratings */}
+      <Section title="Ratings">
         <div className="grid grid-cols-3 gap-2">
           <Field label="Classical Rating"><input type="number" min="0" max="4000" step="1" value={form.ratingClassical} onChange={f('ratingClassical')} className="input" placeholder="e.g. 1200"/></Field>
           <Field label="Rapid Rating"><input type="number" min="0" max="4000" step="1" value={form.ratingRapid} onChange={f('ratingRapid')} className="input" placeholder="e.g. 1100"/></Field>
           <Field label="Blitz Rating"><input type="number" min="0" max="4000" step="1" value={form.ratingBlitz} onChange={f('ratingBlitz')} className="input" placeholder="e.g. 950"/></Field>
         </div>
+      </Section>
+
+      {/* IDs + Online Chess */}
+      <Section title="IDs &amp; Online">
         <Field label="TNSCA ID"><input value={form.tnscaId} onChange={f('tnscaId')} className="input" placeholder="TNSCA registration number"/></Field>
         <Field label="FIDE ID"><input value={form.fideId} onChange={f('fideId')} className="input" placeholder="FIDE registration ID"/></Field>
         <Field label="AICF ID"><input value={form.aicfId} onChange={f('aicfId')} className="input" placeholder="All India Chess Federation ID"/></Field>
-      </Section>
-
-      <Section title="Online Chess">
         <Field label="Chess.com Username"><input maxLength={25} autoCapitalize="none" autoCorrect="off" value={form.chessComUsername} onChange={f('chessComUsername')} className="input" placeholder="e.g. hikaru"/></Field>
         <Field label="Lichess Username"><input maxLength={20} autoCapitalize="none" autoCorrect="off" value={form.lichessUsername} onChange={f('lichessUsername')} className="input" placeholder="e.g. DrNykterstein"/></Field>
       </Section>
 
+      {/* Academic */}
+      <Section title="School &amp; Academic">
+        <Field label="School Name"><input value={form.school} onChange={f('school')} className="input" placeholder="e.g. ABC Matriculation School"/></Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Standard / Class">
+            <select value={form.standard} onChange={f('standard')} className="input">
+              <option value="">Select…</option>
+              {STANDARDS.map(o=><option key={o}>{o}</option>)}
+            </select>
+          </Field>
+          <Field label="Grade / School"><input value={form.grade} onChange={f('grade')} className="input" placeholder="e.g. 7th, ABC School"/></Field>
+        </div>
+      </Section>
+
+      {/* Profile Photo */}
       <Section title="Profile Photo">
         <div className="flex items-center gap-3">
           {form.photoUrl
@@ -868,26 +921,16 @@ function StudentForm({ form, setForm, batches, levels, onPhotoUpload }: Readonly
         </div>
       </Section>
 
-      {/* Parents */}
-      <Section title="Parent / Guardian">
-        <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
-        <Field label="Phone *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={phone('parent1Phone')} className="input"/></Field>
-        <Field label="WhatsApp"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1WhatsApp} onChange={phone('parent1WhatsApp')} className="input"/></Field>
-        <Field label="Email"><input type="email" maxLength={254} value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
-        <Field label="Parent 2 Name"><input maxLength={100} value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
-        <Field label="Parent 2 Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent2Phone} onChange={phone('parent2Phone')} className="input"/></Field>
+      {/* Emergency + Address + Other */}
+      <Section title="Emergency &amp; Other">
+        <Field label="Emergency Contact Name"><input maxLength={100} value={form.emergencyContact} onChange={f('emergencyContact')} className="input"/></Field>
+        <Field label="Emergency Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.emergencyPhone} onChange={phone('emergencyPhone')} className="input"/></Field>
+        <Field label="Home Address"><input value={form.address} onChange={f('address')} className="input"/></Field>
+        <Field label="Photo Consent">
+          <select value={form.photoConsent} onChange={f('photoConsent')} className="input"><option>Yes</option><option>No</option></select>
+        </Field>
+        <Field label="Notes"><textarea value={form.notes} onChange={f('notes')} className="input" rows={2}/></Field>
       </Section>
-
-      <Section title="Emergency Contact">
-        <Field label="Name"><input maxLength={100} value={form.emergencyContact} onChange={f('emergencyContact')} className="input"/></Field>
-        <Field label="Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.emergencyPhone} onChange={phone('emergencyPhone')} className="input"/></Field>
-      </Section>
-
-      <Field label="Home Address"><input value={form.address} onChange={f('address')} className="input"/></Field>
-      <Field label="Photo Consent">
-        <select value={form.photoConsent} onChange={f('photoConsent')} className="input"><option>Yes</option><option>No</option></select>
-      </Field>
-      <Field label="Notes"><textarea value={form.notes} onChange={f('notes')} className="input" rows={2}/></Field>
     </div>
   );
 }
@@ -902,17 +945,6 @@ function Section({ title, children }: Readonly<{ title: string; children: React.
 }
 function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
   return <label className="block"><span className="text-xs font-medium text-gray-500 mb-1 block">{label}</span>{children}</label>;
-}
-const AVATAR_PALETTE = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#EC4899','#84CC16'];
-function StudentAvatar({ name, photoUrl }: Readonly<{ name: string; photoUrl?: string }>) {
-  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
-  const bg = AVATAR_PALETTE[name.charCodeAt(0) % AVATAR_PALETTE.length];
-  if (photoUrl) return <img src={photoUrl} alt="" className="h-10 w-10 flex-none rounded-full object-cover border border-gray-200" />;
-  return (
-    <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: bg }}>
-      {initials}
-    </span>
-  );
 }
 
 function InfoSection({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) {

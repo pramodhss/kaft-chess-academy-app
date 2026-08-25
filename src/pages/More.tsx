@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   BookOpenCheck, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
   ExternalLink, Gauge, Library, LogOut, Medal,
-  Moon, ReceiptText, Sun, Trophy, Workflow,
+  Moon, ReceiptText, Sun, Swords, Trophy, Workflow,
   Type,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
@@ -14,19 +14,19 @@ import { useTextSize } from '../hooks/useTextSize';
 import { ACADEMY_LINKS, SOCIAL } from '../config';
 
 const GROUPS = [
-  { title:'Academy', items:[
-    { to:'/operations', Icon:Workflow, label:'Operations & Data', desc:'Follow-ups, settings and exports' },
-    { to:'/progress', Icon:ChartNoAxesCombined, label:'Student Insights', desc:'Progress, timeline and reports' },
-    { to:'/timetable', Icon:CalendarDays, label:'Weekly Classes', desc:'Batches, coaches, times and rooms' },
+  { title:'Coach Tools', items:[
+    { to:'/progress',   Icon:ChartNoAxesCombined, label:'Student Progress',  desc:'Attendance charts, skill ratings and PDF reports' },
+    { to:'/timetable',  Icon:CalendarDays,         label:'Timetable',          desc:'Class schedule, batches, coaches and rooms' },
+    { to:'/operations', Icon:Workflow,              label:'Reports & Data',    desc:'Exports, data quality checks and audit log' },
   ]},
   { title:'Tournaments', items:[
-    { to:'/van', Icon:Trophy, label:'Tournament Management', desc:'Events, player rosters and fee status' },
-    { to:'/tournaments', Icon:Trophy, label:'Results', desc:'Scores, ratings, medals and prizes' },
-    { to:'/leaderboard', Icon:Medal, label:'Leaderboard', desc:'Rankings by medals and wins' },
+    { to:'/van',           Icon:Swords,    label:'Tournament Events',  desc:'Create events, rosters, payments and van' },
+    { to:'/tournaments',   Icon:Trophy,    label:'Results & Medals',   desc:'Past scores, ratings and prize records' },
+    { to:'/leaderboard',   Icon:Medal,     label:'Rankings',           desc:'Student rankings by medals and wins' },
   ]},
   { title:'Learning', items:[
-    { to:'/resources', Icon:Library, label:'Resources & eBooks', desc:'Study material and shared links' },
-    { to:'/curriculum', Icon:BookOpenCheck, label:'Curriculum', desc:'Beginner to advanced syllabus' },
+    { to:'/resources',  Icon:Library,        label:'Study Materials',  desc:'PDFs, images and shared study links' },
+    { to:'/curriculum', Icon:BookOpenCheck,  label:'Syllabus',          desc:'Chess curriculum from beginner to advanced' },
   ]},
 ];
 

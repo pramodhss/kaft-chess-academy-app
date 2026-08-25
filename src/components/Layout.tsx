@@ -12,22 +12,24 @@ interface LayoutProps {
   readonly children: React.ReactNode;
   readonly action?: React.ReactNode;
   readonly showBack?: boolean;
+  readonly onBack?: () => void;
 }
 
-export function Layout({ title, children, action, showBack }: LayoutProps) {
+export function Layout({ title, children, action, showBack, onBack }: LayoutProps) {
   useTheme();
   const online = useOnline();
   const navigate = useNavigate();
   const location = useLocation();
   const displayBack = showBack ?? location.pathname !== '/';
   const { coachName: coach } = useCoachName();
+  const handleBack = () => onBack ? onBack() : navigate(-1);
   return (
     <div className="app-shell flex h-full flex-col md:pl-60">
       <Sidebar />
       <header className="app-header flex-shrink-0 text-white">
         <div className="app-header-inner flex items-center gap-3">
           {displayBack && (
-            <button type="button" onClick={() => navigate(-1)} aria-label="Go back" title="Go back"
+            <button type="button" onClick={handleBack} aria-label="Go back" title="Go back"
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:bg-white/10">
               <ArrowLeft size={19} aria-hidden="true" />
             </button>

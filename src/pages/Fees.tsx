@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -371,10 +371,10 @@ export function Fees() {
     setDrafts(current => new Map(current).set(student, next));
   };
 
-  const saveRosterFee = async (student: string) => {
+  const saveRosterFee = async (student: string, overrideDraft?: FeeDraft) => {
     if (!token) return;
     const existing = monthlyByStudent.get(normalized(student));
-    const draft = feeDraft(student);
+    const draft = overrideDraft ?? feeDraft(student);
     const due = parseSheetNumber(draft.amountDue);
     const payment = calculateRosterPayment(existing, draft, due);
     const { amountPaid } = payment;
@@ -444,37 +444,125 @@ export function Fees() {
     finally { setRosterSaving(''); }
   };
 
+  const markAsPaid = async (student: string) => {
+    const draft = feeDraft(student);
+    const due = parseSheetNumber(draft.amountDue);
+    if (due <= 0) {
+      toast.info(`No fee amount set for ${student} yet — expand the card to set it.`);
+      setExpandedStudent(student);
+      return;
+    }
+    const paidDraft: FeeDraft = { paid: true, amountDue: draft.amountDue, amountPaid: String(due) };
+    updateDraft(student, paidDraft);
+    await saveRosterFee(student, paidDraft);
+  };
+
   const selectedFees = Array.from(monthlyByStudent.values());
   const totalCollected = selectedFees.reduce((sum, fee) => sum + parseSheetNumber(fee.amountPaid), 0);
   const totalOutstanding = selectedFees.reduce((sum, fee) => sum + Math.max(parseSheetNumber(fee.balance), 0), 0);
   const otherFees = fees.filter(fee => normalizeFeeMonth(fee.feeMonth) === selectedMonth && fee.feeType !== 'Monthly Tuition');
 
+
+  const [yearNum, monthNum] = selectedMonth.split('-').map(Number);
+  const monthDisplay = new Date(yearNum, monthNum - 1, 1)
+    .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const shiftMonth = (delta: number) => {
+    const d = new Date(yearNum, monthNum - 1 + delta, 1);
+    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    setDrafts(new Map()); setExpandedStudent(null);
+  };
+  const copyFeeReport = () => {
+    const lines = [
+      `*KAFT Chess Academy \u2013 Fee Report*`,
+      `*Month:* ${monthDisplay}`,
+      ``,
+      `Collected: \u20b9${totalCollected.toLocaleString('en-IN')} \u00b7 Balance: \u20b9${totalOutstanding.toLocaleString('en-IN')}`,
+      ``,
+      `*Students (${visibleStudents.length})*`,
+      ...visibleStudents.map(s => {
+        const fee = monthlyByStudent.get(normalized(s));
+        const status = fee?.paymentStatus ?? 'No record';
+        const paid = parseSheetNumber(fee?.amountPaid ?? '0');
+        const due = parseSheetNumber(feeDraft(s).amountDue);
+        const e = status === 'Paid' ? '\u2705' : status === 'Partial' ? '\ud83d\udd36' : status === 'Overdue' ? '\ud83d\udd34' : '\u23f3';
+        const money = paid > 0 ? ` (\u20b9${paid.toLocaleString('en-IN')}${due > paid ? `/${due.toLocaleString('en-IN')}` : ''})` : '';
+        return `${e} ${s}${money}`;
+      }),
+      ``,
+      `\u2014 KAFT Chess Academy`,
+    ];
+    void navigator.clipboard.writeText(lines.join('\n')).then(
+      () => toast.success('Fee report copied \u2014 ready to paste in WhatsApp.'),
+      () => toast.error('Could not copy to clipboard.')
+    );
+  };
+
+  const notifyPending = () => {
+    const pending = visibleStudents.filter(s => {
+      const st = monthlyByStudent.get(normalized(s))?.paymentStatus;
+      return !st || st === 'Pending' || st === 'Overdue' || st === 'Partial';
+    }).filter(s => parseSheetNumber(feeDraft(s).amountDue) > 0);
+    if (pending.length === 0) { toast.info('No pending fees to remind for this month.'); return; }
+    const lines = [
+      `*KAFT Chess Academy – Fee Reminder*`,
+      `*Month:* ${monthDisplay}`,
+      ``,
+      `The following students have pending fees:`,
+      ...pending.map(s => {
+        const fee = monthlyByStudent.get(normalized(s));
+        const due = parseSheetNumber(feeDraft(s).amountDue);
+        const paid = parseSheetNumber(fee?.amountPaid ?? '0');
+        const bal = Math.max(due - paid, 0);
+        return `• ${s} – ₹${bal.toLocaleString('en-IN')} pending`;
+      }),
+      ``,
+      `Please arrange payment at the earliest.`,
+      `Thank you — KAFT Chess Academy`,
+    ].join('\n');
+    void navigator.clipboard.writeText(lines).then(
+      () => toast.success(`Reminder copied for ${pending.length} student${pending.length === 1 ? '' : 's'}.`),
+      () => toast.error('Could not copy to clipboard.')
+    );
+  };
+
   if (loading) return <Layout title="Fees"><PageSkeleton /></Layout>;
 
   return (
-    <Layout title="Fees">
+    <Layout title="Fees" action={
+      <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
+        aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
+        className="header-action"><Plus size={15} /></button>
+    }>
       <div className="page-stack mx-auto w-full max-w-4xl">
         {error && <div role="alert" className="error-state">{error}</div>}
 
-        <div className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
-          <input type="month" value={selectedMonth} onChange={event=>{setSelectedMonth(event.target.value);setDrafts(new Map());setExpandedStudent(null);}}
-            aria-label="Fee month" className="input min-w-0" />
-          <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
-            aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
-            className="flex h-10 items-center justify-center rounded-lg bg-navy text-white">
-            <Plus size={18} aria-hidden="true" />
-          </button>
+        {/* Month navigation */}
+        <div className="surface-card flex items-center gap-2 px-3 py-2.5">
+          <button type="button" onClick={() => shiftMonth(-1)} className="icon-button" aria-label="Previous month"><ChevronLeft size={18}/></button>
+          <div className="flex-1 text-center">
+            <p className="text-sm font-bold text-gray-900" data-testid="fee-month-heading">{monthDisplay}</p>
+          </div>
+          <button type="button" onClick={() => shiftMonth(1)} className="icon-button" aria-label="Next month"><ChevronRight size={18}/></button>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center divide-x divide-gray-200">
-          <div className="flex-1 pr-3">
+        {/* Summary + copy report */}
+        <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center">
+          <div className="flex-1 pr-3 border-r border-gray-200">
             <p className="text-[11px] font-medium text-gray-500">Collected</p>
             <p className="text-lg font-bold text-green-700">{formatCurrency(totalCollected)}</p>
           </div>
-          <div className="flex-1 pl-3">
+          <div className="flex-1 px-3">
             <p className="text-[11px] font-medium text-gray-500">Balance</p>
             <p className="text-lg font-bold text-amber-700">{formatCurrency(totalOutstanding)}</p>
           </div>
+          <button type="button" onClick={copyFeeReport}
+            className="icon-button ml-2" aria-label="Copy fee report for WhatsApp" title="Copy monthly fee summary">
+            <Copy size={16} />
+          </button>
+          <button type="button" onClick={notifyPending}
+            className="icon-button ml-1" aria-label="Copy fee reminders for WhatsApp" title="Remind pending students">
+            <MessageCircle size={16} />
+          </button>
         </div>
 
         <label className="relative block"><Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={feeSearch} onChange={e=>setFeeSearch(e.target.value)}
@@ -483,8 +571,8 @@ export function Fees() {
 
         <div className="flex items-end justify-between gap-3 pt-1">
           <div>
-            <h2 className="font-bold text-navy">Fee register</h2>
-            <p className="text-xs text-gray-500">{visibleStudents.length} students · Monthly tuition</p>
+            <h2 className="font-bold text-navy">Student fees</h2>
+            <p className="text-xs text-gray-500">{visibleStudents.length} students</p>
           </div>
         </div>
 
@@ -519,11 +607,15 @@ export function Fees() {
                   </span>
                 </button>
                 <span className={`shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md ${paymentStatusBadge(status)}`}>{status}</span>
-                {fee && <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}}
-                  aria-label={`Edit fee for ${student}`} title="Edit fee details"
-                  className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100">
-                  <Pencil size={16} aria-hidden="true" />
-                </button>}
+                {status !== 'Paid' && (
+                  <button type="button"
+                    onClick={() => { void markAsPaid(student); }}
+                    disabled={rosterSaving === student}
+                    className="shrink-0 h-9 px-2.5 rounded-lg bg-green-50 text-green-700 text-xs font-bold border border-green-200 disabled:opacity-50"
+                    aria-label={`Mark ${student} as paid`}>
+                    {rosterSaving === student ? '…' : '✓ Paid'}
+                  </button>
+                )}
               </div>
 
               {expanded && <div id={`fee-details-${student}`} className="p-3 pt-2 border-t border-gray-100">
@@ -559,6 +651,12 @@ export function Fees() {
                   {changed && <button type="button" onClick={()=>saveRosterFee(student)} disabled={rosterSaving===student}
                     className="h-9 px-3 rounded-lg bg-navy text-white text-xs font-semibold disabled:opacity-50">
                     {rosterSaving===student?'Saving…':'Save'}
+                  </button>}
+                  {fee && <button type="button"
+                    onClick={() => { setEditTarget(fee); setForm(feeToForm(fee)); }}
+                    aria-label={`Edit all fields for ${student}`}
+                    className="h-9 px-3 rounded-lg text-chess-blue text-xs font-semibold hover:bg-chess-light">
+                    Edit
                   </button>}
                   {fee && <button type="button" onClick={()=>removeFee(fee)} disabled={deleting===fee.rowIndex}
                     aria-label={`Remove monthly fee for ${student}`} title="Remove fee"
