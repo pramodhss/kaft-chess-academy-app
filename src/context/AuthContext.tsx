@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import { SCOPES } from '../config';
 import { clearSheetReadCache, SHEETS_READ_CACHE } from '../lib/sheets';
@@ -70,9 +70,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const isLoggedIn = !!auth.token && !!auth.expiresAt && Date.now() < auth.expiresAt;
+  const contextValue = useMemo(
+    () => ({ ...auth, isLoggedIn, login: googleLogin, logout }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [auth, isLoggedIn, logout]
+  );
 
   return (
-    <AuthContext.Provider value={{ ...auth, isLoggedIn, login: googleLogin, logout }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

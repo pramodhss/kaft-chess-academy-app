@@ -339,6 +339,9 @@ async function uploadStudentPhoto(token: string, file: File): Promise<string> {
   return uploaded.webViewLink;
 }
 
+// run schema migration at most once per token (session) to avoid an extra live read on every visit
+const schemaCheckedForToken = new Set<string>();
+
 export function Students() {
   const { token, logout } = useAuth();
   const { coachName } = useCoachName();
@@ -366,7 +369,10 @@ export function Students() {
     if (!token) return;
     setLoading(true); setError('');
     try {
-      if (navigator.onLine) await ensureStudentSchema(token);
+      if (navigator.onLine && !schemaCheckedForToken.has(token)) {
+        await ensureStudentSchema(token);
+        schemaCheckedForToken.add(token);
+      }
       const [rows, options, registrationRows] = await Promise.all([
         loadStudentRows(token),
         loadStudentOptions(token, SHEET_ID),

@@ -366,8 +366,8 @@ html.dark .chess-loader { border-bottom-color: rgba(252, 211, 77, 0.4); }
 }
 
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
-html.dark { color-scheme: dark; }
 html.dark {
+  color-scheme: dark;
   --app-page: #0F1117;
   --app-surface: #171C28;
   --app-border: #2D3347;

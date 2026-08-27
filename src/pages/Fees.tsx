@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
@@ -439,15 +439,26 @@ export function Fees() {
     finally { setDeleting(null); }
   };
 
-  const monthlyByStudent = new Map<string, FeeEntry>();
-  const selectedMonthlyFees = fees
-    .filter(fee => fee.feeType === 'Monthly Tuition' && normalizeFeeMonth(fee.feeMonth) === selectedMonth)
-    .sort((left, right) => left.rowIndex - right.rowIndex);
-  selectedMonthlyFees.forEach(fee => monthlyByStudent.set(normalized(fee.studentName), fee));
-  const duplicateMonthlyFees = selectedMonthlyFees.filter(fee => monthlyByStudent.get(normalized(fee.studentName)) !== fee);
+  const { monthlyByStudent, duplicateMonthlyFees, totalCollected, totalOutstanding, otherFees } = useMemo(() => {
+    const map = new Map<string, FeeEntry>();
+    const monthly = fees
+      .filter(fee => fee.feeType === 'Monthly Tuition' && normalizeFeeMonth(fee.feeMonth) === selectedMonth)
+      .sort((l, r) => l.rowIndex - r.rowIndex);
+    monthly.forEach(fee => map.set(normalized(fee.studentName), fee));
+    const dupes = monthly.filter(fee => map.get(normalized(fee.studentName)) !== fee);
+    const vals = Array.from(map.values());
+    return {
+      monthlyByStudent: map,
+      duplicateMonthlyFees: dupes,
+      totalCollected: vals.reduce((s, f) => s + parseSheetNumber(f.amountPaid), 0),
+      totalOutstanding: vals.reduce((s, f) => s + Math.max(parseSheetNumber(f.balance), 0), 0),
+      otherFees: fees.filter(f => normalizeFeeMonth(f.feeMonth) === selectedMonth && f.feeType !== 'Monthly Tuition'),
+    };
+  }, [fees, selectedMonth]);
 
-  const visibleStudents = students.filter(student =>
-    !feeSearch || student.toLowerCase().includes(feeSearch.toLowerCase())
+  const visibleStudents = useMemo(() =>
+    students.filter(s => !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase())),
+    [students, feeSearch]
   );
 
   const knownAmountDue = (student: string): number => {
@@ -507,7 +518,7 @@ export function Fees() {
     finally { setRosterSaving(''); }
   };
 
-  const markAsPaid = (student: string) => {
+  const markAsPaid = async (student: string) => {
     const draft = feeDraft(student);
     const due = parseSheetNumber(draft.amountDue);
     if (due <= 0) {
@@ -518,13 +529,8 @@ export function Fees() {
     const paidDraft: FeeDraft = { paid: true, amountDue: draft.amountDue, amountPaid: String(due) };
     updateDraft(student, paidDraft);
     setExpandedStudent(student);
+    await saveRosterFee(student, paidDraft);
   };
-
-  const selectedFees = Array.from(monthlyByStudent.values());
-  const totalCollected = selectedFees.reduce((sum, fee) => sum + parseSheetNumber(fee.amountPaid), 0);
-  const totalOutstanding = selectedFees.reduce((sum, fee) => sum + Math.max(parseSheetNumber(fee.balance), 0), 0);
-  const otherFees = fees.filter(fee => normalizeFeeMonth(fee.feeMonth) === selectedMonth && fee.feeType !== 'Monthly Tuition');
-
 
   const [yearNum, monthNum] = selectedMonth.split('-').map(Number);
   const monthDisplay = new Date(yearNum, monthNum - 1, 1)

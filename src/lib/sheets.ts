@@ -1,7 +1,7 @@
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 export const SHEETS_READ_CACHE = 'sheets-read-cache-v1';
 export type SheetValue = string | number | boolean;
-const READ_CACHE_TTL_MS = 15_000;
+const READ_CACHE_TTL_MS = 300_000; // 5 minutes — stable data rarely changes mid-session
 type CachedRead = { data: any; expiresAt: number };
 const recentReads = new Map<string, CachedRead>();
 const pendingReads = new Map<string, Promise<any>>();

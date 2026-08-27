@@ -152,8 +152,7 @@ export function Attendance() {
     if (attendanceDate) loadDate(attendanceDate);
   }, [attendanceDates, loadDate, selectedIdx]);
 
-  const changeDate = (idx: number) => { setSelectedIdx(idx); };
-  void changeDate; // preserved for any future direct-index navigation
+  /* changeDate(idx) removed — goPrev/goNext are the only navigation paths */
 
   const toggle = (sheetRow: number, current: boolean) => {
     const desired = !current;
@@ -372,7 +371,7 @@ export function Attendance() {
             {/* Calendar picker — jumps to nearest available date */}
             <label className="icon-button cursor-pointer" aria-label="Pick a date">
               <CalendarSearch size={17} />
-              <input type="date" className="sr-only" aria-hidden="true"
+              <input type="date" className="sr-only" aria-hidden="true" tabIndex={-1}
                 value={attendanceDates[selectedIdx] ? `${attendanceDates[selectedIdx].date.getFullYear()}-${String(attendanceDates[selectedIdx].date.getMonth()+1).padStart(2,'0')}-${String(attendanceDates[selectedIdx].date.getDate()).padStart(2,'0')}` : ''}
                 onChange={e => jumpToDate(e.target.value)} />
             </label>

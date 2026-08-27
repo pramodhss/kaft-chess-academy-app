@@ -93,7 +93,15 @@ export async function isStudentNameReserved(token: string, sheetId: string, name
     .some(row => normalizedName(row[target.nameIndex] ?? '') === normalized));
 }
 
+const RECONCILE_INTERVAL_MS = 30 * 60 * 1000;
+
 export async function reconcileAttendanceRoster(token: string, sheetId: string) {
+  try {
+    const lastKey = `att-reconciled-${sheetId}`;
+    const last = Number(sessionStorage.getItem(lastKey) ?? 0);
+    if (Date.now() - last < RECONCILE_INTERVAL_MS) return { added: 0, updated: 0 };
+    sessionStorage.setItem(lastKey, String(Date.now()));
+  } catch { /* sessionStorage unavailable in some private-mode browsers */ }
   const [studentRows, attendanceRows] = await Promise.all([
     readSheetLive(token, sheetId, `'${TABS.STUDENTS}'!A:I`),
     readSheetLive(token, sheetId, `'${TABS.ATTENDANCE}'!A:B`),
