@@ -46,16 +46,14 @@ test('recognizes legacy months and supports repeated conflict-safe edits', async
   await expect(page.getByText(/changed on another device/i)).toHaveCount(0);
 });
 
-test('marks a monthly fee paid only after explicit confirmed update', async ({ page, sheets }) => {
+test('marks a monthly fee as paid immediately on single tap', async ({ page, sheets }) => {
   await openApp(page, '#/fees');
   await selectAugust(page);
 
   await page.getByLabel('Mark Aarav Kumar as paid').click();
   await expect(page.locator('[aria-controls="fee-details-Aarav Kumar"]')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByLabel('Aarav Kumar paid in full')).toBeChecked();
-  expect(sheets.workbook['Fee Register'][1][6]).toBe('1,000');
-
-  await page.getByRole('button', { name: 'Update Fee' }).click();
+  // one-tap save — sheet is updated immediately without a second click
   await expect.poll(() => sheets.workbook['Fee Register'][1][6]).toBe('1500');
   expect(sheets.workbook['Fee Register'][1][7]).toBe('0');
   expect(sheets.workbook['Fee Register'][1][11]).toBe('Paid');
