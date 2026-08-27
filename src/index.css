@@ -457,8 +457,8 @@ html.dark .skeleton { background: linear-gradient(90deg, #1a2133 25%, #212840 50
   to   { transform: translateY(0);    opacity: 1; }
 }
 @keyframes chess-piece-sequence {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0) scale(0.94); }
-  24% { opacity: 1; transform: translateY(-4px) scale(1); }
+  from { transform: translateY(5px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
 }
 @keyframes chess-dot-sequence {
   0%, 70%, 100% { opacity: 0.25; transform: scale(0.8); }

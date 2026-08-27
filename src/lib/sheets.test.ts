@@ -1,8 +1,40 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ensureSheet } from './sheets';
+import { appendRows, clearSheetReadCache, ensureSheet, readSheet } from './sheets';
+
+afterEach(() => {
+  clearSheetReadCache();
+  vi.restoreAllMocks();
+});
+
+describe('readSheet', () => {
+  it('reuses a recent read for the same signed-in user and range', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ values: [['Aarav']] }), { status: 200 }),
+    );
+
+    await expect(readSheet('token', 'sheet-id', "'Students'!A:A")).resolves.toEqual([['Aarav']]);
+    await expect(readSheet('token', 'sheet-id', "'Students'!A:A")).resolves.toEqual([['Aarav']]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates cached reads after a successful mutation', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, options) => {
+      if ((options?.method ?? 'GET') === 'POST') {
+        return new Response(JSON.stringify({ updates: { updatedRange: "'Students'!A2:A2" } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ values: [['Aarav']] }), { status: 200 });
+    });
+
+    await readSheet('token', 'sheet-id', "'Students'!A:A");
+    await appendRows('token', 'sheet-id', "'Students'!A:A", [['Diya']]);
+    await readSheet('token', 'sheet-id', "'Students'!A:A");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
 
 describe('ensureSheet', () => {
-  afterEach(() => vi.restoreAllMocks());
 
   it('recovers when another initializer creates the sheet first', async () => {
     let reads = 0;

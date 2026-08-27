@@ -79,24 +79,24 @@ export function Dashboard() {
     (async () => {
       try {
         const [studentRows, feeRows, timetableRows] = await Promise.all([
-          readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:J`),
-          readSheet(token, SHEET_ID, `'${TABS.FEES}'!B:I`),
+          readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
+          readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
           readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`).catch(() => []),
         ]);
         const data = studentRows.slice(1).filter(r => r[0]?.trim());
         const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
         let collected = 0, outstanding = 0;
         feeRows.slice(1).forEach(r => {
-          collected   += nonNegativeSheetNumber(r[5] ?? '');
-          outstanding += nonNegativeSheetNumber(r[6] ?? '');
+          collected   += nonNegativeSheetNumber(r[6] ?? '');
+          outstanding += nonNegativeSheetNumber(r[7] ?? '');
         });
         setStats({ total: data.length, active, collected, outstanding });
         setBirthdays(upcomingBirthdays(studentRows));
         setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
         const overdueMap = new Map<string, number>();
         feeRows.slice(1).forEach(r => {
-          const name = (r[0] ?? '').trim();
-          const balance = nonNegativeSheetNumber(r[6] ?? '');
+          const name = (r[1] ?? '').trim();
+          const balance = nonNegativeSheetNumber(r[7] ?? '');
           if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);
         });
         setOverdueCount(overdueMap.size);

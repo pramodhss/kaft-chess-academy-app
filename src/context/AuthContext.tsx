@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import { SCOPES } from '../config';
-import { SHEETS_READ_CACHE } from '../lib/sheets';
+import { clearSheetReadCache, SHEETS_READ_CACHE } from '../lib/sheets';
 
 interface AuthState {
   token: string | null;
@@ -57,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     googleLogout();
+    clearSheetReadCache();
     sessionStorage.removeItem('chess_auth');
     localStorage.removeItem('chess_auth');
     localStorage.removeItem('chess_coach_name');

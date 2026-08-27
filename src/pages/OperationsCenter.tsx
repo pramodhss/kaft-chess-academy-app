@@ -42,7 +42,7 @@ export function OperationsCenter() {
 
   useEffect(() => {
     if (!token) return;
-    Promise.all([readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`), readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`), readSheet(token, SHEET_ID, `'${TABS.AUDIT}'!A:F`).catch(() => [])]).then(([studentRows, feeRows, audit]) => {
+    Promise.all([readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`), readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`), readSheet(token, SHEET_ID, `'${TABS.AUDIT}'!A:F`).catch(() => [])]).then(([studentRows, feeRows, audit]) => {
       setRaw({ students: studentRows, fees: feeRows });
       setStudents(studentRows.slice(1).filter(row => row[0]?.trim()).map(row => ({ name: row[0] ?? '', dob: row[1] ?? '', status: row[8] ?? '', parent: row[9] ?? '', phone: row[10] ?? '', whatsapp: row[11] ?? '', email: row[12] ?? '' })));
       setFees(feeRows.slice(1).filter(row => row[1]?.trim()).map(row => ({ student: row[1] ?? '', balance: Math.max(0, parseSheetNumber(row[7] ?? '')), dueDate: row[8] ?? '' })));

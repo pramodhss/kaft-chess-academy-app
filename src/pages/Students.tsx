@@ -70,6 +70,14 @@ const EMPTY: FormData = {
   chessComUsername:'', lichessUsername:'', photoUrl:'',
 };
 
+const STUDENT_HEADERS = [
+  'Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status',
+  'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone',
+  'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'This Month Attended', 'Notes',
+  'School', 'Standard', 'TNSCA ID', 'FIDE ID', 'AICF ID', 'Classical Rating', 'Rapid Rating',
+  'Blitz Rating', 'Coach Name', 'Chess.com Username', 'Lichess Username', 'Photo URL',
+];
+
 function rowToStudent(row: string[], rowIndex: number): Student {
   return {
     name:row[0]??'', dob:normalizedDate(row[1]??''), age:row[2]??'', gender:row[3]??'', grade:row[4]??'',
@@ -302,11 +310,10 @@ function StudentDetailActions({ student, onEdit }: Readonly<{
 }
 
 async function ensureStudentSchema(token: string) {
-  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, 33);
-  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AG1`);
-  const expected = ['Coach Name', 'Chess.com Username', 'Lichess Username', 'Photo URL'];
-  if (expected.some((value, index) => header[0]?.[index]?.trim() !== value)) {
-    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AD1:AG1`, [expected]);
+  await ensureSheetColumns(token, SHEET_ID, TABS.STUDENTS, STUDENT_HEADERS.length);
+  const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A1:AG1`);
+  if (STUDENT_HEADERS.some((value, index) => header[0]?.[index]?.trim() !== value)) {
+    await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A1:AG1`, [STUDENT_HEADERS]);
   }
 }
 

@@ -251,6 +251,15 @@ export async function installSheetsMock(context: BrowserContext, initial = defau
 }
 
 export async function openApp(page: Page, hash = '#/') {
+  const previousHash = new URL(page.url()).hash;
+  const previousTitle = previousHash ? await page.locator('header h1').textContent() : null;
   await page.goto(`./${hash}`);
   await page.waitForLoadState('domcontentloaded');
+  if (previousTitle && previousHash !== hash) {
+    await page.waitForFunction(title => document.querySelector('header h1')?.textContent !== title, previousTitle);
+  }
+  await page.evaluate(() => new Promise<void>(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  await page.evaluate(() => document.fonts.ready);
 }

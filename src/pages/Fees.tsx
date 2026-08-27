@@ -160,6 +160,111 @@ function sameFeeRecord(left: FeeEntry, right: FeeEntry): boolean {
   return JSON.stringify(canonicalFee(left)) === JSON.stringify(canonicalFee(right));
 }
 
+function rosterPaymentMatches(
+  fee: FeeEntry,
+  amountDue: number,
+  amountPaid: number,
+  balance: number,
+  status: string,
+): boolean {
+  return parseSheetNumber(fee.amountDue) === amountDue
+    && parseSheetNumber(fee.amountPaid) === amountPaid
+    && parseSheetNumber(fee.balance) === balance
+    && fee.paymentStatus.trim() === status;
+}
+
+type RosterPaymentDetails = {
+  due: number;
+  amountPaid: number;
+  balance: number;
+  status: string;
+  paymentDate: string;
+};
+
+async function updateRosterPayment(
+  token: string,
+  existing: FeeEntry,
+  payment: RosterPaymentDetails,
+  coachName: string,
+): Promise<FeeEntry> {
+  const { due, amountPaid, balance, status, paymentDate } = payment;
+  const tab = TABS.FEES;
+  const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${existing.rowIndex}:N${existing.rowIndex}`);
+  const currentFee = rowToFee(currentRows[0] ?? [], existing.rowIndex - 2);
+  if (!sameFeeRecord(currentFee, existing)) {
+    throw new Error('This payment changed on another device. Reload Fees and try again.');
+  }
+
+  const note = `Roster updated by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`;
+  await batchWrite(token, SHEET_ID, [
+    {range:`'${tab}'!F${existing.rowIndex}`,value:due},
+    {range:`'${tab}'!G${existing.rowIndex}`,value:amountPaid},
+    {range:`'${tab}'!H${existing.rowIndex}`,value:balance},
+    {range:`'${tab}'!J${existing.rowIndex}`,value:paymentDate},
+    {range:`'${tab}'!L${existing.rowIndex}`,value:status},
+    {range:`'${tab}'!N${existing.rowIndex}`,value:note},
+  ]);
+
+  const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${existing.rowIndex}:N${existing.rowIndex}`);
+  const confirmedFee = rowToFee(confirmedRows[0] ?? [], existing.rowIndex - 2);
+  if (!rosterPaymentMatches(confirmedFee, due, amountPaid, balance, status)) {
+    throw new Error('Google Sheets did not confirm the updated payment. Reload Fees and try again.');
+  }
+  return confirmedFee;
+}
+
+async function appendRosterPayment(
+  token: string,
+  student: string,
+  selectedMonth: string,
+  batch: string,
+  payment: RosterPaymentDetails,
+  coachName: string,
+): Promise<FeeEntry> {
+  const { due, amountPaid, balance, status, paymentDate } = payment;
+  const tab = TABS.FEES;
+  const liveFees = feeRowsToEntries(await readSheetLive(token, SHEET_ID, `'${tab}'!A:N`));
+  if (liveFees.some(fee => sameFeeIdentity(fee, student, selectedMonth, 'Monthly Tuition'))) {
+    throw new Error('A monthly fee was added on another device. Reload Fees and try again.');
+  }
+
+  const receipt = newReceiptNumber();
+  const rowIndex = await appendRows(token, SHEET_ID, `'${tab}'!A:N`, [[
+    receipt, student, batch, selectedMonth, 'Monthly Tuition', due,
+    amountPaid, balance, '', paymentDate, 'UPI', status, '', `Roster added by ${coachName}`,
+  ]]);
+  const confirmedFees = feeRowsToEntries(await readSheetLive(token, SHEET_ID, `'${tab}'!A:N`));
+  const confirmedFee = confirmedFees
+    .filter(fee => sameFeeIdentity(fee, student, selectedMonth, 'Monthly Tuition'))
+    .sort((left, right) => left.rowIndex - right.rowIndex)[0];
+  if (confirmedFee?.rowIndex !== rowIndex) {
+    await clearSheetRange(token, SHEET_ID, `'${tab}'!A${rowIndex}:N${rowIndex}`);
+    throw new Error('This monthly fee was added elsewhere at the same time. The duplicate row was removed.');
+  }
+  if (!rosterPaymentMatches(confirmedFee, due, amountPaid, balance, status)) {
+    throw new Error('Google Sheets did not confirm the saved payment. Reload Fees and try again.');
+  }
+  return confirmedFee;
+}
+
+function rosterSaveButtonLabel(isSaving: boolean, hasExistingFee: boolean): string {
+  if (isSaving) return 'Saving…';
+  return hasExistingFee ? 'Update Fee' : 'Save Fee';
+}
+
+function paymentStatusIcon(status: string): string {
+  if (status === 'Paid') return '\u2705';
+  if (status === 'Partial') return '\ud83d\udd36';
+  if (status === 'Overdue') return '\ud83d\udd34';
+  return '\u23f3';
+}
+
+function paymentReportAmount(paid: number, due: number): string {
+  if (paid <= 0) return '';
+  const dueSuffix = due > paid ? `/${due.toLocaleString('en-IN')}` : '';
+  return ` (\u20b9${paid.toLocaleString('en-IN')}${dueSuffix})`;
+}
+
 export function Fees() {
   const { token, logout } = useAuth();
   const { coachName: savedCoachName } = useCoachName();
@@ -187,7 +292,7 @@ export function Fees() {
     try {
       const [feeRows, studentRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:L`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
       ]);
       setFees(feeRowsToEntries(feeRows));
       const uniqueStudents = new Map<string, string>();
@@ -388,63 +493,21 @@ export function Fees() {
     try {
       const paymentDate = amountPaid > 0 ? localIsoDate() : '';
       const { status, balance } = payment;
-      if (existing) {
-        const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A${existing.rowIndex}:N${existing.rowIndex}`);
-        const currentFee = rowToFee(currentRows[0] ?? [], existing.rowIndex - 2);
-        if (!sameFeeRecord(currentFee, existing)) {
-          toast.info('This payment changed on another device. Fees have been reloaded.');
-          await load();
-          return;
-        }
-        const note = `Roster updated by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`;
-        await batchWrite(token, SHEET_ID, [
-          {range:`'${TABS.FEES}'!F${existing.rowIndex}`,value:due},
-          {range:`'${TABS.FEES}'!G${existing.rowIndex}`,value:amountPaid},
-          {range:`'${TABS.FEES}'!H${existing.rowIndex}`,value:balance},
-          {range:`'${TABS.FEES}'!J${existing.rowIndex}`,value:paymentDate},
-          {range:`'${TABS.FEES}'!L${existing.rowIndex}`,value:status},
-          {range:`'${TABS.FEES}'!N${existing.rowIndex}`,value:note},
-        ]);
-        setFees(current => current.map(fee => fee.rowIndex === existing.rowIndex
-          ? {...fee, amountDue:String(due), amountPaid:String(amountPaid), balance:String(balance), paymentDate, paymentStatus:status, notes:note}
-          : fee));
-      } else {
-        const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`);
-        if (feeRowsToEntries(liveRows).some(fee => sameFeeIdentity(fee, student, selectedMonth, 'Monthly Tuition'))) {
-          toast.info('A monthly fee was added on another device. Fees have been reloaded.');
-          await load();
-          return;
-        }
-        const receipt = newReceiptNumber();
-        const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
-          receipt, student, batchMap.get(student) ?? '', selectedMonth, 'Monthly Tuition', due,
-          amountPaid, balance, '', paymentDate, 'UPI', status, '', `Roster added by ${coachName}`,
-        ]]);
-        const confirmedFees = feeRowsToEntries(await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`));
-        const firstMatchingRow = confirmedFees
-          .filter(fee => sameFeeIdentity(fee, student, selectedMonth, 'Monthly Tuition'))
-          .sort((left, right) => left.rowIndex - right.rowIndex)[0]?.rowIndex;
-        if (firstMatchingRow !== rowIndex) {
-          await clearSheetRange(token, SHEET_ID, `'${TABS.FEES}'!A${rowIndex}:N${rowIndex}`);
-          toast.info('This monthly fee was added elsewhere at the same time. The duplicate row was not saved.');
-          await load();
-          return;
-        }
-        setFees(current => [...current, {
-          receiptNo:receipt, studentName:student, batch:batchMap.get(student) ?? '', feeMonth:selectedMonth,
-          feeType:'Monthly Tuition', amountDue:String(due), amountPaid:String(amountPaid), balance:String(balance),
-          dueDate:'', paymentDate, paymentMethod:'UPI', paymentStatus:status, reference:'',
-          notes:`Roster added by ${coachName}`, rowIndex,
-        }]);
-      }
+      const paymentDetails = { due, amountPaid, balance, status, paymentDate };
+      const confirmedFee = existing
+        ? await updateRosterPayment(token, existing, paymentDetails, coachName)
+        : await appendRosterPayment(token, student, selectedMonth, batchMap.get(student) ?? '', paymentDetails, coachName);
+      setFees(current => existing
+        ? current.map(fee => fee.rowIndex === existing.rowIndex ? confirmedFee : fee)
+        : [...current, confirmedFee]);
       setDrafts(current => { const next = new Map(current); next.delete(student); return next; });
       void recordAudit(token, existing ? 'UPDATE' : 'CREATE', 'Fees', `${student} · ${selectedMonth}`, 'Monthly roster').catch(() => undefined);
-      toast.success(`${student}'s fee was updated.`);
+      toast.success(existing ? `${student}'s fee was updated and verified.` : `${student}'s fee was saved and verified.`);
     } catch (e: any) { toast.error('Save failed: ' + e.message); }
     finally { setRosterSaving(''); }
   };
 
-  const markAsPaid = async (student: string) => {
+  const markAsPaid = (student: string) => {
     const draft = feeDraft(student);
     const due = parseSheetNumber(draft.amountDue);
     if (due <= 0) {
@@ -454,7 +517,7 @@ export function Fees() {
     }
     const paidDraft: FeeDraft = { paid: true, amountDue: draft.amountDue, amountPaid: String(due) };
     updateDraft(student, paidDraft);
-    await saveRosterFee(student, paidDraft);
+    setExpandedStudent(student);
   };
 
   const selectedFees = Array.from(monthlyByStudent.values());
@@ -484,8 +547,8 @@ export function Fees() {
         const status = fee?.paymentStatus ?? 'No record';
         const paid = parseSheetNumber(fee?.amountPaid ?? '0');
         const due = parseSheetNumber(feeDraft(s).amountDue);
-        const e = status === 'Paid' ? '\u2705' : status === 'Partial' ? '\ud83d\udd36' : status === 'Overdue' ? '\ud83d\udd34' : '\u23f3';
-        const money = paid > 0 ? ` (\u20b9${paid.toLocaleString('en-IN')}${due > paid ? `/${due.toLocaleString('en-IN')}` : ''})` : '';
+        const e = paymentStatusIcon(status);
+        const money = paymentReportAmount(paid, due);
         return `${e} ${s}${money}`;
       }),
       ``,
@@ -609,7 +672,7 @@ export function Fees() {
                 <span className={`shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md ${paymentStatusBadge(status)}`}>{status}</span>
                 {status !== 'Paid' && (
                   <button type="button"
-                    onClick={() => { void markAsPaid(student); }}
+                    onClick={() => markAsPaid(student)}
                     disabled={rosterSaving === student}
                     className="shrink-0 h-9 px-2.5 rounded-lg bg-green-50 text-green-700 text-xs font-bold border border-green-200 disabled:opacity-50"
                     aria-label={`Mark ${student} as paid`}>
@@ -648,10 +711,10 @@ export function Fees() {
                 </label>
                 <div className="ml-auto flex items-center gap-1.5">
                   <span className={`text-xs mr-1 ${balance>0?'text-amber-700':'text-green-700'}`}>{balance>0?`Balance ${formatCurrency(balance)}`:'No balance'}</span>
-                  {changed && <button type="button" onClick={()=>saveRosterFee(student)} disabled={rosterSaving===student}
+                  <button type="button" onClick={()=>saveRosterFee(student)} disabled={!changed || rosterSaving===student}
                     className="h-9 px-3 rounded-lg bg-navy text-white text-xs font-semibold disabled:opacity-50">
-                    {rosterSaving===student?'Saving…':'Save'}
-                  </button>}
+                    {rosterSaveButtonLabel(rosterSaving === student, Boolean(fee))}
+                  </button>
                   {fee && <button type="button"
                     onClick={() => { setEditTarget(fee); setForm(feeToForm(fee)); }}
                     aria-label={`Edit all fields for ${student}`}
@@ -723,12 +786,12 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,coachName}:
   return (
     <div className="modal-backdrop items-end justify-center sm:items-center">
       <button type="button" onClick={onClose} aria-label="Close payment form" className="absolute inset-0 h-full w-full" />
-      <dialog open aria-labelledby="fee-modal-title" className="modal-panel relative m-0 max-h-[92vh] max-w-lg overflow-y-auto p-4">
-        <div className="mb-3 flex items-center justify-between">
+      <dialog open aria-labelledby="fee-modal-title" className="modal-panel relative m-0 flex max-h-[92vh] max-w-lg flex-col overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
           <h2 id="fee-modal-title" className="text-base font-semibold text-navy">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="icon-button"><X size={18} /></button>
         </div>
-        <div className="form-grid">
+        <div className="form-grid overflow-y-auto px-4 py-3">
           <F label="Student *"><select value={form.studentName} onChange={u('studentName')} className="input"><option value="">Select…</option>{students.map(s=><option key={s}>{s}</option>)}</select></F>
           <F label="Fee Month"><input type="month" value={form.feeMonth} onChange={u('feeMonth')} className="input"/></F>
           <F label="Fee Type"><select value={form.feeType} onChange={u('feeType')} className="input">{['Monthly Tuition','Admission','Tournament','Van','Materials','Other'].map(o=><option key={o}>{o}</option>)}</select></F>
@@ -746,12 +809,14 @@ function FeeModal({title,onClose,form,setForm,students,onSave,saving,coachName}:
           <p className="text-xs text-gray-400">Will be tracked to: <strong>{coachName}</strong></p>
           {feeFormValidationError(form) && <p role="alert" className="text-xs text-red-600">{feeFormValidationError(form)}</p>}
         </div>
-        <button type="button" onClick={onSave} disabled={saving} className="primary-action mt-3 w-full">
-          <span className="inline-flex items-center justify-center gap-2">
-            {saving && <span className="button-spinner" aria-hidden="true"/>}
-            {buttonLabel}
-          </span>
-        </button>
+        <div className="border-t border-gray-100 bg-white p-4">
+          <button type="button" onClick={onSave} disabled={saving} className="primary-action w-full">
+            <span className="inline-flex items-center justify-center gap-2">
+              {saving && <span className="button-spinner" aria-hidden="true"/>}
+              {buttonLabel}
+            </span>
+          </button>
+        </div>
       </dialog>
     </div>
   );

@@ -96,7 +96,7 @@ export function StudentProgress() {
   // Load student list
   useEffect(() => {
     if (!token) return;
-    readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`)
+    readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`)
       .then(rows => setStudents(rows.slice(1).map(r => r[0]).filter(Boolean)))
       .catch(e => { if (e.message === 'TOKEN_EXPIRED') logout(); })
       .finally(() => setLoadingStudents(false));

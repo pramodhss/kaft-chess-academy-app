@@ -1,6 +1,37 @@
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 export const SHEETS_READ_CACHE = 'sheets-read-cache-v1';
 export type SheetValue = string | number | boolean;
+const READ_CACHE_TTL_MS = 15_000;
+type CachedRead = { data: any; expiresAt: number };
+const recentReads = new Map<string, CachedRead>();
+const pendingReads = new Map<string, Promise<any>>();
+
+function sheetUrlFragment(sheetId: string): string {
+  return `/spreadsheets/${encodeURIComponent(sheetId)}/`;
+}
+
+export function clearSheetReadCache(sheetId?: string): void {
+  if (!sheetId) {
+    recentReads.clear();
+    pendingReads.clear();
+    return;
+  }
+  const fragment = sheetUrlFragment(sheetId);
+  for (const key of recentReads.keys()) if (key.includes(fragment)) recentReads.delete(key);
+  for (const key of pendingReads.keys()) if (key.includes(fragment)) pendingReads.delete(key);
+}
+
+async function invalidateSheetReadCache(sheetId: string): Promise<void> {
+  clearSheetReadCache(sheetId);
+  if (!('caches' in globalThis)) return;
+  try {
+    const cache = await caches.open(SHEETS_READ_CACHE);
+    const requests = await cache.keys();
+    await Promise.all(requests
+      .filter(request => request.url.includes(sheetUrlFragment(sheetId)))
+      .map(request => cache.delete(request)));
+  } catch { /* a successful write must not fail because browser caching is unavailable */ }
+}
 
 export function colLetter(index: number): string {
   let col = '', n = index + 1;
@@ -23,10 +54,30 @@ async function apiCall(token: string, url: string, options?: RequestInit) {
     if (res.status === 403 && text.includes('SCOPE_INSUFFICIENT')) throw new Error('TOKEN_EXPIRED');
     throw new Error(`Sheets API ${res.status}: ${text}`);
   }
-  return res.json();
+  const data = await res.json();
+  if (method !== 'GET') {
+    const sheetId = /\/spreadsheets\/([^/]+)/.exec(new URL(url).pathname)?.[1];
+    if (sheetId) await invalidateSheetReadCache(decodeURIComponent(sheetId));
+  }
+  return data;
 }
 
 async function readWithCache(token: string, url: string) {
+  const cacheKey = `${token}\n${url}`;
+  const recent = recentReads.get(cacheKey);
+  if (recent && recent.expiresAt > Date.now()) return recent.data;
+  const pending = pendingReads.get(cacheKey);
+  if (pending) return pending;
+
+  const request = readOnlineOrOffline(token, url).then(data => {
+    recentReads.set(cacheKey, { data, expiresAt: Date.now() + READ_CACHE_TTL_MS });
+    return data;
+  }).finally(() => pendingReads.delete(cacheKey));
+  pendingReads.set(cacheKey, request);
+  return request;
+}
+
+async function readOnlineOrOffline(token: string, url: string) {
   try {
     const data = await apiCall(token, url);
     if ('caches' in globalThis) {

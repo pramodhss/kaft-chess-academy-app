@@ -31,7 +31,7 @@ export function GlobalSearch() {
     if (!token || students.length > 0) return;
     setLoading(true);
     try {
-      const rows = await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AD`);
+      const rows = await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
       setStudents(rows.slice(1).map(toSearchStudent).filter(student => student.name.trim()));
     } finally { setLoading(false); }
   };

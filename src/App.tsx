@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -9,14 +9,22 @@ import { ErrorBoundary }         from './components/ErrorBoundary';
 import { PageSkeleton }          from './components/Skeleton';
 import { ToastProvider }         from './context/ToastContext';
 
-const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
-const Students = lazy(() => import('./pages/Students').then(module => ({ default: module.Students })));
-const Attendance = lazy(() => import('./pages/Attendance').then(module => ({ default: module.Attendance })));
-const Fees = lazy(() => import('./pages/Fees').then(module => ({ default: module.Fees })));
+const loadDashboard = () => import('./pages/Dashboard').then(module => ({ default: module.Dashboard }));
+const loadStudents = () => import('./pages/Students').then(module => ({ default: module.Students }));
+const loadAttendance = () => import('./pages/Attendance').then(module => ({ default: module.Attendance }));
+const loadFees = () => import('./pages/Fees').then(module => ({ default: module.Fees }));
+const loadVan = () => import('./pages/Van').then(module => ({ default: module.Van }));
+const loadTimetable = () => import('./pages/Timetable').then(module => ({ default: module.Timetable }));
+const loadMore = () => import('./pages/More').then(module => ({ default: module.More }));
+
+const Dashboard = lazy(loadDashboard);
+const Students = lazy(loadStudents);
+const Attendance = lazy(loadAttendance);
+const Fees = lazy(loadFees);
 const Tournaments = lazy(() => import('./pages/Tournaments').then(module => ({ default: module.Tournaments })));
-const Van = lazy(() => import('./pages/Van').then(module => ({ default: module.Van })));
-const Timetable = lazy(() => import('./pages/Timetable').then(module => ({ default: module.Timetable })));
-const More = lazy(() => import('./pages/More').then(module => ({ default: module.More })));
+const Van = lazy(loadVan);
+const Timetable = lazy(loadTimetable);
+const More = lazy(loadMore);
 const MonthlyReport = lazy(() => import('./pages/MonthlyReport').then(module => ({ default: module.MonthlyReport })));
 const Resources = lazy(() => import('./pages/Resources').then(module => ({ default: module.Resources })));
 const Leaderboard = lazy(() => import('./pages/Leaderboard').then(module => ({ default: module.Leaderboard })));
@@ -50,6 +58,15 @@ function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
 function AppRoutes() {
   const { isLoggedIn } = useAuth();
   const { showPrompt, saveCoachName } = useCoachName();
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const timer = window.setTimeout(() => {
+      void Promise.allSettled([
+        loadDashboard(), loadStudents(), loadAttendance(), loadFees(), loadVan(), loadTimetable(), loadMore(),
+      ]);
+    }, 1_000);
+    return () => window.clearTimeout(timer);
+  }, [isLoggedIn]);
   if (!isLoggedIn) return <Login />;
   return (
     <>

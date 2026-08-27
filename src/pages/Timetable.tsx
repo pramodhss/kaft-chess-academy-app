@@ -36,7 +36,7 @@ export function Timetable() {
       await ensureSheet(token, SHEET_ID, TABS.TIMETABLE, TIMETABLE_HEADERS);
       const [timetableRows, studentRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:G`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
       ]);
       const normalized = normalizeTimetableRows(timetableRows);
       if (normalized.legacy) await writeRange(token, SHEET_ID, `'${TABS.TIMETABLE}'!A1:M${normalized.values.length + 1}`, [TIMETABLE_HEADERS, ...normalized.values]);

@@ -46,6 +46,36 @@ test('recognizes legacy months and supports repeated conflict-safe edits', async
   await expect(page.getByText(/changed on another device/i)).toHaveCount(0);
 });
 
+test('marks a monthly fee paid only after explicit confirmed update', async ({ page, sheets }) => {
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+
+  await page.getByLabel('Mark Aarav Kumar as paid').click();
+  await expect(page.locator('[aria-controls="fee-details-Aarav Kumar"]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByLabel('Aarav Kumar paid in full')).toBeChecked();
+  expect(sheets.workbook['Fee Register'][1][6]).toBe('1,000');
+
+  await page.getByRole('button', { name: 'Update Fee' }).click();
+  await expect.poll(() => sheets.workbook['Fee Register'][1][6]).toBe('1500');
+  expect(sheets.workbook['Fee Register'][1][7]).toBe('0');
+  expect(sheets.workbook['Fee Register'][1][11]).toBe('Paid');
+  await expect(page.getByText("Aarav Kumar's fee was updated and verified.")).toBeVisible();
+});
+
+test('requires confirmation and removes a fee only after Sheets succeeds', async ({ page, sheets }) => {
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+  await page.locator('[aria-controls="fee-details-Aarav Kumar"]').click();
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByLabel('Remove monthly fee for Aarav Kumar').click();
+
+  await expect(page.getByText('Receipt RCP-001 was removed.')).toBeVisible();
+  const aaravRow = page.getByText('Aarav Kumar', { exact: true }).locator('xpath=ancestor::div[contains(@class,"overflow-hidden")]');
+  await expect(aaravRow.getByText('Pending', { exact: true })).toBeVisible();
+  expect(sheets.workbook['Fee Register'][1].every(value => value === '')).toBe(true);
+});
+
 test('waiving a fee clears balance without inflating collected revenue', async ({ page, sheets }) => {
   await openApp(page, '#/fees');
   await selectAugust(page);

@@ -34,7 +34,7 @@ export function StudentTimeline() {
   useEffect(() => {
     if (!token) return;
     Promise.all([
-      readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`),
+      readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
       readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
       readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
       readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),

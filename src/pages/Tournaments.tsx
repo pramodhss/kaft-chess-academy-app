@@ -44,7 +44,7 @@ export function Tournaments() {
     try {
       const [tRows, sRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:G`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
       ]);
       setEntries(tRows.slice(1).map((row, index) => rowToEntry(row, index)).filter(entry => entry.studentName.trim()));
       setStudents(sRows.slice(1).map(r => r[0]).filter(Boolean));
@@ -67,7 +67,7 @@ export function Tournaments() {
     setSaving(true);
     try {
       const ratingChange = form.ratingBefore && form.ratingAfter
-        ? String(parseFloat(form.ratingAfter) - parseFloat(form.ratingBefore)) : '';
+        ? String(Number.parseFloat(form.ratingAfter) - Number.parseFloat(form.ratingBefore)) : '';
       const details = studentDetails.get(form.studentName) ?? { batch: '', level: '' };
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:V`, [[
         form.month, form.studentName, details.batch, details.level, form.tournamentName, form.type,
@@ -139,8 +139,8 @@ export function Tournaments() {
                 <span>W{e.wins}/D{e.draws}/L{e.losses}</span>
               )}
               {e.ratingChange && (
-                <span className={parseFloat(e.ratingChange) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  Rating: {parseFloat(e.ratingChange) >= 0 ? '+' : ''}{e.ratingChange}
+                <span className={Number.parseFloat(e.ratingChange) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                  Rating: {Number.parseFloat(e.ratingChange) >= 0 ? '+' : ''}{e.ratingChange}
                 </span>
               )}
             </div>
@@ -156,11 +156,11 @@ export function Tournaments() {
       </div>
 
       {showAdd && (
-        <div className="modal-backdrop items-end justify-center sm:items-center" onClick={() => setShowAdd(false)}>
-          <div className="modal-panel max-h-[92vh] max-w-lg overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop items-end justify-center sm:items-center">
+          <dialog open className="modal-panel max-h-[92vh] max-w-lg overflow-y-auto p-4" aria-labelledby="add-tournament-result-title">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-lg text-navy">Add Tournament Result</h2>
-              <button onClick={() => setShowAdd(false)} className="text-gray-400 text-2xl leading-none">×</button>
+              <h2 id="add-tournament-result-title" className="font-bold text-lg text-navy">Add Tournament Result</h2>
+              <button type="button" onClick={() => setShowAdd(false)} className="text-gray-400 text-2xl leading-none" aria-label="Close tournament result form">×</button>
             </div>
             <div className="space-y-3">
               <Field label="Student *">
@@ -194,18 +194,18 @@ export function Tournaments() {
               </Field>
               <Field label="Coach Notes"><textarea value={form.coachNotes} onChange={upd('coachNotes')} className="input" rows={2} /></Field>
             </div>
-            <button onClick={handleAdd} disabled={saving || !form.studentName || !form.tournamentName}
+            <button type="button" onClick={handleAdd} disabled={saving || !form.studentName || !form.tournamentName}
               className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
               {saving && <span className="button-spinner" aria-hidden="true"/>}
               {saving ? 'Saving result…' : 'Save Result'}
             </button>
-          </div>
+          </dialog>
         </div>
       )}
     </Layout>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
   return <div><label className="text-xs font-medium text-gray-500 mb-1 block">{label}</label>{children}</div>;
 }

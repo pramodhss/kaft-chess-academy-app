@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, WifiOff } from 'lucide-react';
 import { BottomNav } from './BottomNav';
@@ -15,14 +16,24 @@ interface LayoutProps {
   readonly onBack?: () => void;
 }
 
+const routeScrollPositions = new Map<string, number>();
+
 export function Layout({ title, children, action, showBack, onBack }: LayoutProps) {
   useTheme();
   const online = useOnline();
   const navigate = useNavigate();
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
   const displayBack = showBack ?? location.pathname !== '/';
   const { coachName: coach } = useCoachName();
   const handleBack = () => onBack ? onBack() : navigate(-1);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      mainRef.current?.scrollTo({ top: routeScrollPositions.get(location.pathname) ?? 0 });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname]);
+  const rememberScroll = () => routeScrollPositions.set(location.pathname, mainRef.current?.scrollTop ?? 0);
   return (
     <div className="app-shell flex h-full flex-col md:pl-60">
       <Sidebar />
@@ -50,7 +61,7 @@ export function Layout({ title, children, action, showBack, onBack }: LayoutProp
           <WifiOff size={14} aria-hidden="true" /> Offline. Showing last synced data; changes are unavailable.
         </output>
       )}
-      <main className="app-main no-scrollbar flex-1 overflow-y-auto pb-24 md:pb-0"><div key={location.pathname} className="route-view">{children}</div></main>
+      <main ref={mainRef} onScroll={rememberScroll} className="app-main no-scrollbar flex-1 overflow-y-auto pb-24 md:pb-0"><div key={location.pathname} className="route-view">{children}</div></main>
       <BottomNav />
     </div>
   );

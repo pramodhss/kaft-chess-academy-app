@@ -77,7 +77,7 @@ export function Van() {
       await ensureTournamentSheets(token);
       const [tournamentRows, studentRows, registrationRows, legacyVanRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:M`),
-        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:L`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:L`),
         readSheet(token, SHEET_ID, `'${TABS.VAN}'!A:M`).catch(() => []),
       ]);
@@ -147,14 +147,16 @@ export function Van() {
   };
   const copyTournamentRoster = (tournament: ManagedTournament) => {
     const regs = registrations.filter(r => r.tournamentId === tournament.id && r.playing);
+    const entryFee = tournament.fee ? ` \u00b7 Entry: \u20b9${tournament.fee}` : '';
     const lines = [
       `\ud83c\udfc6 *${tournament.name}*`,
-      `\ud83d\udcc5 ${formattedDate(tournament.date)}${tournament.fee ? ` \u00b7 Entry: \u20b9${tournament.fee}` : ''}`,
+      `\ud83d\udcc5 ${formattedDate(tournament.date)}${entryFee}`,
       ``,
       `*Roster (${regs.length} players)*`,
       ...regs.map(r => {
         const tags = [r.feePaid ? '\ud83d\udcb3 Paid' : '\u23f3 Fee pending', r.vanRequired ? '\ud83d\ude8c Van' : null].filter(Boolean);
-        return `\u2022 ${r.studentName}${tags.length ? ` \u2014 ${tags.join(', ')}` : ''}`;
+        const tagList = tags.length ? ` \u2014 ${tags.join(', ')}` : '';
+        return `\u2022 ${r.studentName}${tagList}`;
       }),
       ``,
       `\u2014 KAFT Chess Academy`,
@@ -169,7 +171,14 @@ export function Van() {
     const err = tournamentValidationError(form);
     if (err) { toast.error(err); return; }
     setSaving(true);
-    try { if (editing) await updateTournament(editing); else await createTournament(); setShowForm(false); }
+    try {
+      if (editing) {
+        await updateTournament(editing);
+      } else {
+        await createTournament();
+      }
+      setShowForm(false);
+    }
     catch (e: any) { toast.error(`Save failed: ${e.message}`); }
     finally { setSaving(false); }
   };

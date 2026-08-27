@@ -40,7 +40,26 @@ test.describe('route regression matrix', () => {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow).toBeLessThanOrEqual(1);
     });
+
   }
+
+  test('reuses shared student data during in-app navigation', async ({ page, sheets }) => {
+    void sheets;
+    let studentReads = 0;
+    page.on('request', request => {
+      const url = decodeURIComponent(request.url());
+      if (request.method() === 'GET' && url.includes("'Students & Parents'!A:AG")) studentReads += 1;
+    });
+
+    await openApp(page, '#/');
+    await expect(page.getByText('Active Students')).toBeVisible();
+    await page.getByRole('link', { name: 'Students', exact: true }).first().click();
+    await expect(page.getByRole('button', { name: /Aarav Kumar/ })).toBeVisible();
+    await page.getByRole('link', { name: 'Fees', exact: true }).first().click();
+    await expect(page.getByText('Student fees')).toBeVisible();
+
+    expect(studentReads).toBe(1);
+  });
 
   test('dark mode persists and remains usable', async ({ page, sheets }) => {
     void sheets;
