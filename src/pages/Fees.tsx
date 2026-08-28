@@ -446,15 +446,30 @@ export function Fees() {
       .sort((l, r) => l.rowIndex - r.rowIndex);
     monthly.forEach(fee => map.set(normalized(fee.studentName), fee));
     const dupes = monthly.filter(fee => map.get(normalized(fee.studentName)) !== fee);
-    const vals = Array.from(map.values());
+
+    // Include draft state so the summary reflects what cards show, even while saves are pending
+    let collected = 0, outstanding = 0;
+    for (const fee of map.values()) {
+      const draft = drafts.get(fee.studentName);
+      if (draft) {
+        const due = parseSheetNumber(draft.amountDue);
+        const payment = calculateRosterPayment(fee, draft, due);
+        collected += payment.amountPaid;
+        outstanding += Math.max(payment.balance, 0);
+      } else {
+        collected += parseSheetNumber(fee.amountPaid);
+        outstanding += Math.max(parseSheetNumber(fee.balance), 0);
+      }
+    }
+
     return {
       monthlyByStudent: map,
       duplicateMonthlyFees: dupes,
-      totalCollected: vals.reduce((s, f) => s + parseSheetNumber(f.amountPaid), 0),
-      totalOutstanding: vals.reduce((s, f) => s + Math.max(parseSheetNumber(f.balance), 0), 0),
+      totalCollected: collected,
+      totalOutstanding: outstanding,
       otherFees: fees.filter(f => normalizeFeeMonth(f.feeMonth) === selectedMonth && f.feeType !== 'Monthly Tuition'),
     };
-  }, [fees, selectedMonth]);
+  }, [fees, selectedMonth, drafts]);
 
   const visibleStudents = useMemo(() =>
     students.filter(s => !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase())),
