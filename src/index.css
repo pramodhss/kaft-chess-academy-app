@@ -391,6 +391,9 @@ html.dark .bg-red-50    { background-color: #2d1515 !important; }
 html.dark .bg-green-50  { background-color: #0f2010 !important; }
 html.dark .bg-green-50\/60 { background-color: rgba(15, 45, 26, 0.72) !important; }
 html.dark .bg-blue-50   { background-color: #172554 !important; }
+html.dark .bg-amber-50  { background-color: #3d1a00 !important; }
+html.dark .bg-yellow-50 { background-color: #2d2000 !important; }
+html.dark .bg-orange-50 { background-color: #3a1400 !important; }
 html.dark .bg-gray-50.border-b { background-color: #1f2937 !important; }
 html.dark .text-gray-900,
 html.dark .text-gray-800 { color: #f9fafb !important; }
@@ -401,7 +404,9 @@ html.dark .text-gray-400 { color: #aeb7c4 !important; }
 html.dark .text-gray-300 { color: #9ca8b8 !important; }
 html.dark .text-blue-800 { color: #bfdbfe !important; }
 html.dark .text-green-700 { color: #86efac !important; }
+html.dark .text-amber-600 { color: #fcd34d !important; }
 html.dark .text-amber-700 { color: #fde68a !important; }
+html.dark .text-orange-600 { color: #fdba74 !important; }
 html.dark .text-red-600,
 html.dark .text-red-700,
 html.dark .text-red-800 { color: #fca5a5 !important; }

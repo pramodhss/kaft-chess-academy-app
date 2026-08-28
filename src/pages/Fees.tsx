@@ -760,20 +760,23 @@ export function Fees() {
         </div>
 
         {orphanedFees.length > 0 && (
-          <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
-            <h2 className="font-bold text-amber-800 text-sm">Fee records for removed students</h2>
-            <p className="text-xs text-amber-700 mt-0.5 mb-2">These students no longer exist — remove their fee records to clear the balance.</p>
-            <div className="divide-y divide-amber-200">
+          <div className="surface-card border-l-4 border-l-orange-500 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-orange-500" aria-hidden="true">⚠</span>
+              <h2 className="font-bold text-gray-900 text-sm">Fee records for removed students</h2>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">These students no longer exist in the roster. Remove their records to clear the balance.</p>
+            <div className="divide-y divide-gray-100">
               {orphanedFees.map(fee => (
-                <div key={fee.rowIndex} className="py-2 flex items-center gap-2">
+                <div key={fee.rowIndex} className="py-2.5 flex items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-sm text-gray-900 truncate">{fee.studentName}</p>
-                    <p className="text-xs text-gray-600">Receipt {fee.receiptNo} · {formatCurrency(fee.balance)} unpaid balance</p>
+                    <p className="font-semibold text-sm text-gray-900">{fee.studentName}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Receipt {fee.receiptNo} &middot; {formatCurrency(fee.balance)} unpaid</p>
                   </div>
                   <button type="button" onClick={() => removeFee(fee)} disabled={deleting === fee.rowIndex}
-                    aria-label={`Remove orphaned fee for ${fee.studentName}`}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-red-700 hover:bg-red-50 disabled:opacity-50">
-                    <Trash2 size={16} aria-hidden="true" />
+                    aria-label={`Remove fee record for ${fee.studentName}`}
+                    className="shrink-0 h-9 px-3 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 disabled:opacity-50">
+                    {deleting === fee.rowIndex ? 'Removing…' : 'Remove'}
                   </button>
                 </div>
               ))}
@@ -781,9 +784,12 @@ export function Fees() {
           </div>
         )}
 
-        {duplicateMonthlyFees.length>0 && <div className="border border-red-200 bg-red-50 rounded-lg p-3">
-          <h2 className="font-bold text-red-800 text-sm">Duplicate monthly fees</h2>
-          <p className="text-xs text-red-700 mt-0.5 mb-2">Keep the correct entry and remove the extras below.</p>
+        {duplicateMonthlyFees.length>0 && <div className="surface-card border-l-4 border-l-red-500 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-red-500" aria-hidden="true">⚠</span>
+            <h2 className="font-bold text-gray-900 text-sm">Duplicate monthly fees</h2>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">Keep the correct entry and remove the extras below.</p>
           <div className="divide-y divide-red-200">
             {duplicateMonthlyFees.map(fee=><div key={fee.rowIndex} className="py-2 flex items-center gap-2">
               <div className="min-w-0 flex-1">

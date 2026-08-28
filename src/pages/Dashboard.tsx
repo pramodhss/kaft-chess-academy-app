@@ -155,7 +155,7 @@ export function Dashboard() {
         </section>}
 
         {overdueCount > 0 && <button type="button" onClick={() => navigate('/operations')} className="card-btn surface-card flex w-full items-center gap-3 p-4 text-left">
-          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-amber-50 text-amber-600"><AlertCircle size={18} /></span>
+          <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-amber-100 text-amber-700"><AlertCircle size={18} /></span>
           <div className="flex-1 min-w-0">
             <strong className="block text-sm text-gray-900">{overdueCount} student{overdueCount !== 1 ? 's' : ''} with pending fees</strong>
             <span className="text-xs text-gray-500">Open Operations › Reminders to send WhatsApp alerts</span>
