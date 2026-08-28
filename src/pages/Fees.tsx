@@ -439,7 +439,7 @@ export function Fees() {
     finally { setDeleting(null); }
   };
 
-  const { monthlyByStudent, duplicateMonthlyFees, totalCollected, totalOutstanding, otherFees } = useMemo(() => {
+  const { monthlyByStudent, duplicateMonthlyFees, orphanedFees, totalCollected, totalOutstanding, otherFees } = useMemo(() => {
     const map = new Map<string, FeeEntry>();
     const monthly = fees
       .filter(fee => fee.feeType === 'Monthly Tuition' && normalizeFeeMonth(fee.feeMonth) === selectedMonth)
@@ -447,9 +447,14 @@ export function Fees() {
     monthly.forEach(fee => map.set(normalized(fee.studentName), fee));
     const dupes = monthly.filter(fee => map.get(normalized(fee.studentName)) !== fee);
 
-    // Include draft state so the summary reflects what cards show, even while saves are pending
+    const knownStudents = new Set(students.map(s => normalized(s)));
+    // fee records for deleted students — excluded from summary, shown separately for cleanup
+    const orphaned = monthly.filter(fee => !knownStudents.has(normalized(fee.studentName)) && !dupes.includes(fee));
+
+    // Summary counts only active students, includes draft state for in-progress saves
     let collected = 0, outstanding = 0;
-    for (const fee of map.values()) {
+    for (const [normName, fee] of map.entries()) {
+      if (!knownStudents.has(normName)) continue;
       const draft = drafts.get(fee.studentName);
       if (draft) {
         const due = parseSheetNumber(draft.amountDue);
@@ -465,11 +470,12 @@ export function Fees() {
     return {
       monthlyByStudent: map,
       duplicateMonthlyFees: dupes,
+      orphanedFees: orphaned,
       totalCollected: collected,
       totalOutstanding: outstanding,
       otherFees: fees.filter(f => normalizeFeeMonth(f.feeMonth) === selectedMonth && f.feeType !== 'Monthly Tuition'),
     };
-  }, [fees, selectedMonth, drafts]);
+  }, [fees, selectedMonth, drafts, students]);
 
   const visibleStudents = useMemo(() =>
     students.filter(s => !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase())),
@@ -752,6 +758,28 @@ export function Fees() {
           );
         })}
         </div>
+
+        {orphanedFees.length > 0 && (
+          <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+            <h2 className="font-bold text-amber-800 text-sm">Fee records for removed students</h2>
+            <p className="text-xs text-amber-700 mt-0.5 mb-2">These students no longer exist — remove their fee records to clear the balance.</p>
+            <div className="divide-y divide-amber-200">
+              {orphanedFees.map(fee => (
+                <div key={fee.rowIndex} className="py-2 flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm text-gray-900 truncate">{fee.studentName}</p>
+                    <p className="text-xs text-gray-600">Receipt {fee.receiptNo} · {formatCurrency(fee.balance)} unpaid balance</p>
+                  </div>
+                  <button type="button" onClick={() => removeFee(fee)} disabled={deleting === fee.rowIndex}
+                    aria-label={`Remove orphaned fee for ${fee.studentName}`}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-red-700 hover:bg-red-50 disabled:opacity-50">
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {duplicateMonthlyFees.length>0 && <div className="border border-red-200 bg-red-50 rounded-lg p-3">
           <h2 className="font-bold text-red-800 text-sm">Duplicate monthly fees</h2>
