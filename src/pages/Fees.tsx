@@ -623,7 +623,7 @@ export function Fees() {
         aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
         className="header-action"><Plus size={15} /></button>
     }>
-      <div className="page-stack mx-auto w-full max-w-4xl">
+      <div className="fee-workspace page-stack mx-auto w-full max-w-4xl">
         {error && <div role="alert" className="error-state">{error}</div>}
 
         {/* Month navigation */}
@@ -636,7 +636,7 @@ export function Fees() {
         </div>
 
         {/* Summary + copy report */}
-        <div className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center">
+        <div className="fee-summary bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center">
           <div className="flex-1 pr-3 border-r border-gray-200">
             <p className="text-[11px] font-medium text-gray-500">Collected</p>
             <p className="text-lg font-bold text-green-700">{formatCurrency(totalCollected)}</p>
@@ -682,7 +682,7 @@ export function Fees() {
           const balance = payment.balance;
           const expanded = expandedStudent === student;
           return (
-            <div key={student} className={`bg-white border rounded-lg overflow-hidden ${draft.paid?'border-green-300':'border-gray-200'}`}>
+            <div key={student} className={`fee-row bg-white border rounded-lg overflow-hidden ${draft.paid?'border-green-300':'border-gray-200'}`}>
               <div className={`flex items-center gap-2 p-3 ${draft.paid?'bg-green-50/60':''}`}>
                 <button type="button" onClick={()=>setExpandedStudent(expanded ? null : student)}
                   aria-expanded={expanded} aria-controls={`fee-details-${student}`}
@@ -736,22 +736,20 @@ export function Fees() {
                   {' '}
                   Paid in full
                 </label>
-                <div className="ml-auto flex items-center gap-1.5">
-                  <span className={`text-xs mr-1 ${balance>0?'text-amber-700':'text-green-700'}`}>{balance>0?`Balance ${formatCurrency(balance)}`:'No balance'}</span>
-                  <button type="button" onClick={()=>saveRosterFee(student)} disabled={!changed || rosterSaving===student}
-                    className="h-9 px-3 rounded-lg bg-navy text-white text-xs font-semibold disabled:opacity-50">
-                    {rosterSaveButtonLabel(rosterSaving === student, Boolean(fee))}
-                  </button>
-                  {fee && <button type="button"
-                    onClick={() => { setEditTarget(fee); setForm(feeToForm(fee)); }}
-                    aria-label={`Edit all fields for ${student}`}
-                    className="h-9 px-3 rounded-lg text-chess-blue text-xs font-semibold hover:bg-chess-light">
-                    Edit
-                  </button>}
-                  {fee && <button type="button" onClick={()=>removeFee(fee)} disabled={deleting===fee.rowIndex}
-                    aria-label={`Remove monthly fee for ${student}`} title="Remove fee"
-                    className="w-9 h-9 flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={16}/></button>}
-                </div>
+                <span className={`text-xs ${balance>0?'text-amber-700':'text-green-700'}`}>{balance>0?`Balance ${formatCurrency(balance)}`:'No balance'}</span>
+              </div>
+              <div className="mt-2 flex items-center gap-1.5">
+                <button type="button" onClick={()=>saveRosterFee(student)} disabled={!changed || rosterSaving===student}
+                  className="primary-action h-9 flex-1 px-3 text-xs">
+                  {rosterSaveButtonLabel(rosterSaving === student, Boolean(fee))}
+                </button>
+                {fee && <button type="button"
+                  onClick={() => { setEditTarget(fee); setForm(feeToForm(fee)); }}
+                  aria-label={`Edit all fields for ${student}`} title="Edit all fee details"
+                  className="icon-button"><Pencil size={15}/></button>}
+                {fee && <button type="button" onClick={()=>removeFee(fee)} disabled={deleting===fee.rowIndex}
+                  aria-label={`Remove monthly fee for ${student}`} title="Remove fee"
+                  className="icon-button-danger"><Trash2 size={15}/></button>}
               </div>
               </div>}
             </div>

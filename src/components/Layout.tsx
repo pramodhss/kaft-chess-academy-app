@@ -14,11 +14,12 @@ interface LayoutProps {
   readonly action?: React.ReactNode;
   readonly showBack?: boolean;
   readonly onBack?: () => void;
+  readonly hideMobileHeader?: boolean;
 }
 
 const routeScrollPositions = new Map<string, number>();
 
-export function Layout({ title, children, action, showBack, onBack }: LayoutProps) {
+export function Layout({ title, children, action, showBack, onBack, hideMobileHeader }: LayoutProps) {
   useTheme();
   const online = useOnline();
   const navigate = useNavigate();
@@ -35,20 +36,21 @@ export function Layout({ title, children, action, showBack, onBack }: LayoutProp
   }, [location.pathname]);
   const rememberScroll = () => routeScrollPositions.set(location.pathname, mainRef.current?.scrollTop ?? 0);
   return (
-    <div className="app-shell flex h-full flex-col md:pl-60">
+    <div className="app-shell flex h-full flex-col md:pl-64">
       <Sidebar />
-      <header className="app-header flex-shrink-0 text-white">
+      <header className={`app-header flex-shrink-0 ${hideMobileHeader ? 'app-header-hide-mobile' : ''}`}>
         <div className="app-header-inner flex items-center gap-3">
           {displayBack && (
             <button type="button" onClick={handleBack} aria-label="Go back" title="Go back"
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:bg-white/10">
+              className="app-back-button flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg">
               <ArrowLeft size={19} aria-hidden="true" />
             </button>
           )}
-          <img src="logo.jpg" alt="" className={`app-logo h-9 w-9 flex-shrink-0 rounded-lg object-cover ${displayBack ? 'hidden sm:block' : ''}`} />
+          <img src="logo.jpg" alt="" className={`app-logo h-9 w-9 flex-shrink-0 rounded-lg object-cover md:hidden ${displayBack ? 'hidden sm:block' : ''}`} />
           <div className="min-w-0 flex-1">
+            <p className="app-header-kicker hidden md:block">Academy operations</p>
             <h1 className="truncate text-[15px] font-semibold leading-tight">{title}</h1>
-            {coach && <p className="mt-0.5 truncate text-[11px] font-medium text-yellow-200/75">{coach}</p>}
+            {coach && <p className="app-header-coach mt-0.5 truncate text-[11px] font-medium md:hidden">{coach}</p>}
           </div>
           <div className="flex flex-shrink-0 items-center gap-1.5">
             <GlobalSearch />

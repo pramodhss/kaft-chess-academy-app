@@ -57,19 +57,23 @@ export function More() {
   const { textSize, setTextSize } = useTextSize();
   return (
     <Layout title="More">
-      <div className="space-y-4 p-4 md:p-6">
+      <div className="more-screen space-y-4 p-4 md:p-6">
+        <section className="more-account surface-card p-3">
+          <span className="more-account-avatar"><CircleUserRound size={20} /></span>
+          <span className="min-w-0"><strong>{coachName || 'Coach'}</strong><small>KAFT Chess Academy · Coach</small></span>
+        </section>
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {GROUPS.map(group => <section key={group.title} className="surface-card overflow-hidden">
+          {GROUPS.map(group => <section key={group.title} className="more-group surface-card overflow-hidden">
             <h2 className="section-label border-b border-gray-100 px-3 py-2.5 text-navy">{group.title}</h2>
             {group.items.map(({ to, Icon, label, desc }) => <button type="button" key={to} onClick={() => navigate(to)}
-              className="card-btn flex w-full items-center gap-3 border-b border-gray-100 p-3 text-left last:border-0">
+              className="more-row card-btn flex w-full items-center gap-3 border-b border-gray-100 p-3 text-left last:border-0">
               <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 text-navy"><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></span>
               <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-gray-900">{label}</span><span className="block truncate text-xs text-gray-400">{desc}</span></span>
               <ChevronRight size={16} className="flex-shrink-0 text-gray-300" aria-hidden="true" />
             </button>)}
           </section>)}
         </div>
-        <details className="surface-card overflow-hidden">
+        <details className="more-group surface-card overflow-hidden">
           <summary className="flex cursor-pointer list-none items-center gap-3 p-4"><span className="min-w-0 flex-1"><strong className="section-label block text-navy">Useful Chess Links</strong><span className="text-xs text-gray-400">Ratings, pairings, events and payments</span></span><ChevronRight size={17} className="text-gray-400" /></summary>
           <div className="space-y-2 border-t border-gray-100 p-4">
             {USEFUL_LINKS.map(({ key, label, desc, Icon, url }) => (
@@ -88,7 +92,7 @@ export function More() {
           </div>
         </details>
         {SOCIALS.length > 0 && (
-          <div className="surface-card p-4">
+          <div className="more-group surface-card p-4">
             <p className="section-label mb-3 text-navy">Academy Social Media</p>
             <div className="grid grid-cols-2 gap-2">
               {SOCIALS.map(({ key, label, url }) => (
@@ -100,15 +104,15 @@ export function More() {
             </div>
           </div>
         )}
-        <div className="surface-card p-4">
+        <div className="more-group surface-card p-4">
           <p className="section-label mb-2 text-navy">Logged in as</p>
           <p className="font-semibold text-gray-900 flex items-center gap-2"><CircleUserRound size={18} />{coachName || '—'}</p>
           <button type="button" onClick={() => setShowPrompt(true)} className="text-xs text-chess-blue mt-1">Change name</button>
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
             <span className="text-sm text-gray-600">{dark ? 'Dark mode' : 'Light mode'}</span>
-            <button type="button" onClick={toggle}
-              className={`w-14 h-7 rounded-full transition-colors relative flex items-center px-0.5 flex-shrink-0 ${dark ? 'bg-navy' : 'bg-gray-200'}`}>
-              <span className={`w-6 h-6 rounded-full bg-white shadow transition-transform flex items-center justify-center ${dark ? 'translate-x-7' : 'translate-x-0'}`}>
+            <button type="button" onClick={toggle} aria-pressed={dark}
+              className="theme-toggle w-14 h-7 rounded-full transition-colors relative flex items-center px-0.5 flex-shrink-0">
+              <span className={`w-6 h-6 rounded-full bg-white shadow transition-transform flex items-center justify-center ${dark ? 'translate-x-7 text-navy' : 'translate-x-0 text-gray-500'}`}>
                 {dark ? <Moon size={13} /> : <Sun size={13} />}
               </span>
             </button>

@@ -19,11 +19,11 @@ export function BottomNav() {
           end={to === '/'}
           className={({ isActive }) =>
             `bottom-nav-item relative flex flex-1 flex-col items-center justify-center py-1.5 text-[11px] font-semibold transition-colors
-             ${isActive ? 'text-chess-blue' : 'text-gray-400'}`
+             ${isActive ? 'text-gold' : 'text-gray-400'}`
           }
         >
           {({ isActive }) => <>
-            <span className={`bottom-nav-indicator absolute top-0 h-0.5 rounded-full ${isActive ? 'w-8 bg-chess-blue' : 'w-0 bg-transparent'}`} />
+            <span className={`bottom-nav-indicator absolute top-0 h-0.5 rounded-full ${isActive ? 'w-8 bg-gold' : 'w-0 bg-transparent'}`} />
             <Icon size={20} strokeWidth={isActive ? 2.2 : 1.7} className="mb-0.5" aria-hidden="true" />
             <span>{label}</span>
           </>}

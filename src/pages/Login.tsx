@@ -13,7 +13,7 @@ export function Login() {
         <p className="text-chess-light mt-2 text-sm">Operations Manager</p>
       </div>
 
-      <div className="w-full max-w-sm rounded-xl border border-white/10 bg-white p-6 shadow-xl">
+      <div className="login-card w-full max-w-sm rounded-xl border border-white/10 p-6 shadow-xl">
         {noClientId ? (
           <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">
             <strong>Setup needed:</strong> Open <code>src/config.ts</code> and replace{' '}

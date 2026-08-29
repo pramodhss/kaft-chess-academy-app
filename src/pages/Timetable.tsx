@@ -115,12 +115,12 @@ export function Timetable() {
   if (saving) saveLabel = 'Saving…';
 
   return <Layout title="Weekly Classes" action={<button type="button" onClick={openCreate} className="header-action" aria-label="Add weekly class"><Plus size={15} />Add</button>}>
-    <div className="page-stack">
+    <div className="timetable-screen page-stack">
       {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
       {!error && rows.length === 0 && <div className="empty-state"><CalendarDays size={24} /><p>No weekly classes scheduled yet.</p><button type="button" onClick={openCreate} className="primary-action"><Plus size={16} />Add first class</button></div>}
       {!error && availableDays.map(day => <section key={day} className="space-y-2">
         <h2 className="section-label px-1">{day}</h2>
-        {rows.filter(row => row.day.toLowerCase() === day.toLowerCase()).sort((left, right) => left.start.localeCompare(right.start)).map(entry => <article key={entry.rowIndex} className="surface-card p-3">
+        {rows.filter(row => row.day.toLowerCase() === day.toLowerCase()).sort((left, right) => left.start.localeCompare(right.start)).map(entry => <article key={entry.rowIndex} className="timetable-row surface-card p-3">
           <div className="flex items-start gap-3"><span className="icon-tile"><CalendarDays size={18} /></span><div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-gray-900">{entry.batch}</h3><p className="text-xs text-gray-500">{entry.level || 'Level not set'}</p></div><span className={entry.status === 'Active' ? 'badge-green' : 'badge-gray'}>{entry.status || 'Scheduled'}</span></div>
             <div className="mt-2 grid gap-1.5 text-xs text-gray-600 sm:grid-cols-2">

@@ -121,7 +121,7 @@ function OptionEditor({ title, values, saving, onChange, onSave }: Readonly<{
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-bold text-navy">{title}</h2>
         <button type="button" onClick={() => onChange([...values, ''])}
-          className="w-9 h-9 border border-gray-200 bg-white text-navy rounded-lg flex items-center justify-center"
+          className="icon-button"
           aria-label={`Add ${title}`} title={`Add ${title}`}>
           <Plus size={18} aria-hidden="true" />
         </button>
@@ -132,7 +132,7 @@ function OptionEditor({ title, values, saving, onChange, onSave }: Readonly<{
             <input value={value} onChange={event => update(index, event.target.value)}
               className="input flex-1" aria-label={`${title} option ${index + 1}`} />
             <button type="button" onClick={() => remove(index)} disabled={values.length === 1}
-              className="w-11 border border-red-100 bg-white text-red-600 rounded-lg flex items-center justify-center disabled:opacity-30"
+              className="icon-button-danger w-11"
               aria-label={`Remove ${value || 'empty option'}`} title="Remove option">
               <Trash2 size={17} aria-hidden="true" />
             </button>
@@ -140,7 +140,7 @@ function OptionEditor({ title, values, saving, onChange, onSave }: Readonly<{
         ))}
       </div>
       <button type="button" onClick={onSave} disabled={saving || values.every(value => !value.trim())}
-        className="w-full mt-3 bg-navy text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+        className="primary-action mt-3 w-full">
         <Save size={17} aria-hidden="true" />
         {saving ? 'Saving…' : `Save ${title}`}
       </button>

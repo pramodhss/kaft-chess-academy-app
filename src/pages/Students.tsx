@@ -362,7 +362,7 @@ export function Students() {
   const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
   const [levels, setLevels] = useState([...DEFAULT_LEVELS]);
   const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
-  const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('chess');
+  const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('info');
   const toast = useToast();
 
   const load = async () => {
@@ -571,7 +571,7 @@ export function Students() {
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
           <button type="button" onClick={handleEdit} disabled={saving}
-            className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
+            className="primary-action w-full">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving ? 'Saving changes…' : 'Save Changes'}
           </button>
@@ -622,7 +622,7 @@ export function Students() {
 
           {/* Tab bar */}
           <div className="flex bg-white border-b border-gray-100">
-            {(['chess','contact','info'] as const).map(tab => (
+            {(['info','contact','chess'] as const).map(tab => (
               <button key={tab} type="button" onClick={() => setDetailTab(tab)}
                 className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors
                   ${detailTab===tab ? 'border-chess-blue text-chess-blue' : 'border-transparent text-gray-400'}`}>
@@ -713,7 +713,7 @@ export function Students() {
               <FileChartColumn size={16} /> View Timeline &amp; Export PDF
             </button>
             <button type="button" onClick={handleDelete} disabled={deleting}
-              className="w-full border border-red-200 text-red-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+              className="danger-action">
               <Trash2 size={18} aria-hidden="true" />
               {deleting ? 'Removing student…' : 'Remove Student'}
             </button>
@@ -735,16 +735,16 @@ export function Students() {
         });
         setShowAdd(true);
       }}
-        aria-label="+ Add"
-        className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
+        aria-label="Add student"
+        className="student-add-button"><Plus size={17} aria-hidden="true" /></button>
     }>
-      <div className="p-4 space-y-3">
+      <div className="students-workspace p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, batch, FIDE ID, school…"
-          className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-chess-blue"/>
-        <div className="flex gap-2 items-center">
-          <p className="text-xs text-gray-400 flex-1">{filtered.length} student{filtered.length!==1?'s':''}</p>
+          className="input student-search"/>
+        <div className="student-list-controls flex gap-2 items-center">
+          <p className="text-xs text-gray-400 flex-1">{filtered.filter(student => student.status === 'Active').length} active · {filtered.length} total</p>
           <select value={sortKey} onChange={e=>setSortKey(e.target.value as typeof sortKey)}
             className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white">
             <option value="name">A → Z</option>
@@ -771,8 +771,8 @@ export function Students() {
           const cm = currentMonthKey();
           const hasTournament = tournamentRegistrations.some(r => r.month === cm && normalizedName(r.studentName) === normalizedName(s.name));
           return (
-            <button type="button" key={s.name+s.rowIndex} onClick={() => { setSelected(s); setDetailTab('chess'); }}
-              className="card-btn w-full bg-white rounded-xl px-4 py-3.5 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
+            <button type="button" key={s.name+s.rowIndex} onClick={() => { setSelected(s); setDetailTab('info'); }}
+              className="student-list-row card-btn w-full bg-white rounded-xl px-3 py-3 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <p className="font-semibold text-gray-900">{s.name}</p>
@@ -799,7 +799,7 @@ export function Students() {
           </div>
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mt-3">{formValidationError(form)}</p>}
           <button type="button" onClick={handleAdd} disabled={saving}
-            className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+            className="primary-action mt-4 w-full">
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving?'Adding student…':'Add Student'}
           </button>

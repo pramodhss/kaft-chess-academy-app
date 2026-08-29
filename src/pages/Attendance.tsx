@@ -356,10 +356,10 @@ export function Attendance() {
         </button>
       )
     }>
-      <div className="flex flex-col h-full">
+      <div className="attendance-workspace flex flex-col h-full">
 
         {/* ── Date navigation ──────────────────────────────────────────── */}
-        <div className="bg-white border-b border-gray-100">
+        <div className="attendance-date-bar bg-white border-b border-gray-100">
           <div className="flex items-center gap-2 px-3 py-3">
             <button type="button" onClick={goPrev} disabled={selectedIdx <= 0}
               className="icon-button disabled:opacity-30" aria-label="Previous date">
@@ -392,7 +392,7 @@ export function Attendance() {
 
         {/* ── Stats + filter + bulk action ─────────────────────────────── */}
         {!loading && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-100">
+          <div className="attendance-summary flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-100">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <span className="text-xs font-bold text-green-700">{presentCount} present</span>
               {absentCount > 0 && <span className="text-xs font-semibold text-red-600">{absentCount} absent</span>}
@@ -402,7 +402,7 @@ export function Attendance() {
               {batches.map(b => <option key={b}>{b}</option>)}
             </select>
             <button type="button" onClick={markAllPresent}
-              className="flex-shrink-0 flex items-center gap-1 bg-green-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg">
+              className="attendance-mark-all flex-shrink-0 flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg">
               <Check size={12} />✓ All
             </button>
             <button type="button" onClick={copyAttendanceReport}
@@ -436,14 +436,14 @@ export function Attendance() {
               const changed = dirty.has(r.sheetRow);
               return (
                 <button type="button" key={r.sheetRow} onClick={() => toggle(r.sheetRow, isPresent)}
-                  className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-gray-100 transition-colors
-                    ${isPresent ? 'bg-green-50' : 'bg-white'} ${changed ? 'ring-1 ring-inset ring-chess-blue/20' : ''}`}>
+                  className={`attendance-row w-full flex items-center justify-between px-4 py-3.5 border-b border-gray-100 transition-colors
+                    ${isPresent ? 'attendance-present-row' : 'bg-white'} ${changed ? 'ring-1 ring-inset ring-chess-blue/20' : ''}`}>
                   <div className="text-left">
                     <p className={`font-medium ${changed ? 'text-chess-blue' : 'text-gray-900'}`}>{r.name}</p>
                     {r.batch && <p className="text-xs text-gray-400 mt-0.5">{r.batch}</p>}
                   </div>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base font-bold transition-all
-                    ${isPresent ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-400'}`}>
+                    ${isPresent ? 'attendance-present-dot text-white' : 'bg-gray-100 text-gray-400'}`}>
                     {isPresent ? '✓' : '○'}
                   </div>
                 </button>
@@ -454,9 +454,9 @@ export function Attendance() {
 
         {/* ── Sticky save bar ──────────────────────────────────────────── */}
         {dirty.size > 0 && (
-          <div className="sticky bottom-0 border-t border-gray-200 bg-white p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+          <div className="attendance-save-bar sticky bottom-0 border-t border-gray-200 bg-white p-4 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
             <button type="button" onClick={save} disabled={saving}
-              className="w-full bg-navy text-white py-3 rounded-xl font-semibold disabled:opacity-60 flex items-center justify-center gap-2">
+              className="primary-action w-full">
               {saving && <span className="button-spinner" aria-hidden="true"/>}
               {saving ? 'Saving attendance…' : `Save Attendance (${dirty.size} changes) — ${coachName}`}
             </button>
@@ -483,7 +483,7 @@ export function Attendance() {
               <input id="attendance-extra-date" type="date" value={newDate}
                 onChange={event => setNewDate(event.target.value)} className="input" />
               <button type="button" onClick={addAttendanceDate} disabled={addingDate || !newDate}
-                className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+                className="primary-action mt-4 w-full">
                 {addingDate && <span className="button-spinner" aria-hidden="true"/>}
                 {addingDate ? 'Adding…' : 'Add Class Date'}
               </button>

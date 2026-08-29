@@ -14,6 +14,7 @@ export const TABS = {
   TOURNAMENTS: "Tournament Achievements",
   UPCOMING:    "Upcoming Tournaments",
   TOURNAMENT_REGISTRATIONS: "Tournament Registrations",
+  WEEKLY_ONLINE_TOURNAMENTS: "Weekly Online Tournaments",
   RESOURCES:   "Resources",
   SETTINGS:    "App Settings",
   AUDIT:       "Audit Log",

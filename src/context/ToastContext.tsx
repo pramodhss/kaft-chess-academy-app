@@ -2,7 +2,10 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useRe
 import { AlertTriangle, Check, Info } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
-interface ToastItem { id: string; msg: string; type: ToastType }
+interface ToastItem { id: string; msg: string; type: ToastType; leaving: boolean }
+
+const TOAST_LIFETIME_MS = 3500;
+const TOAST_LEAVE_MS = 220;
 
 const ToastCtx = createContext<{ show: (msg: string, type: ToastType) => void }>(null!);
 
@@ -13,8 +16,11 @@ export function ToastProvider({ children }: Readonly<{ children: React.ReactNode
   const show = useCallback((msg: string, type: ToastType) => {
     nextId.current += 1;
     const id = `${Date.now()}-${nextId.current}`;
-    setToasts(prev => [...prev.slice(-2), { id, msg, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+    setToasts(prev => [...prev.slice(-2), { id, msg, type, leaving: false }]);
+    setTimeout(() => {
+      setToasts(prev => prev.map(item => item.id === id ? { ...item, leaving: true } : item));
+      setTimeout(() => setToasts(prev => prev.filter(item => item.id !== id)), TOAST_LEAVE_MS);
+    }, TOAST_LIFETIME_MS);
   }, []);
 
   const icons = { success: Check, error: AlertTriangle, info: Info };
@@ -33,7 +39,7 @@ export function ToastProvider({ children }: Readonly<{ children: React.ReactNode
         style={{ top: 'calc(env(safe-area-inset-top,0px) + 64px)' }}>
         {toasts.map(t => (
           <output key={t.id} aria-live={t.type === 'error' ? 'assertive' : 'polite'}
-            className={`${colors[t.type]} toast-card pointer-events-auto`}>
+            className={`${colors[t.type]} toast-card ${t.leaving ? 'toast-card-leaving' : ''} pointer-events-auto`}>
             <span className="toast-icon" aria-hidden="true">
               {React.createElement(icons[t.type], { size: 18, strokeWidth: 2.25 })}
             </span>

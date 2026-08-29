@@ -195,7 +195,7 @@ export function Tournaments() {
               <Field label="Coach Notes"><textarea value={form.coachNotes} onChange={upd('coachNotes')} className="input" rows={2} /></Field>
             </div>
             <button type="button" onClick={handleAdd} disabled={saving || !form.studentName || !form.tournamentName}
-              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-60 flex items-center justify-center gap-2">
+              className="primary-action mt-4 w-full">
               {saving && <span className="button-spinner" aria-hidden="true"/>}
               {saving ? 'Saving result…' : 'Save Result'}
             </button>

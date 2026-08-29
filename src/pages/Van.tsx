@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Copy, MessageCircle, Pencil, Plus, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
+import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Copy, Link, LoaderCircle, MessageCircle, Pencil, Plus, Save, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ import { useCoachName } from '../hooks/useCoachName';
 import { appendRows, batchWriteRanges, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
 import { phoneValidationError } from '../lib/validation';
+import { fetchWeeklyOnlineTournament, rowToSavedWeeklyOnlineTournament, WEEKLY_ONLINE_TOURNAMENT_HEADERS, weeklyTournamentValues, weeklyTournamentWhatsAppMessage, type SavedWeeklyOnlineTournament, type WeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import {
   EMPTY_TOURNAMENT, REGISTRATION_HEADERS, TOURNAMENT_HEADERS, registrationValues,
   rowToManagedTournament, rowToRegistration, tournamentMonth, tournamentValidationError, tournamentValues,
@@ -31,6 +32,8 @@ async function ensureTournamentSheets(token: string) {
   if (idHeader[0]?.[0] !== 'Tournament ID') await writeRange(token, SHEET_ID, `'${TABS.UPCOMING}'!M1`, [['Tournament ID']]);
   await ensureSheet(token, SHEET_ID, TABS.TOURNAMENT_REGISTRATIONS, REGISTRATION_HEADERS);
   await ensureSheetColumns(token, SHEET_ID, TABS.TOURNAMENT_REGISTRATIONS, REGISTRATION_HEADERS.length);
+  await ensureSheet(token, SHEET_ID, TABS.WEEKLY_ONLINE_TOURNAMENTS, WEEKLY_ONLINE_TOURNAMENT_HEADERS);
+  await ensureSheetColumns(token, SHEET_ID, TABS.WEEKLY_ONLINE_TOURNAMENTS, WEEKLY_ONLINE_TOURNAMENT_HEADERS.length);
 }
 
 async function addMissingIds(token: string, tournaments: ManagedTournament[]) {
@@ -69,22 +72,30 @@ export function Van() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [legacyWarning, setLegacyWarning] = useState('');
+  const [weeklyLink, setWeeklyLink] = useState('');
+  const [weeklyResult, setWeeklyResult] = useState<WeeklyOnlineTournament | null>(null);
+  const [savedWeeklyResults, setSavedWeeklyResults] = useState<SavedWeeklyOnlineTournament[]>([]);
+  const [selectedWeeklyResult, setSelectedWeeklyResult] = useState<SavedWeeklyOnlineTournament | null>(null);
+  const [weeklyLoading, setWeeklyLoading] = useState(false);
+  const weeklyResultAlreadySaved = Boolean(weeklyResult && savedWeeklyResults.some(item => item.sourceUrl === weeklyResult.sourceUrl));
 
   const load = async () => {
     if (!token) return;
     setLoading(true); setError('');
     try {
       await ensureTournamentSheets(token);
-      const [tournamentRows, studentRows, registrationRows, legacyVanRows] = await Promise.all([
+      const [tournamentRows, studentRows, registrationRows, weeklyRows, legacyVanRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.UPCOMING}'!A:M`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:L`),
+        readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`),
         readSheet(token, SHEET_ID, `'${TABS.VAN}'!A:M`).catch(() => []),
       ]);
       const parsed = tournamentRows.slice(1).map((row, i) => rowToManagedTournament(row, i + 2)).filter(t => t.name.trim());
       setTournaments(await addMissingIds(token, parsed));
       setStudents(studentRows.slice(1).map(r => r[0]?.trim()).filter((n): n is string => Boolean(n)));
       setRegistrations(registrationRows.slice(1).map((r, i) => rowToRegistration(r, i + 2)).filter(r => r.tournamentId && r.studentName));
+      setSavedWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
       setLegacyWarning(legacyVanRows.slice(1).map(r => phoneValidationError(r[9] ?? '', 'Driver phone')).find(Boolean) ?? '');
     } catch (e: any) {
       if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
@@ -165,6 +176,46 @@ export function Van() {
       () => toast.success('Roster copied \u2014 ready to paste in WhatsApp.'),
       () => toast.error('Could not copy to clipboard.')
     );
+  };
+  const importWeeklyTournament = async () => {
+    setWeeklyLoading(true);
+    try {
+      setWeeklyResult(await fetchWeeklyOnlineTournament(weeklyLink));
+      toast.success('Final standings loaded. Review them before sharing.');
+    } catch (e: any) {
+      setWeeklyResult(null);
+      toast.error(e.message || 'Could not import tournament results.');
+    } finally { setWeeklyLoading(false); }
+  };
+  const copyWeeklyMessage = () => {
+    if (!weeklyResult) return;
+    void navigator.clipboard.writeText(weeklyTournamentWhatsAppMessage(weeklyResult)).then(
+      () => toast.success('Weekly results copied for WhatsApp.'),
+      () => toast.error('Could not copy to clipboard.'),
+    );
+  };
+  const copySavedWeeklyMessage = (tournament: SavedWeeklyOnlineTournament) => {
+    void navigator.clipboard.writeText(weeklyTournamentWhatsAppMessage(tournament)).then(
+      () => toast.success('Weekly results copied for WhatsApp.'),
+      () => toast.error('Could not copy to clipboard.'),
+    );
+  };
+  const saveWeeklyTournament = async () => {
+    if (!token || !weeklyResult) return;
+    if (savedWeeklyResults.some(item => item.sourceUrl === weeklyResult.sourceUrl)) {
+      toast.info('This weekly tournament has already been saved.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const savedAt = new Date().toISOString();
+      const savedBy = coachName || 'Coach';
+      const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`, [weeklyTournamentValues(weeklyResult, savedBy, savedAt)]);
+      setSavedWeeklyResults(current => [{ ...weeklyResult, savedBy, savedAt, rowIndex }, ...current]);
+      void recordAudit(token, 'CREATE', 'Weekly Online Tournament', weeklyResult.name, weeklyResult.sourceUrl).catch(() => undefined);
+      toast.success('Weekly tournament was saved as a read-only record.');
+    } catch (e: any) { toast.error(`Save failed: ${e.message}`); }
+    finally { setSaving(false); }
   };
   const saveTournament = async () => {
     if (!token) return;
@@ -260,6 +311,22 @@ export function Van() {
             <p className="text-xs text-gray-500">Create an event, then mark players, fees and van needs.</p>
           </div>
         </div>
+        <section className="weekly-workspace" aria-labelledby="weekly-online-title">
+          <div className="weekly-workspace-heading"><span className="icon-tile"><Link size={18} /></span><div><p className="section-label">Weekly results</p><h2 id="weekly-online-title">Online tournament</h2></div></div>
+          <label className="weekly-link-field"><span>Completed Lichess event link</span><div className="flex gap-2"><input type="url" value={weeklyLink} onChange={event => setWeeklyLink(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void importWeeklyTournament(); }} className="input min-w-0 flex-1" placeholder="https://lichess.org/swiss/abcdefgh" aria-label="Completed Lichess tournament link" /><button type="button" onClick={() => void importWeeklyTournament()} disabled={weeklyLoading || !weeklyLink.trim()} className="primary-action shrink-0">{weeklyLoading ? <LoaderCircle size={15} className="animate-spin" /> : <Trophy size={15} />} Load results</button></div></label>
+          {weeklyResult && <div className="weekly-result-view">
+            <div className="weekly-result-title"><div className="min-w-0"><p className="section-label">Results ready</p><h3>{weeklyResult.name}</h3><p>{[weeklyResult.format, weeklyResult.variant, weeklyResult.timeControl].filter(Boolean).join(' | ')}</p></div><span className="badge-green">Final</span></div>
+            <dl className="weekly-stat-grid"><div><dt>Players</dt><dd>{weeklyResult.playerCount || '-'}</dd></div><div><dt>Rounds</dt><dd>{weeklyResult.rounds || '-'}</dd></div><div><dt>Organizer</dt><dd>{weeklyResult.organizer || '-'}</dd></div></dl>
+            <div className="weekly-standings"><div className="weekly-standings-heading"><h4>Top 5 standings</h4><span>Final points</span></div>{weeklyResult.standings.map(player => <div key={`${player.rank}-${player.playerName}`} className="weekly-standing-row"><span className="weekly-place">{({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[player.rank] ?? player.rank}</span><span className="truncate">{player.playerName}</span><strong>{player.score || '-'}{player.score ? ' pts' : ''}</strong></div>)}</div>
+            <div className="weekly-result-actions"><p>{weeklyResultAlreadySaved ? 'This result is saved and cannot be edited.' : 'Save this final result to the academy record.'}</p><div><button type="button" onClick={copyWeeklyMessage} className="secondary-action"><Copy size={15} /> Copy WhatsApp text</button><button type="button" onClick={() => void saveWeeklyTournament()} disabled={saving || weeklyResultAlreadySaved} className="primary-action"><Save size={15} />{saving ? 'Saving...' : weeklyResultAlreadySaved ? 'Saved' : 'Save result'}</button></div></div>
+          </div>}
+        </section>
+        {savedWeeklyResults.length > 0 && <section className="weekly-history" aria-labelledby="saved-weekly-title">
+          <div className="weekly-history-heading"><div><p className="section-label">Archive</p><h2 id="saved-weekly-title">Saved weekly results</h2></div><span>{savedWeeklyResults.length} saved</span></div>
+          <div>
+            {[...savedWeeklyResults].sort((left, right) => right.savedAt.localeCompare(left.savedAt)).map(item => <button key={item.rowIndex} type="button" onClick={() => setSelectedWeeklyResult(item)} className="weekly-history-row"><span className="weekly-history-trophy"><Trophy size={15} /></span><span className="min-w-0 flex-1"><strong className="truncate">{item.name}</strong><small>{[item.format, item.variant, item.timeControl].filter(Boolean).join(' | ')} · {item.standings.length} finalists</small></span><span className="weekly-view-label">View <ChevronRight size={15} /></span></button>)}
+          </div>
+        </section>}
         {tournaments.length === 0 && !error && (
           <div className="empty-state"><CalendarDays size={25} /><p>No tournaments yet.</p>
             <button type="button" onClick={openCreate} className="primary-action"><Plus size={15} /> Create tournament</button>
@@ -275,8 +342,18 @@ export function Van() {
         </div>
       </div>
       {showForm && <TournamentForm form={form} setForm={setForm} editing={Boolean(editing)} saving={saving} close={() => setShowForm(false)} save={saveTournament} />}
+      {selectedWeeklyResult && <WeeklyTournamentDetail tournament={selectedWeeklyResult} close={() => setSelectedWeeklyResult(null)} copy={() => copySavedWeeklyMessage(selectedWeeklyResult)} />}
     </Layout>
   );
+}
+
+function WeeklyTournamentDetail({ tournament, close, copy }: Readonly<{ tournament: SavedWeeklyOnlineTournament; close: () => void; copy: () => void }>) {
+  return <div className="modal-backdrop items-end justify-center sm:items-center"><dialog open className="modal-panel max-w-md p-0" aria-labelledby="weekly-result-detail-title">
+    <div className="flex items-start justify-between border-b border-gray-100 px-4 py-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-chess-blue">Saved weekly result</p><h2 id="weekly-result-detail-title" className="mt-0.5 truncate text-base font-semibold text-gray-900">{tournament.name}</h2><p className="mt-1 text-xs text-gray-500">{[tournament.format, tournament.variant, tournament.timeControl].filter(Boolean).join(' | ')}</p></div><button type="button" onClick={close} className="icon-button shrink-0" aria-label="Close saved weekly result"><X size={17} /></button></div>
+    <dl className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 text-xs"><div className="px-4 py-2.5"><dt className="text-gray-400">Players</dt><dd className="mt-0.5 font-semibold text-gray-800">{tournament.playerCount || '-'}</dd></div><div className="px-4 py-2.5"><dt className="text-gray-400">Rounds</dt><dd className="mt-0.5 font-semibold text-gray-800">{tournament.rounds || '-'}</dd></div><div className="px-4 py-2.5"><dt className="text-gray-400">Organizer</dt><dd className="mt-0.5 truncate font-semibold text-gray-800">{tournament.organizer || '-'}</dd></div></dl>
+    <div className="p-4"><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-800">Top 5 final standings</h3><span className="badge-blue">Read-only</span></div><div className="overflow-hidden rounded-md border border-gray-100"><div className="grid grid-cols-[42px_minmax(0,1fr)_64px] bg-gray-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400"><span>Rank</span><span>Player</span><span className="text-right">Points</span></div>{tournament.standings.map(player => <div key={`${player.rank}-${player.playerName}`} className="grid grid-cols-[42px_minmax(0,1fr)_64px] border-t border-gray-100 px-3 py-2.5 text-sm"><span className="font-semibold text-chess-blue">{({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[player.rank] ?? player.rank}</span><span className="truncate font-medium text-gray-800">{player.playerName}</span><span className="text-right text-gray-500">{player.score || '-'}{player.score ? ' pts' : ''}</span></div>)}</div></div>
+    <div className="flex items-center justify-end border-t border-gray-100 bg-gray-50 px-4 py-3"><button type="button" onClick={copy} className="secondary-action"><Copy size={15} /> Copy for WhatsApp</button></div>
+  </dialog></div>;
 }
 
 function TournamentCard({ tournament, playing, paid, van, open, edit, remove, notify, copy, saving }: Readonly<{

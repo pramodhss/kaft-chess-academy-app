@@ -62,6 +62,12 @@ const QUICK_LINKS = [
   { to: '/more',       Icon: LayoutGrid, label: 'More' },
 ];
 
+const PRIMARY_ACTIONS = [
+  { to: '/attendance', Icon: CalendarCheck, label: 'Mark attendance', tone: 'blue' },
+  { to: '/fees', Icon: ReceiptIndianRupee, label: 'Collect fee', tone: 'green' },
+  { to: '/students', Icon: Users, label: 'Add student', tone: 'gold' },
+] as const;
+
 export function Dashboard() {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -120,14 +126,22 @@ export function Dashboard() {
       return d.getTime() === today.getTime() && coachName && entry.coach.toLowerCase().includes(coachName.split(' ')[0]?.toLowerCase() ?? '');
     });
     content = (
-      <div className="space-y-4 p-3 sm:p-4 md:p-6">
+      <div className="dashboard-screen space-y-5 p-3 sm:p-4 md:p-6">
+        <section className="dashboard-intro">
+          <div className="flex items-start justify-between gap-3">
+            <div><p className="section-label">{new Date().toLocaleDateString('en-IN', { weekday: 'long' })} · KAFT Chess</p><h2 className="mt-1 text-xl font-bold text-gray-900 sm:text-2xl">Good morning{coachName ? `, ${coachName.split(' ')[0]}` : ''}</h2></div>
+            <span className="dashboard-live-status"><span />Synced</span>
+          </div>
+        </section>
         {/* Stat cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Active Students" value={stats.active} sub={`of ${stats.total} enrolled`} gradient="from-navy to-navy/80" icon={<Users size={22} className="opacity-70" />} />
-          <StatCard label="Next Session" value={`${DAYS_S[nextDate.getDay()]} ${nextDate.getDate()} ${MONTHS_S[nextDate.getMonth()]}`} gradient="from-chess-blue to-chess-blue/80" icon={<CalendarCheck size={22} className="opacity-70" />} />
-          <StatCard label="Fees Collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} gradient="from-green-600 to-green-700" icon={<ReceiptIndianRupee size={22} className="opacity-70" />} />
-          <StatCard label="Outstanding" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} gradient="from-amber-500 to-amber-600" icon={<Trophy size={22} className="opacity-70" />} />
+          <StatCard label="Students" value={stats.active} sub={`${stats.total - stats.active} inactive`} tone="blue" icon={<Users size={19} />} />
+          <StatCard label="Next class" value={`${DAYS_S[nextDate.getDay()]} ${nextDate.getDate()}`} sub={`${MONTHS_S[nextDate.getMonth()]} session`} tone="green" icon={<CalendarCheck size={19} />} />
+          <StatCard label="Fee pending" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} sub={`${overdueCount} accounts`} tone="red" icon={<AlertCircle size={19} />} />
+          <StatCard label="Tournaments" value={classes.length} sub="Upcoming activity" tone="gold" icon={<Trophy size={19} />} />
         </div>
+
+        <section className="dashboard-primary-actions"><h2 className="section-label">Quick actions</h2><div className="mt-2 grid grid-cols-3 gap-2">{PRIMARY_ACTIONS.map(({ to, Icon, label, tone }) => <button key={to} type="button" onClick={() => navigate(to)} className={`dashboard-action dashboard-action-${tone}`}><span><Icon size={18} /></span><strong>{label}</strong></button>)}</div></section>
 
         {birthdays.length > 0 && (
           <div className="rounded-lg border border-pink-200 bg-pink-50 p-4">
@@ -163,8 +177,8 @@ export function Dashboard() {
           <ChevronRight size={16} className="hover-arrow text-gray-400" />
         </button>}
 
-        {classes.length > 0 && <section className="space-y-2">
-          <div className="flex items-center justify-between"><h2 className="section-label">Upcoming Classes</h2><button type="button" onClick={() => navigate('/timetable')} className="flex items-center gap-1 text-xs font-semibold text-chess-blue">Manage <ChevronRight size={13} /></button></div>
+        {classes.length > 0 && <section className="dashboard-sessions space-y-2">
+          <div className="flex items-center justify-between"><h2 className="section-label">Next sessions</h2><button type="button" onClick={() => navigate('/timetable')} className="flex items-center gap-1 text-xs font-semibold text-chess-blue">View all <ChevronRight size={13} /></button></div>
           <div className="grid gap-2 md:grid-cols-3">{classes.map(({ entry, date }) => <article key={`${entry.rowIndex}-${date.toISOString()}`} className="surface-card p-3">
             <div className="flex items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-gray-900">{entry.batch}</h3><p className="text-xs font-medium text-chess-blue">{date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</p></div><span className="badge-green">{entry.status || 'Active'}</span></div>
             <div className="mt-2 space-y-1 text-xs text-gray-600"><p className="flex items-center gap-1.5"><Clock3 size={13} />{entry.start} - {entry.end}</p><p className="flex items-center gap-1.5"><UserRound size={13} />{entry.coach}</p>{entry.room && <p className="flex items-center gap-1.5"><MapPin size={13} />{entry.room}</p>}</div>
@@ -195,19 +209,18 @@ export function Dashboard() {
   }
 
   return (
-    <Layout title="Chess Academy">
+    <Layout title="Chess Academy" hideMobileHeader>
       {content}
     </Layout>
   );
 }
 
-function StatCard({ label, value, sub, gradient, icon }: Readonly<{ label: string; value: string | number; sub?: string; gradient: string; icon?: React.ReactNode }>) {
+function StatCard({ label, value, sub, tone, icon }: Readonly<{ label: string; value: string | number; sub?: string; tone: 'blue' | 'gold' | 'green' | 'red'; icon?: React.ReactNode }>) {
   return (
-    <div className={`stat-card bg-gradient-to-br ${gradient} rounded-xl p-4 text-white`}>
-      {icon && <div className="mb-1 text-white">{icon}</div>}
-      <p className="text-xs opacity-80 mb-0.5">{label}</p>
-      <p className="text-xl font-bold leading-tight sm:text-2xl">{value}</p>
-      {sub && <p className="mt-0.5 text-xs opacity-70">{sub}</p>}
+    <div className={`stat-card stat-card-${tone} rounded-xl p-4`}>
+      <div className="flex items-start justify-between gap-2"><p className="section-label">{label}</p>{icon && <span className="stat-card-icon">{icon}</span>}</div>
+      <p className="mt-3 text-xl font-bold leading-tight text-gray-900 sm:text-2xl">{value}</p>
+      {sub && <p className="mt-1 text-xs text-gray-500">{sub}</p>}
     </div>
   );
 }

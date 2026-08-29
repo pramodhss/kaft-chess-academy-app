@@ -287,7 +287,7 @@ export function MonthlyReport() {
             ))}
           </div>
           <button type="button" onClick={() => load(selectedMonth)} disabled={loading}
-            className="mt-3 w-full bg-chess-blue text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50">
+            className="primary-action mt-3 w-full">
             {loading ? 'Loading…' : `Load ${MONTHS[selectedMonth].label} Report`}
           </button>
         </div>
@@ -301,7 +301,7 @@ export function MonthlyReport() {
               <SumCard label="Students" value={reports.length} color="bg-navy text-white" />
               <SumCard label="Avg Attendance"
                 value={avgAttendance === null ? '—' : avgAttendanceLabel}
-                color="bg-chess-blue text-white" />
+                color="summary-tile-gold" />
               <SumCard label="Achievements" value={reports.reduce((s,r)=>s+r.medals.length,0)} color="bg-navy text-white" />
             </div>
 
@@ -449,7 +449,7 @@ export function MonthlyReport() {
               </div>
             </div>
             <button type="button" onClick={handleSendEmail} disabled={!emailTo.trim()}
-              className="w-full bg-navy text-white py-3 rounded-xl font-semibold mt-4 disabled:opacity-50">
+              className="primary-action mt-4 w-full">
               📧 Open in Gmail / Mail App
             </button>
           </dialog>
