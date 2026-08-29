@@ -74,8 +74,12 @@ export function Timetable() {
     try {
       if (editing) {
         const current = await readSheetLive(token, SHEET_ID, `'${TABS.TIMETABLE}'!A${editing.rowIndex}:M${editing.rowIndex}`);
-        if (JSON.stringify(timetableRow(current[0] ?? [], editing.rowIndex)) !== JSON.stringify(editing)) {
-          toast.info('This class changed on another device. Reload before editing it.'); return;
+        const live = timetableRow(current[0] ?? [], editing.rowIndex);
+        if (JSON.stringify(live) !== JSON.stringify(editing)) {
+          setRows(currentRows => currentRows.map(row => row.rowIndex === editing.rowIndex ? live : row));
+          setEditing(live); setForm(live);
+          toast.info('This class changed on another device. The latest values were loaded — review and save again.');
+          return;
         }
         await writeRange(token, SHEET_ID, `'${TABS.TIMETABLE}'!A${editing.rowIndex}:M${editing.rowIndex}`, [timetableValues(form)]);
         setRows(currentRows => currentRows.map(row => row.rowIndex === editing.rowIndex ? { ...form, rowIndex: editing.rowIndex } : row));
@@ -97,8 +101,11 @@ export function Timetable() {
     setDeleting(entry.rowIndex);
     try {
       const current = await readSheetLive(token, SHEET_ID, `'${TABS.TIMETABLE}'!A${entry.rowIndex}:M${entry.rowIndex}`);
-      if (JSON.stringify(timetableRow(current[0] ?? [], entry.rowIndex)) !== JSON.stringify(entry)) {
-        toast.info('This class changed on another device. Reload before removing it.'); return;
+      const live = timetableRow(current[0] ?? [], entry.rowIndex);
+      if (JSON.stringify(live) !== JSON.stringify(entry)) {
+        setRows(currentRows => currentRows.map(row => row.rowIndex === entry.rowIndex ? live : row));
+        toast.info('This class changed on another device. The latest values were loaded — review and try removing it again.');
+        return;
       }
       await clearSheetRange(token, SHEET_ID, `'${TABS.TIMETABLE}'!A${entry.rowIndex}:M${entry.rowIndex}`);
       setRows(currentRows => currentRows.filter(row => row.rowIndex !== entry.rowIndex));

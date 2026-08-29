@@ -5,7 +5,7 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
-import { appendRows, batchWriteRanges, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, writeRange } from '../lib/sheets';
+import { appendRows, batchWriteRanges, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, SheetConflictError, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
 import { phoneValidationError } from '../lib/validation';
 import { fetchWeeklyOnlineTournament, rowToSavedWeeklyOnlineTournament, WEEKLY_ONLINE_TOURNAMENT_HEADERS, weeklyTournamentValues, weeklyTournamentWhatsAppMessage, type SavedWeeklyOnlineTournament, type WeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
@@ -126,7 +126,8 @@ export function Van() {
   const updateTournament = async (original: ManagedTournament) => {
     if (!token) return;
     const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.UPCOMING}'!A${original.rowIndex}:M${original.rowIndex}`);
-    if (!sameTournament(rowToManagedTournament(liveRows[0] ?? [], original.rowIndex), original)) throw new Error('This tournament changed on another device. Reload and try again.');
+    const live = rowToManagedTournament(liveRows[0] ?? [], original.rowIndex);
+    if (!sameTournament(live, original)) throw new SheetConflictError('This tournament changed on another device. The latest values were loaded — review and save again.', live);
     const updated = { ...original, name: form.name.trim(), date: form.date, fee: form.fee };
     const linked = registrations.filter(r => r.tournamentId === original.id);
     const updatedRegs = linked.map(r => ({ ...r, tournamentName: updated.name, tournamentDate: updated.date, month: tournamentMonth(updated.date), entryFee: updated.fee }));
@@ -230,7 +231,15 @@ export function Van() {
       }
       setShowForm(false);
     }
-    catch (e: any) { toast.error(`Save failed: ${e.message}`); }
+    catch (e: any) {
+      if (e instanceof SheetConflictError) {
+        setTournaments(current => current.map(t => t.id === e.live.id ? e.live : t));
+        setEditing(e.live);
+        toast.info(e.message);
+        return;
+      }
+      toast.error(`Save failed: ${e.message}`);
+    }
     finally { setSaving(false); }
   };
 
@@ -239,7 +248,12 @@ export function Van() {
     setSaving(true);
     try {
       const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.UPCOMING}'!A${t.rowIndex}:M${t.rowIndex}`);
-      if (!sameTournament(rowToManagedTournament(liveRows[0] ?? [], t.rowIndex), t)) { toast.info('This tournament changed on another device. Reload before removing it.'); return; }
+      const live = rowToManagedTournament(liveRows[0] ?? [], t.rowIndex);
+      if (!sameTournament(live, t)) {
+        setTournaments(current => current.map(item => item.id === live.id ? live : item));
+        toast.info('This tournament changed on another device. The latest values were loaded — review and try removing it again.');
+        return;
+      }
       const linked = registrations.filter(r => r.tournamentId === t.id);
       await Promise.all([
         clearSheetRange(token, SHEET_ID, `'${TABS.UPCOMING}'!A${t.rowIndex}:M${t.rowIndex}`),

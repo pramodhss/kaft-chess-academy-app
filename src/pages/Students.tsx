@@ -823,9 +823,10 @@ function StudentForm({ form, setForm, batches, levels, onPhotoUpload }: Readonly
   
   // Compute auto values from DOB/age
   const dobDate = form.dob ? new Date(form.dob) : null;
-  const computedAge = dobDate && !Number.isNaN(dobDate.getTime())
+  const rawAge = dobDate && !Number.isNaN(dobDate.getTime())
     ? Math.floor((Date.now() - dobDate.getTime()) / (365.25 * 86400000))
     : null;
+  const computedAge = rawAge !== null && rawAge >= 0 ? rawAge : null;
   const category = computedAge !== null ? getCategory(String(computedAge)) : '';
 
   return (

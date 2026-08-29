@@ -3,7 +3,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Pl
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange, SheetConflictError } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
 import { SHEET_ID, TABS } from '../config';
 import { parseSheetNumber } from '../lib/values';
@@ -192,7 +192,7 @@ async function updateRosterPayment(
   const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${existing.rowIndex}:N${existing.rowIndex}`);
   const currentFee = rowToFee(currentRows[0] ?? [], existing.rowIndex - 2);
   if (!sameFeeRecord(currentFee, existing)) {
-    throw new Error('This payment changed on another device. Reload Fees and try again.');
+    throw new SheetConflictError('This payment changed on another device. The latest values were loaded — review and save again.', currentFee);
   }
 
   const note = `Roster updated by ${coachName} on ${new Date().toLocaleDateString('en-IN')}`;
@@ -224,8 +224,9 @@ async function appendRosterPayment(
   const { due, amountPaid, balance, status, paymentDate } = payment;
   const tab = TABS.FEES;
   const liveFees = feeRowsToEntries(await readSheetLive(token, SHEET_ID, `'${tab}'!A:N`));
-  if (liveFees.some(fee => sameFeeIdentity(fee, student, selectedMonth, 'Monthly Tuition'))) {
-    throw new Error('A monthly fee was added on another device. Reload Fees and try again.');
+  const existingFee = liveFees.find(fee => sameFeeIdentity(fee, student, selectedMonth, 'Monthly Tuition'));
+  if (existingFee) {
+    throw new SheetConflictError('A monthly fee was already added for this student on another device. The latest values were loaded \u2014 review and save again.', existingFee);
   }
 
   const receipt = newReceiptNumber();
@@ -381,7 +382,10 @@ export function Fees() {
       ]);
       const currentFee = rowToFee(currentRows[0] ?? [], row - 2);
       if (!sameFeeRecord(currentFee, editTarget)) {
-        toast.info('This payment was changed on another device. Reload Fees before editing again.');
+        setFees(prev => prev.map(fee => fee.rowIndex === row ? currentFee : fee));
+        setEditTarget(currentFee);
+        setForm(feeToForm(currentFee));
+        toast.info('This payment was changed on another device. The latest values were loaded — review and save again.');
         return;
       }
       if (feeRowsToEntries(allRows).some(fee => fee.rowIndex !== row
@@ -428,7 +432,8 @@ export function Fees() {
       const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
       const currentFee = rowToFee(currentRows[0] ?? [], fee.rowIndex - 2);
       if (!sameFeeRecord(currentFee, fee)) {
-        toast.info('This payment was changed on another device. Reload Fees before removing it.');
+        setFees(prev => prev.map(entry => entry.rowIndex === fee.rowIndex ? currentFee : entry));
+        toast.info('This payment was changed on another device. The latest values were loaded — review and try removing it again.');
         return;
       }
       await clearSheetRange(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`);
@@ -535,7 +540,16 @@ export function Fees() {
       setDrafts(current => { const next = new Map(current); next.delete(student); return next; });
       void recordAudit(token, existing ? 'UPDATE' : 'CREATE', 'Fees', `${student} · ${selectedMonth}`, 'Monthly roster').catch(() => undefined);
       toast.success(existing ? `${student}'s fee was updated and verified.` : `${student}'s fee was saved and verified.`);
-    } catch (e: any) { toast.error('Save failed: ' + e.message); }
+    } catch (e: any) {
+      if (e instanceof SheetConflictError) {
+        setFees(current => current.some(fee => fee.rowIndex === e.live.rowIndex)
+          ? current.map(fee => fee.rowIndex === e.live.rowIndex ? e.live : fee)
+          : [...current, e.live]);
+        toast.info(e.message);
+        return;
+      }
+      toast.error('Save failed: ' + e.message);
+    }
     finally { setRosterSaving(''); }
   };
 

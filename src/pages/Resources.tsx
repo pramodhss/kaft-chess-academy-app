@@ -106,7 +106,8 @@ export function Resources() {
       const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:G${resource.rowIndex}`);
       const currentResource = rowToResource(currentRows[0] ?? [], resource.rowIndex);
       if (!isSameResource(currentResource, resource)) {
-        toast.info('This resource was changed on another device. Reload before removing it.');
+        setItems(prev => prev.map(item => item.rowIndex === resource.rowIndex ? currentResource : item));
+        toast.info('This resource was changed on another device. The latest values were loaded — review and try removing it again.');
         return;
       }
       await clearSheetRange(token, SHEET_ID, `'${TABS.RESOURCES}'!A${resource.rowIndex}:G${resource.rowIndex}`);

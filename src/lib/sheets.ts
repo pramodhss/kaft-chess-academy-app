@@ -6,6 +6,15 @@ type CachedRead = { data: any; expiresAt: number };
 const recentReads = new Map<string, CachedRead>();
 const pendingReads = new Map<string, Promise<any>>();
 
+/** Thrown when a concurrent edit is detected. Carries the live row so callers can
+ * refresh local state instead of leaving the user stuck with a stale view. */
+export class SheetConflictError<T> extends Error {
+  constructor(message: string, public readonly live: T) {
+    super(message);
+    this.name = 'SheetConflictError';
+  }
+}
+
 function sheetUrlFragment(sheetId: string): string {
   return `/spreadsheets/${encodeURIComponent(sheetId)}/`;
 }
@@ -52,6 +61,9 @@ async function apiCall(token: string, url: string, options?: RequestInit) {
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     if (res.status === 403 && text.includes('SCOPE_INSUFFICIENT')) throw new Error('TOKEN_EXPIRED');
+    if (res.status === 403) {
+      throw new Error(`You don't have edit access to this Google Sheet. Ask the sheet owner to share it with your Google account as an Editor, then try again. (Sheets API 403: ${text})`);
+    }
     throw new Error(`Sheets API ${res.status}: ${text}`);
   }
   const data = await res.json();

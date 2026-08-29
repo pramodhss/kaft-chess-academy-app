@@ -4,7 +4,7 @@ import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { readSheet, appendRows, clearSheetRange } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, clearSheetRange } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import type { TournamentEntry } from '../types';
 
@@ -94,10 +94,11 @@ export function Tournaments() {
     if (!token || !window.confirm(`Remove ${entry.studentName}'s result for ${entry.tournamentName}? This cannot be undone.`)) return;
     setDeleting(entry.rowIndex);
     try {
-      const currentRows = await readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A${entry.rowIndex}:V${entry.rowIndex}`);
+      const currentRows = await readSheetLive(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A${entry.rowIndex}:V${entry.rowIndex}`);
       const currentEntry = rowToEntry(currentRows[0] ?? [], entry.rowIndex - 2);
       if (JSON.stringify(currentEntry) !== JSON.stringify(entry)) {
-        toast.info('This tournament result was changed on another device. Reload before removing it.');
+        setEntries(prev => prev.map(item => item.rowIndex === entry.rowIndex ? currentEntry : item));
+        toast.info('This tournament result was changed on another device. The latest values were loaded — review and try removing it again.');
         return;
       }
       await clearSheetRange(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A${entry.rowIndex}:V${entry.rowIndex}`);
