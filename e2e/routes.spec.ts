@@ -52,7 +52,7 @@ test.describe('route regression matrix', () => {
     });
 
     await openApp(page, '#/');
-    await expect(page.getByText('Active Students')).toBeVisible();
+    await expect(page.locator('.stat-card-blue')).toBeVisible();
     await page.getByRole('link', { name: 'Students', exact: true }).first().click();
     await expect(page.getByRole('button', { name: /Aarav Kumar/ })).toBeVisible();
     await page.getByRole('link', { name: 'Fees', exact: true }).first().click();
@@ -64,10 +64,11 @@ test.describe('route regression matrix', () => {
   test('dark mode persists and remains usable', async ({ page, sheets }) => {
     void sheets;
     await openApp(page, '#/more');
-    const themeButton = page.getByText('Light mode').locator('..').getByRole('button');
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    const themeButton = page.getByText('Dark mode').locator('..').getByRole('button');
     await themeButton.click();
-    await expect(page.locator('html')).toHaveClass(/dark/);
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
     await page.reload();
-    await expect(page.locator('html')).toHaveClass(/dark/);
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
   });
 });

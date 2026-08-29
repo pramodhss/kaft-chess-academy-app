@@ -137,8 +137,8 @@ export function Dashboard() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatCard label="Students" value={stats.active} sub={`${stats.total - stats.active} inactive`} tone="blue" icon={<Users size={19} />} />
           <StatCard label="Next class" value={`${DAYS_S[nextDate.getDay()]} ${nextDate.getDate()}`} sub={`${MONTHS_S[nextDate.getMonth()]} session`} tone="green" icon={<CalendarCheck size={19} />} />
+          <StatCard label="Fees collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} sub="This month" tone="gold" icon={<Trophy size={19} />} />
           <StatCard label="Fee pending" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} sub={`${overdueCount} accounts`} tone="red" icon={<AlertCircle size={19} />} />
-          <StatCard label="Tournaments" value={classes.length} sub="Upcoming activity" tone="gold" icon={<Trophy size={19} />} />
         </div>
 
         <section className="dashboard-primary-actions"><h2 className="section-label">Quick actions</h2><div className="mt-2 grid grid-cols-3 gap-2">{PRIMARY_ACTIONS.map(({ to, Icon, label, tone }) => <button key={to} type="button" onClick={() => navigate(to)} className={`dashboard-action dashboard-action-${tone}`}><span><Icon size={18} /></span><strong>{label}</strong></button>)}</div></section>

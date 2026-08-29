@@ -8,7 +8,7 @@ function sheetRows(workbook: Record<string, string[][]>, tab: string) {
 
 test('adds a validated student and synchronizes the attendance roster', async ({ page, sheets }) => {
   await openApp(page, '#/students');
-  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student' }).click();
 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Full Name *').fill('Ishaan Rao');
@@ -71,6 +71,7 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   expect(student?.[31]).toBe('ishaan-knight');
 
   await page.getByRole('button', { name: /Ishaan Rao/ }).click();
+  await page.getByRole('button', { name: '♟ Chess' }).click();
   await expect(page.getByRole('link', { name: 'ishaan_rook' })).toHaveAttribute('href', 'https://www.chess.com/member/ishaan_rook');
   await expect(page.getByRole('link', { name: 'ishaan-knight' })).toHaveAttribute('href', 'https://lichess.org/@/ishaan-knight');
   await expect(page.getByRole('link', { name: 'ishaan_rook' })).toHaveAttribute('target', '_blank');
@@ -80,7 +81,7 @@ test('adds a validated student and synchronizes the attendance roster', async ({
 test('blocks duplicate student names before writing', async ({ page, sheets }) => {
   await openApp(page, '#/students');
   const writesBefore = sheets.writes.length;
-  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student' }).click();
 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Full Name *').fill('Aarav Kumar');
@@ -122,7 +123,7 @@ test('requires confirmation and removes a student only after Sheets succeeds', a
 
 test('filters phone input and validates email and ratings', async ({ page, sheets }) => {
   await openApp(page, '#/students');
-  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add student' }).click();
   const dialog = page.getByRole('dialog');
 
   await dialog.getByLabel('Full Name *').fill('Validation Student');

@@ -70,7 +70,7 @@ test('dashboard shows pending fee alert when students have outstanding balance',
   void sheets;
   await openApp(page, '#/');
   // Wait for Dashboard data to load — stat card appears when Sheets returns
-  await expect(page.getByText('Active Students')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.stat-card-blue')).toBeVisible({ timeout: 10000 });
   // Mock has Aarav Kumar with 500 balance; matches singular "student" form\n  await expect(page.getByText(/\d+ student.* with pending fees/i)).toBeVisible();
 });
 

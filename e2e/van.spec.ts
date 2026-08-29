@@ -45,6 +45,7 @@ test('manages a tournament roster, payments, and automatic student history', asy
 
   await openApp(page, '#/students');
   await page.getByRole('button', { name: /Aarav Kumar/ }).click();
+  await page.getByRole('button', { name: '♟ Chess' }).click();
   await expect(page.getByText('Tournament Attendance')).toBeVisible();
   await expect(page.getByText('State Junior Open', { exact: true })).toBeVisible();
   await expect(page.getByText('September 2026')).toBeVisible();
