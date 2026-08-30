@@ -595,6 +595,12 @@ async function batchImportStudents(deps: Readonly<{
     const rowsToAppend = filteredToAppend.map(item => studentRowValues(item));
     await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, rowsToAppend);
 
+    // Reflect the newly written students immediately so the list never appears stuck,
+    // regardless of whether the reconciliation read below succeeds or is delayed.
+    const optimisticStudents = filteredToAppend.map((item, idx) => formToStudent(item, -1 - idx));
+    setStudents(prev => [...prev, ...optimisticStudents]);
+    setFiltered(prev => [...prev, ...optimisticStudents]);
+
     // Immediately synchronize all newly imported students to Weekend Attendance sheet
     try {
       const attRows = await readSheetLive(token, SHEET_ID, `'${TABS.ATTENDANCE}'!A:B`);
@@ -613,11 +619,14 @@ async function batchImportStudents(deps: Readonly<{
     // Clear Google Sheets read cache
     clearSheetReadCache(SHEET_ID);
 
-    // Reload from live sheet so all indices, formulas, and data are 100% verified and retained
-    const freshRows = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
-    const freshData = freshRows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(s => s.name.trim());
-    setStudents(freshData);
-    setFiltered(freshData);
+    // Reload from live sheet so all indices, formulas, and data are 100% verified and retained.
+    // A failure here must not undo the already-persisted import or the optimistic update above.
+    try {
+      const freshRows = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
+      const freshData = freshRows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(s => s.name.trim());
+      setStudents(freshData);
+      setFiltered(freshData);
+    } catch { /* optimistic students already reflect what was saved; reconciliation will retry on next sync */ }
 
     void recordAudit(token, 'CREATE', 'Students', `Imported ${filteredToAppend.length} students from Excel/CSV`, coachName).catch(() => undefined);
     toast.success(`Successfully saved ${filteredToAppend.length} student${filteredToAppend.length === 1 ? '' : 's'} to Google Sheets!`);

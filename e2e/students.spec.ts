@@ -198,3 +198,40 @@ test('imports students from spreadsheet, commits to Sheets, and retains on refre
   await page.getByRole('button', { name: 'Save Changes' }).click();
   await expect(page.getByText(/changes were updated successfully/i)).toBeVisible();
 });
+
+test('shows imported students immediately even if the post-import reconciliation read fails', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+
+  const csvContent = [
+    'Full Name,DOB,Grade / School,Batch,Parent Name,Parent Phone,TNSCA ID,Classical Rating',
+    'Kiran Das,2015-01-10,4th,Beginner,Meera Das,9876500333,TN600,1100',
+  ].join('\n');
+
+  const fileInput = page.locator('input[type="file"]');
+  await fileInput.setInputFiles({
+    name: 'one_batch.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csvContent),
+  });
+  await expect(page.getByText(/Import Students \(1 found\)/i)).toBeVisible();
+
+  // Simulate a broken/slow network on the post-import reconciliation read (the GET issued right
+  // after the append succeeds). The already-saved import must still show up immediately.
+  let failNextStudentsListRead = true;
+  await page.route('https://sheets.googleapis.com/**', async route => {
+    const request = route.request();
+    const url = request.url();
+    if (failNextStudentsListRead && request.method() === 'GET' && url.includes('Students') && url.includes('A%3AAG')) {
+      failNextStudentsListRead = false;
+      await route.abort('failed');
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.getByRole('button', { name: /Import 1 Students to Academy/i }).click();
+
+  await expect(page.getByText(/Successfully saved 1 student/i)).toBeVisible();
+  await expect(page.getByText('Kiran Das', { exact: true })).toBeVisible();
+  expect(sheets.workbook['Students & Parents'].some(row => row[0] === 'Kiran Das')).toBe(true);
+});
