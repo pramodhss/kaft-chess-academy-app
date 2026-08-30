@@ -20,8 +20,9 @@ describe('readSheet', () => {
 
   it('invalidates cached reads after a successful mutation', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, options) => {
-      if ((options?.method ?? 'GET') === 'POST') {
-        return new Response(JSON.stringify({ updates: { updatedRange: "'Students'!A2:A2" } }), { status: 200 });
+      const method = options?.method ?? 'GET';
+      if (method === 'PUT') {
+        return new Response(JSON.stringify({ updatedRange: "'Students'!A2:A2" }), { status: 200 });
       }
       return new Response(JSON.stringify({ values: [['Aarav']] }), { status: 200 });
     });
@@ -30,7 +31,7 @@ describe('readSheet', () => {
     await appendRows('token', 'sheet-id', "'Students'!A:A", [['Diya']]);
     await readSheet('token', 'sheet-id', "'Students'!A:A");
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 

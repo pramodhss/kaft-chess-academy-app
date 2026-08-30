@@ -146,13 +146,29 @@ export async function writeRange(token: string, sheetId: string, range: string, 
     { method: 'PUT', body: JSON.stringify({ range, majorDimension: 'ROWS', values }) });
 }
 
+function parseColumnRange(range: string): { sheet: string; startColumn: string; endColumn: string } {
+  const bangIndex = range.lastIndexOf('!');
+  const sheet = (bangIndex >= 0 ? range.slice(0, bangIndex) : range).replace(/^'|'$/g, '').replace(/''/g, "'");
+  const cells = bangIndex >= 0 ? range.slice(bangIndex + 1) : 'A:A';
+  const [start, end = start] = cells.split(':');
+  const startColumn = /^[A-Z]+/.exec(start.toUpperCase())?.[0] ?? 'A';
+  const endColumn = /^[A-Z]+/.exec(end.toUpperCase())?.[0] ?? startColumn;
+  return { sheet, startColumn, endColumn };
+}
+
+// Google's values:append anchors to whatever "table" it detects in the given range, which can
+// silently land new rows in the wrong columns on sheets with stray data far to the right (this
+// happened in production and made imported rows invisible). Compute the true next empty row from
+// the anchor column ourselves and write there directly so placement is always deterministic.
 export async function appendRows(token: string, sheetId: string, range: string, rows: SheetValue[][]): Promise<number> {
-  const data = await apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    { method: 'POST', body: JSON.stringify({ values: rows }) });
-  const updatedRange = data.updates?.updatedRange;
-  const rowMatch = typeof updatedRange === 'string' ? /![A-Z]+(\d+)(?::[A-Z]+\d+)?$/.exec(updatedRange) : null;
-  if (!rowMatch) throw new Error('Sheets API append response did not include the saved row.');
-  return Number(rowMatch[1]);
+  const { sheet, startColumn, endColumn } = parseColumnRange(range);
+  const quotedSheet = `'${sheet.replace(/'/g, "''")}'`;
+  const existing = await apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(`${quotedSheet}!${startColumn}:${startColumn}`)}?valueRenderOption=FORMATTED_VALUE`);
+  const nextRow = (existing.values?.length ?? 0) + 1;
+  const targetRange = `${quotedSheet}!${startColumn}${nextRow}:${endColumn}${nextRow + rows.length - 1}`;
+  await apiCall(token, `${API}/${sheetId}/values/${encodeURIComponent(targetRange)}?valueInputOption=USER_ENTERED`,
+    { method: 'PUT', body: JSON.stringify({ range: targetRange, majorDimension: 'ROWS', values: rows }) });
+  return nextRow;
 }
 
 export async function batchWrite(token: string, sheetId: string, updates: { range: string; value: SheetValue }[]) {

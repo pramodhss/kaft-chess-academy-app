@@ -70,7 +70,7 @@ test('migrates legacy timetable and manages weekly classes shown on Dashboard', 
   page.once('dialog', confirmation => confirmation.accept());
   await page.getByRole('button', { name: 'Remove Beginner A class' }).click();
   await expect(page.getByRole('heading', { name: 'Beginner A' })).toHaveCount(0);
-  expect(sheets.writes.some(write => write.operation === 'append' && write.range.includes('Timetable'))).toBe(true);
+  expect(sheets.writes.some(write => write.operation === 'update' && write.range.includes('Timetable'))).toBe(true);
   expect(sheets.writes.some(write => write.operation === 'update' && /Timetable.*A3:M3/.test(write.range))).toBe(true);
   expect(sheets.writes.some(write => write.operation === 'clear' && /Timetable.*A3:M3/.test(write.range))).toBe(true);
 });
