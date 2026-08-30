@@ -47,14 +47,25 @@ function normalizePhone(raw: unknown, defaultSuffix: number): string {
   return `98401${String(10000 + defaultSuffix).slice(1)}`;
 }
 
-function normalizeName(raw: unknown, parentName: string, index: number): string {
+function normalizeName(raw: unknown, parentName: string, index: number, seenNames: Set<string>): string {
   let name = cleanString(raw);
   name = name.replace(/\.\.\.$|\.\.\s*\/.*$|\[Unclear\]/g, '').trim();
   if (!name || name.length < 2) {
-    if (parentName) return `Student ${parentName}`;
-    return `Student ${index + 1}`;
+    if (parentName && parentName !== 'Parent') name = `Student ${parentName}`;
+    else name = `Student ${index + 1}`;
   }
-  return name;
+  let uniqueName = name;
+  let counter = 1;
+  while (seenNames.has(uniqueName.toLowerCase())) {
+    if (parentName && parentName !== 'Parent' && !uniqueName.includes(parentName)) {
+      uniqueName = `${name} ${parentName}`;
+    } else {
+      counter += 1;
+      uniqueName = `${name} (${counter})`;
+    }
+  }
+  seenNames.add(uniqueName.toLowerCase());
+  return uniqueName;
 }
 
 export async function parseExcelOrCsvFile(file: File | Blob | ArrayBuffer | Uint8Array, coachName: string = 'Coach'): Promise<FormData[]> {
@@ -87,6 +98,8 @@ export async function parseExcelOrCsvFile(file: File | Blob | ArrayBuffer | Uint
     ? XLSX.utils.sheet_to_json(workbook.Sheets[ratingsSheetName], { defval: '' })
     : [];
 
+  const seenNames = new Set<string>();
+
   return rows.map((row, index) => {
     // Look for column keys flexibly
     const findKey = (...patterns: RegExp[]) => {
@@ -98,7 +111,7 @@ export async function parseExcelOrCsvFile(file: File | Blob | ArrayBuffer | Uint
     };
 
     const parentName = cleanString(findKey(/parent/i, /father/i, /guardian/i)) || 'Parent';
-    const name = normalizeName(findKey(/full\s*name/i, /^name$/i, /student/i), parentName, index);
+    const name = normalizeName(findKey(/full\s*name/i, /^name$/i, /student/i), parentName, index, seenNames);
     const dob = normalizeDate(findKey(/dob/i, /birth/i, /date/i));
     const phone = normalizePhone(findKey(/contact/i, /phone/i, /mobile/i, /whatsapp/i), index);
     const tnscaId = cleanString(findKey(/tnsca/i));

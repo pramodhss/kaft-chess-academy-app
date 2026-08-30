@@ -32,4 +32,24 @@ describe('parseExcelOrCsvFile', () => {
     expect(results[2].name).toBe('Student Rajkumar');
     expect(results[2].dob).toBe('2012-04-21');
   });
+
+  it('handles duplicate student names in imported files by disambiguating with parent or index', async () => {
+    const wb = XLSX.utils.book_new();
+    const studentData = [
+      ['Name', 'Parent Name', 'Contact Number', 'DOB'],
+      ['Ashika', 'Senthilkumar', '7539 35723', '16/11/2012'],
+      ['Ashika', 'Shanmugam', '868899562', '11/06/2014'],
+      ['[Unclear]', 'Sathyanarayanan', '9607819952', '18/01/2012'],
+      ['[Unclear]', 'Sathyanarayanan', '9607819952', '02/04/2014'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(studentData);
+    XLSX.utils.book_append_sheet(wb, ws, 'Student Details');
+    const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const results = await parseExcelOrCsvFile(buffer, 'Coach Meera');
+
+    expect(results).toHaveLength(4);
+    const names = results.map(r => r.name);
+    const uniqueNames = new Set(names.map(n => n.toLowerCase()));
+    expect(uniqueNames.size).toBe(4);
+  });
 });

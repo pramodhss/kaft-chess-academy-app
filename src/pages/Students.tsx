@@ -447,6 +447,7 @@ async function addStudent(deps: Readonly<{
       { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
     );
     setStudents(prev => [...prev, formToStudent(form, savedRow)]);
+    clearSheetReadCache(SHEET_ID);
     void recordAudit(token, 'CREATE', 'Students', form.name, `Row ${savedRow}`).catch(() => undefined);
     setShowAdd(false);
     setForm({ ...EMPTY });
@@ -515,16 +516,8 @@ async function editStudent(deps: Readonly<{
       { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
       { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
     );
+    clearSheetReadCache(SHEET_ID);
     const updated = formToStudent(mergedForm, row, currentStudent);
-    const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
-    const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
-    if (!sameStudentForm(studentToForm(confirmed), studentToForm(updated))) {
-      setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
-      setEditMode(false);
-      setSelected(confirmed);
-      toast.error('Another update changed this student at the same time. The latest Sheet values were loaded; review before editing again.');
-      return;
-    }
     setStudents(prev => prev.map(student => student.rowIndex === row ? updated : student));
     setEditMode(false);
     setSelected(updated);
@@ -556,6 +549,7 @@ async function deleteStudent(deps: Readonly<{
       return;
     }
     await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
+    clearSheetReadCache(SHEET_ID);
     setStudents(prev => prev.filter(student => student.rowIndex !== row));
     void recordAudit(token, 'DELETE', 'Students', selected.name, `Row ${row}`).catch(() => undefined);
     setSelected(null);
