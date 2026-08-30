@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { CalendarDays, CalendarSearch, Check, ChevronLeft, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, CalendarSearch, Check, ChevronLeft, ChevronRight, Copy, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { readSheet, readSheetUnformatted, batchWrite, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
+import { readSheet, readSheetUnformatted, batchWrite, clearSheetReadCache, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
 import { reconcileAttendanceRoster } from '../lib/studentSync';
 import { useCoachName } from '../hooks/useCoachName';
 import type { SheetValue } from '../lib/sheets';
@@ -82,6 +82,7 @@ export function Attendance() {
   const [addingDate, setAddingDate] = useState(false);
   const [deletingDate, setDeletingDate] = useState(false);
   const [error, setError] = useState('');
+  const [syncing, setSyncing] = useState(false);
   const coachName = savedCoachName || 'Coach';
   const online = useOnline();
 
@@ -151,6 +152,16 @@ export function Attendance() {
     const attendanceDate = attendanceDates[selectedIdx];
     if (attendanceDate) loadDate(attendanceDate);
   }, [attendanceDates, loadDate, selectedIdx]);
+
+  // Sheets reads are cached briefly for performance, so another coach's edits
+  // may not appear immediately — this forces a fresh fetch on demand.
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    const attendanceDate = attendanceDates[selectedIdx];
+    if (!attendanceDate) return;
+    setSyncing(true);
+    void loadDate(attendanceDate).finally(() => setSyncing(false));
+  };
 
   /* changeDate(idx) removed — goPrev/goNext are the only navigation paths */
 
@@ -351,9 +362,13 @@ export function Attendance() {
           {!saving && <Check size={15} aria-hidden="true" />}{saving ? 'Saving…' : `Save ${dirty.size}`}
         </button>
       ) : (
-        <button type="button" onClick={() => setShowAddDate(true)} className="icon-button-add" aria-label="Add class date" title="Add a new class date">
-          <Plus size={18} />
-        </button>
+        <>
+          <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+            className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+          <button type="button" onClick={() => setShowAddDate(true)} className="icon-button-add" aria-label="Add class date" title="Add a new class date">
+            <Plus size={18} />
+          </button>
+        </>
       )
     }>
       <div className="attendance-workspace flex flex-col h-full">

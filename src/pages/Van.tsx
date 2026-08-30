@@ -20,6 +20,10 @@ interface RosterChoice { playing: boolean; feePaid: boolean; vanRequired: boolea
 
 function newTournamentId() { return `TRN-${crypto.randomUUID().slice(0, 8).toUpperCase()}`; }
 function sameTournament(left: ManagedTournament, right: ManagedTournament) { return JSON.stringify(tournamentValues(left)) === JSON.stringify(tournamentValues(right)); }
+function saveWeeklyButtonLabel(saving: boolean, alreadySaved: boolean): string {
+  if (saving) return 'Saving...';
+  return alreadySaved ? 'Saved' : 'Save result';
+}
 function formattedDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'Date not set';
   return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
@@ -332,7 +336,7 @@ export function Van() {
             <div className="weekly-result-title"><div className="min-w-0"><p className="section-label">Results ready</p><h3>{weeklyResult.name}</h3><p>{[weeklyResult.format, weeklyResult.variant, weeklyResult.timeControl].filter(Boolean).join(' | ')}</p></div><span className="badge-green">Final</span></div>
             <dl className="weekly-stat-grid"><div><dt>Players</dt><dd>{weeklyResult.playerCount || '-'}</dd></div><div><dt>Rounds</dt><dd>{weeklyResult.rounds || '-'}</dd></div><div><dt>Organizer</dt><dd>{weeklyResult.organizer || '-'}</dd></div></dl>
             <div className="weekly-standings"><div className="weekly-standings-heading"><h4>Top 5 standings</h4><span>Final points</span></div>{weeklyResult.standings.map(player => <div key={`${player.rank}-${player.playerName}`} className="weekly-standing-row"><span className="weekly-place">{({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[player.rank] ?? player.rank}</span><span className="truncate">{player.playerName}</span><strong>{player.score || '-'}{player.score ? ' pts' : ''}</strong></div>)}</div>
-            <div className="weekly-result-actions"><p>{weeklyResultAlreadySaved ? 'This result is saved and cannot be edited.' : 'Save this final result to the academy record.'}</p><div><button type="button" onClick={copyWeeklyMessage} className="secondary-action"><Copy size={15} /> Copy WhatsApp text</button><button type="button" onClick={() => void saveWeeklyTournament()} disabled={saving || weeklyResultAlreadySaved} className="primary-action"><Save size={15} />{saving ? 'Saving...' : weeklyResultAlreadySaved ? 'Saved' : 'Save result'}</button></div></div>
+            <div className="weekly-result-actions"><p>{weeklyResultAlreadySaved ? 'This result is saved and cannot be edited.' : 'Save this final result to the academy record.'}</p><div><button type="button" onClick={copyWeeklyMessage} className="secondary-action"><Copy size={15} /> Copy WhatsApp text</button><button type="button" onClick={() => void saveWeeklyTournament()} disabled={saving || weeklyResultAlreadySaved} className="primary-action"><Save size={15} />{saveWeeklyButtonLabel(saving, weeklyResultAlreadySaved)}</button></div></div>
           </div>}
         </section>
         {savedWeeklyResults.length > 0 && <section className="weekly-history" aria-labelledby="saved-weekly-title">

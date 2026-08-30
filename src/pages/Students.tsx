@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, Trash2 } from 'lucide-react';import { Layout } from '../components/Layout';
+import { Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheetColumns, writeRange } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, clearSheetRange, clearSheetReadCache, ensureSheetColumns, writeRange } from '../lib/sheets';
 import { isStudentNameReserved, syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, DEFAULT_LEVELS, loadStudentOptions } from '../lib/studentOptions';
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
-import { rowToSavedWeeklyOnlineTournament, weeklyTournamentSource, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
+import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
+import { matchOnlineTournamentResults, ordinal } from '../lib/onlineTournamentMatch';
 import {
   dateValidationError,
   digitsOnly,
@@ -343,6 +344,206 @@ function currentMonthKey() {
 // run schema migration at most once per token (session) to avoid an extra live read on every visit
 const schemaCheckedForToken = new Set<string>();
 
+type ToastApi = ReturnType<typeof useToast>;
+type StudentsSetter = React.Dispatch<React.SetStateAction<Student[]>>;
+
+async function loadStudents(deps: Readonly<{
+  token: string | null; logout: () => void;
+  setLoading: (value: boolean) => void; setError: (value: string) => void;
+  setStudents: StudentsSetter; setFiltered: StudentsSetter;
+  setBatches: (value: string[]) => void; setLevels: (value: string[]) => void;
+  setTournamentRegistrations: (value: TournamentRegistration[]) => void;
+  setWeeklyResults: (value: SavedWeeklyOnlineTournament[]) => void;
+}>) {
+  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setTournamentRegistrations, setWeeklyResults } = deps;
+  if (!token) return;
+  setLoading(true); setError('');
+  try {
+    if (navigator.onLine && !schemaCheckedForToken.has(token)) {
+      await ensureStudentSchema(token);
+      schemaCheckedForToken.add(token);
+    }
+    const [rows, options, registrationRows, weeklyRows] = await Promise.all([
+      loadStudentRows(token),
+      loadStudentOptions(token, SHEET_ID),
+      readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
+      readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`).catch(() => []),
+    ]);
+    const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(student => student.name.trim());
+    setStudents(data); setFiltered(data);
+    setBatches(options.batches.values);
+    setLevels(options.levels.values);
+    setTournamentRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
+    setWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
+  } catch(e:any) {
+    if(e.message==='TOKEN_EXPIRED'){logout();return;}
+    setError(e.message);
+  } finally { setLoading(false); }
+}
+
+async function addStudent(deps: Readonly<{
+  token: string | null; form: FormData; toast: ToastApi;
+  setSaving: (value: boolean) => void; setStudents: StudentsSetter;
+  setShowAdd: (value: boolean) => void; setForm: (value: FormData) => void;
+}>) {
+  const { token, form, toast, setSaving, setStudents, setShowAdd, setForm } = deps;
+  if (!token) return;
+  const validationError = formValidationError(form);
+  if (validationError) { toast.error(validationError); return; }
+  setSaving(true);
+  let rowIndex: number | null = null;
+  try {
+    const currentNames = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`);
+    if (currentNames.slice(1).some(row => row[0]?.trim().toLocaleLowerCase() === form.name.trim().toLocaleLowerCase())) {
+      toast.error('A student with this name already exists. Use a distinct name before saving.');
+      return;
+    }
+    if (await isStudentNameReserved(token, SHEET_ID, form.name)) {
+      toast.error('This name belongs to retained student history. Use a distinct name before saving.');
+      return;
+    }
+    await ensureStudentSchema(token);
+    rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, [[
+      form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
+      form.gender, form.grade, form.batch, form.level,
+      form.joiningDate, form.status, form.parent1Name, phoneForSheet(form.parent1Phone),
+      phoneForSheet(form.parent1WhatsApp), form.parent1Email, form.parent2Name, phoneForSheet(form.parent2Phone),
+      form.emergencyContact, phoneForSheet(form.emergencyPhone), form.address, form.photoConsent,
+      '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
+      form.notes,
+      form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
+      form.ratingClassical, form.ratingRapid, form.ratingBlitz, form.coachName,
+      form.chessComUsername.trim(), form.lichessUsername.trim(), form.photoUrl,
+    ]]);
+    await confirmUniqueStudentAppend(token, form.name, rowIndex, () => { rowIndex = null; });
+    const savedRow = rowIndex;
+    const values = studentRowValues(form, savedRow);
+    const attendanceSynced = await syncStudentProfile(
+      token,
+      SHEET_ID,
+      `'${TABS.STUDENTS}'!A${savedRow}:AG${savedRow}`,
+      values,
+      { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
+      { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
+    );
+    setStudents(prev => [...prev, formToStudent(form, savedRow)]);
+    void recordAudit(token, 'CREATE', 'Students', form.name, `Row ${savedRow}`).catch(() => undefined);
+    setShowAdd(false);
+    setForm({ ...EMPTY });
+    if (attendanceSynced) toast.success('Student added successfully. The new profile is ready.');
+    else toast.error('Student was saved, but Attendance could not update. Open Attendance while online to retry.');
+  } catch(e:any) {
+    if (rowIndex !== null) {
+      setStudents(prev => prev.some(student => student.rowIndex === rowIndex)
+        ? prev
+        : [...prev, formToStudent(form, rowIndex!)]);
+      setShowAdd(false);
+      setForm({ ...EMPTY });
+      toast.error('Student was saved, but some linked sheets could not update. Open Attendance while online to retry.');
+      return;
+    }
+    toast.error('Save failed: '+e.message);
+  }
+  finally { setSaving(false); }
+}
+
+async function editStudent(deps: Readonly<{
+  token: string | null; selected: Student | null; form: FormData; toast: ToastApi;
+  setSaving: (value: boolean) => void; setStudents: StudentsSetter; setForm: (value: FormData) => void;
+  setSelected: (value: Student | null) => void; setEditMode: (value: boolean) => void;
+}>) {
+  const { token, selected, form, toast, setSaving, setStudents, setForm, setSelected, setEditMode } = deps;
+  if (!token || !selected) return;
+  const validationError = formValidationError(form);
+  if (validationError) { toast.error(validationError); return; }
+  setSaving(true);
+  try {
+    const row = selected.rowIndex; const tab = TABS.STUDENTS;
+    const [currentRows, currentNames] = await Promise.all([
+      readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`),
+      readSheetLive(token, SHEET_ID, `'${tab}'!A:A`),
+    ]);
+    const currentStudent = rowToStudent(currentRows[0] ?? [], row);
+    const { merged: mergedForm, conflictingFields } = mergeStudentEdits(
+      studentToForm(selected),
+      form,
+      studentToForm(currentStudent),
+    );
+    if (conflictingFields.length > 0) {
+      toast.info('The same student fields were changed elsewhere. Latest values were loaded; review and try again.');
+      setForm(studentToForm(currentStudent));
+      setStudents(prev => prev.map(student => student.rowIndex === row ? currentStudent : student));
+      setSelected(currentStudent);
+      return;
+    }
+    if (currentNames.slice(1).some((nameRow, index) => index + 2 !== row
+      && nameRow[0]?.trim().toLocaleLowerCase() === mergedForm.name.trim().toLocaleLowerCase())) {
+      toast.error('A student with this name already exists. Use a distinct name before saving.');
+      return;
+    }
+    if (currentStudent.name.trim().toLocaleLowerCase() !== mergedForm.name.trim().toLocaleLowerCase()
+      && await isStudentNameReserved(token, SHEET_ID, mergedForm.name)) {
+      toast.error('This name belongs to retained student history. Use a distinct name before saving.');
+      return;
+    }
+    await ensureStudentSchema(token);
+    const attendanceSynced = await syncStudentProfile(
+      token,
+      SHEET_ID,
+      `'${tab}'!A${row}:AG${row}`,
+      studentRowValues(mergedForm, row),
+      { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
+      { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
+    );
+    const updated = formToStudent(mergedForm, row, currentStudent);
+    const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
+    const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
+    if (!sameStudentForm(studentToForm(confirmed), studentToForm(updated))) {
+      setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
+      setEditMode(false);
+      setSelected(confirmed);
+      toast.error('Another update changed this student at the same time. The latest Sheet values were loaded; review before editing again.');
+      return;
+    }
+    setStudents(prev => prev.map(student => student.rowIndex === row ? updated : student));
+    setEditMode(false);
+    setSelected(updated);
+    void recordAudit(token, 'UPDATE', 'Students', updated.name, `Row ${row}`).catch(() => undefined);
+    if (attendanceSynced) toast.success(`${updated.name}'s changes were updated successfully.`);
+    else toast.error(`${updated.name}'s profile was updated, but Attendance could not update. Open Attendance while online to retry.`);
+  } catch(e:any) { toast.error('Save failed: '+e.message); }
+  finally { setSaving(false); }
+}
+
+async function deleteStudent(deps: Readonly<{
+  token: string | null; selected: Student | null; toast: ToastApi;
+  setDeleting: (value: boolean) => void; setStudents: StudentsSetter; setSelected: (value: Student | null) => void;
+}>) {
+  const { token, selected, toast, setDeleting, setStudents, setSelected } = deps;
+  if (!token || !selected) return;
+  const confirmed = window.confirm(
+    `Remove ${selected.name}? Their student profile will be removed, but historical fees, attendance, and tournament records will be retained.`,
+  );
+  if (!confirmed) return;
+  setDeleting(true);
+  try {
+    const row = selected.rowIndex;
+    const tab = TABS.STUDENTS;
+    const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
+    const currentStudent = rowToStudent(currentRows[0] ?? [], row);
+    if (!sameStudentForm(studentToForm(currentStudent), studentToForm(selected))) {
+      toast.info('This student was changed on another device. Reload the list before removing it.');
+      return;
+    }
+    await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
+    setStudents(prev => prev.filter(student => student.rowIndex !== row));
+    void recordAudit(token, 'DELETE', 'Students', selected.name, `Row ${row}`).catch(() => undefined);
+    setSelected(null);
+    toast.success(`${selected.name} was removed from Students.`);
+  } catch (e: any) { toast.error('Remove failed: ' + e.message); }
+  finally { setDeleting(false); }
+}
+
 export function Students() {
   const { token, logout } = useAuth();
   const { coachName } = useCoachName();
@@ -365,33 +566,13 @@ export function Students() {
   const [levels, setLevels] = useState([...DEFAULT_LEVELS]);
   const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
   const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('info');
+  const [syncing, setSyncing] = useState(false);
   const toast = useToast();
 
-  const load = async () => {
-    if (!token) return;
-    setLoading(true); setError('');
-    try {
-      if (navigator.onLine && !schemaCheckedForToken.has(token)) {
-        await ensureStudentSchema(token);
-        schemaCheckedForToken.add(token);
-      }
-      const [rows, options, registrationRows, weeklyRows] = await Promise.all([
-        loadStudentRows(token),
-        loadStudentOptions(token, SHEET_ID),
-        readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
-        readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`).catch(() => []),
-      ]);
-      const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(student => student.name.trim());
-      setStudents(data); setFiltered(data);
-      setBatches(options.batches.values);
-      setLevels(options.levels.values);
-      setTournamentRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
-      setWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
-    } catch(e:any) {
-      if(e.message==='TOKEN_EXPIRED'){logout();return;}
-      setError(e.message);
-    } finally { setLoading(false); }
-  };
+  const load = () => loadStudents({
+    token, logout, setLoading, setError, setStudents, setFiltered,
+    setBatches, setLevels, setTournamentRegistrations, setWeeklyResults,
+  });
 
   useEffect(() => { load(); }, [token]);
   useEffect(() => {
@@ -403,153 +584,18 @@ export function Students() {
     ));
   }, [search, students]);
 
-  const handleAdd = async () => {
-    if (!token) return;
-    const validationError = formValidationError(form);
-    if (validationError) { toast.error(validationError); return; }
-    setSaving(true);
-    let rowIndex: number | null = null;
-    try {
-      const currentNames = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`);
-      if (currentNames.slice(1).some(row => row[0]?.trim().toLocaleLowerCase() === form.name.trim().toLocaleLowerCase())) {
-        toast.error('A student with this name already exists. Use a distinct name before saving.');
-        return;
-      }
-      if (await isStudentNameReserved(token, SHEET_ID, form.name)) {
-        toast.error('This name belongs to retained student history. Use a distinct name before saving.');
-        return;
-      }
-      await ensureStudentSchema(token);
-      rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, [[
-        form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
-        form.gender, form.grade, form.batch, form.level,
-        form.joiningDate, form.status, form.parent1Name, phoneForSheet(form.parent1Phone),
-        phoneForSheet(form.parent1WhatsApp), form.parent1Email, form.parent2Name, phoneForSheet(form.parent2Phone),
-        form.emergencyContact, phoneForSheet(form.emergencyPhone), form.address, form.photoConsent,
-        '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
-        form.notes,
-        form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
-        form.ratingClassical, form.ratingRapid, form.ratingBlitz, form.coachName,
-        form.chessComUsername.trim(), form.lichessUsername.trim(), form.photoUrl,
-      ]]);
-      await confirmUniqueStudentAppend(token, form.name, rowIndex, () => { rowIndex = null; });
-      const savedRow = rowIndex;
-      const values = studentRowValues(form, savedRow);
-      const attendanceSynced = await syncStudentProfile(
-        token,
-        SHEET_ID,
-        `'${TABS.STUDENTS}'!A${savedRow}:AG${savedRow}`,
-        values,
-        { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
-        { name: form.name, batch: form.batch, level: form.level, parentName: form.parent1Name },
-      );
-      setStudents(prev => [...prev, formToStudent(form, savedRow)]);
-      void recordAudit(token, 'CREATE', 'Students', form.name, `Row ${savedRow}`).catch(() => undefined);
-      setShowAdd(false);
-      setForm({ ...EMPTY });
-      if (attendanceSynced) toast.success('Student added successfully. The new profile is ready.');
-      else toast.error('Student was saved, but Attendance could not update. Open Attendance while online to retry.');
-    } catch(e:any) {
-      if (rowIndex !== null) {
-        setStudents(prev => prev.some(student => student.rowIndex === rowIndex)
-          ? prev
-          : [...prev, formToStudent(form, rowIndex!)]);
-        setShowAdd(false);
-        setForm({ ...EMPTY });
-        toast.error('Student was saved, but some linked sheets could not update. Open Attendance while online to retry.');
-        return;
-      }
-      toast.error('Save failed: '+e.message);
-    }
-    finally { setSaving(false); }
-  };
+  const handleAdd = () => addStudent({ token, form, toast, setSaving, setStudents, setShowAdd, setForm });
 
-  const handleEdit = async () => {
-    if (!token || !selected) return;
-    const validationError = formValidationError(form);
-    if (validationError) { toast.error(validationError); return; }
-    setSaving(true);
-    try {
-      const row = selected.rowIndex; const tab = TABS.STUDENTS;
-      const [currentRows, currentNames] = await Promise.all([
-        readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`),
-        readSheetLive(token, SHEET_ID, `'${tab}'!A:A`),
-      ]);
-      const currentStudent = rowToStudent(currentRows[0] ?? [], row);
-      const { merged: mergedForm, conflictingFields } = mergeStudentEdits(
-        studentToForm(selected),
-        form,
-        studentToForm(currentStudent),
-      );
-      if (conflictingFields.length > 0) {
-        toast.info('The same student fields were changed elsewhere. Latest values were loaded; review and try again.');
-        setForm(studentToForm(currentStudent));
-        setStudents(prev => prev.map(student => student.rowIndex === row ? currentStudent : student));
-        setSelected(currentStudent);
-        return;
-      }
-      if (currentNames.slice(1).some((nameRow, index) => index + 2 !== row
-        && nameRow[0]?.trim().toLocaleLowerCase() === mergedForm.name.trim().toLocaleLowerCase())) {
-        toast.error('A student with this name already exists. Use a distinct name before saving.');
-        return;
-      }
-      if (currentStudent.name.trim().toLocaleLowerCase() !== mergedForm.name.trim().toLocaleLowerCase()
-        && await isStudentNameReserved(token, SHEET_ID, mergedForm.name)) {
-        toast.error('This name belongs to retained student history. Use a distinct name before saving.');
-        return;
-      }
-      await ensureStudentSchema(token);
-      const attendanceSynced = await syncStudentProfile(
-        token,
-        SHEET_ID,
-        `'${tab}'!A${row}:AG${row}`,
-        studentRowValues(mergedForm, row),
-        { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
-        { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
-      );
-      const updated = formToStudent(mergedForm, row, currentStudent);
-      const confirmedRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
-      const confirmed = rowToStudent(confirmedRows[0] ?? [], row);
-      if (!sameStudentForm(studentToForm(confirmed), studentToForm(updated))) {
-        setStudents(prev => prev.map(student => student.rowIndex === row ? confirmed : student));
-        setEditMode(false);
-        setSelected(confirmed);
-        toast.error('Another update changed this student at the same time. The latest Sheet values were loaded; review before editing again.');
-        return;
-      }
-      setStudents(prev => prev.map(student => student.rowIndex === row ? updated : student));
-      setEditMode(false);
-      setSelected(updated);
-      void recordAudit(token, 'UPDATE', 'Students', updated.name, `Row ${row}`).catch(() => undefined);
-      if (attendanceSynced) toast.success(`${updated.name}'s changes were updated successfully.`);
-      else toast.error(`${updated.name}'s profile was updated, but Attendance could not update. Open Attendance while online to retry.`);
-    } catch(e:any) { toast.error('Save failed: '+e.message); }
-    finally { setSaving(false); }
-  };
+  const handleEdit = () => editStudent({ token, selected, form, toast, setSaving, setStudents, setForm, setSelected, setEditMode });
 
-  const handleDelete = async () => {
-    if (!token || !selected) return;
-    const confirmed = window.confirm(
-      `Remove ${selected.name}? Their student profile will be removed, but historical fees, attendance, and tournament records will be retained.`,
-    );
-    if (!confirmed) return;
-    setDeleting(true);
-    try {
-      const row = selected.rowIndex;
-      const tab = TABS.STUDENTS;
-      const currentRows = await readSheetLive(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
-      const currentStudent = rowToStudent(currentRows[0] ?? [], row);
-      if (!sameStudentForm(studentToForm(currentStudent), studentToForm(selected))) {
-        toast.info('This student was changed on another device. Reload the list before removing it.');
-        return;
-      }
-      await clearSheetRange(token, SHEET_ID, `'${tab}'!A${row}:AG${row}`);
-      setStudents(prev => prev.filter(student => student.rowIndex !== row));
-      void recordAudit(token, 'DELETE', 'Students', selected.name, `Row ${row}`).catch(() => undefined);
-      setSelected(null);
-      toast.success(`${selected.name} was removed from Students.`);
-    } catch (e: any) { toast.error('Remove failed: ' + e.message); }
-    finally { setDeleting(false); }
+  const handleDelete = () => deleteStudent({ token, selected, toast, setDeleting, setStudents, setSelected });
+
+  // Sheets reads are cached briefly for performance, so another coach's edits
+  // may not appear immediately — this forces a fresh fetch on demand.
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    setSyncing(true);
+    void load().finally(() => setSyncing(false));
   };
 
   if (loading) return <Layout title="Students"><PageSkeleton /></Layout>;
@@ -734,17 +780,21 @@ export function Students() {
   // List view
   return (
     <Layout title="Students" action={
-      <button type="button" onClick={() => {
-        setForm({
-          ...EMPTY,
-          batch: batches[0] ?? '',
-          level: levels[0] ?? '',
-          coachName,
-        });
-        setShowAdd(true);
-      }}
-        aria-label="Add student"
-        className="icon-button-add"><Plus size={18} aria-hidden="true" /></button>
+      <>
+        <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+          className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+        <button type="button" onClick={() => {
+          setForm({
+            ...EMPTY,
+            batch: batches[0] ?? '',
+            level: levels[0] ?? '',
+            coachName,
+          });
+          setShowAdd(true);
+        }}
+          aria-label="Add student"
+          className="icon-button-add"><Plus size={18} aria-hidden="true" /></button>
+      </>
     }>
       <div className="students-workspace p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
@@ -982,12 +1032,6 @@ function RatingBox({ label, value }: Readonly<{ label: string; value: string }>)
     </div>
   );
 }
-function ordinal(rank: number): string {
-  const remainder = rank % 100;
-  if (remainder >= 11 && remainder <= 13) return `${rank}th`;
-  const suffix = ['th', 'st', 'nd', 'rd'][rank % 10] ?? 'th';
-  return `${rank}${suffix}`;
-}
 
 interface AttendanceItem { key: string; sortKey: string; summary: string; node: React.ReactNode }
 
@@ -1012,32 +1056,29 @@ function TournamentAttendance({ studentName, lichessUsername, chessComUsername, 
       ),
     }));
 
-  const lichess = lichessUsername.trim().toLocaleLowerCase();
-  const chessCom = chessComUsername.trim().toLocaleLowerCase();
-  const online: AttendanceItem[] = weeklyResults.flatMap(tournament => {
-    const source = weeklyTournamentSource(tournament.sourceUrl);
-    const username = source === 'chess.com' ? chessCom : lichess;
-    if (!username) return [];
-    const standing = tournament.standings.find(entry => entry.playerName.trim().toLocaleLowerCase() === username);
-    if (!standing) return [];
-    const dateValue = tournament.completedAt || tournament.startedAt;
-    const dateLabel = dateValue && !Number.isNaN(new Date(dateValue).getTime())
-      ? new Date(dateValue).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-      : 'Date not recorded';
-    return [{
-      key: `online-${tournament.rowIndex}`,
-      sortKey: dateValue,
-      summary: `• [Online · ${source === 'chess.com' ? 'Chess.com' : 'Lichess'}] ${tournament.name} – ${dateLabel} · Place ${ordinal(standing.rank)}${standing.score ? ` · ${standing.score} pts` : ''}`,
-      node: (
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5"><span className="badge-green">Online</span><span className="badge-gray">{source === 'chess.com' ? 'Chess.com' : 'Lichess'}</span><p className="text-sm font-semibold text-gray-900 truncate">{tournament.name}</p></div>
-            <p className="mt-1 text-xs text-gray-500">{dateLabel} · Place {ordinal(standing.rank)}{standing.score ? ` · ${standing.score} pts` : ''}</p>
+  const online: AttendanceItem[] = matchOnlineTournamentResults(weeklyResults, [{ name: studentName, lichessUsername, chessComUsername }])
+    .map(match => {
+      const tournament = match.tournament;
+      const dateValue = tournament.completedAt || tournament.startedAt;
+      const dateLabel = dateValue && !Number.isNaN(new Date(dateValue).getTime())
+        ? new Date(dateValue).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'Date not recorded';
+      const sourceLabel = match.source === 'chess.com' ? 'Chess.com' : 'Lichess';
+      const pointsSuffix = match.score ? ` · ${match.score} pts` : '';
+      return {
+        key: `online-${tournament.rowIndex}`,
+        sortKey: dateValue,
+        summary: `• [Online · ${sourceLabel}] ${tournament.name} – ${dateLabel} · Place ${ordinal(match.rank)}${pointsSuffix}`,
+        node: (
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5"><span className="badge-green">Online</span><span className="badge-gray">{sourceLabel}</span><p className="text-sm font-semibold text-gray-900 truncate">{tournament.name}</p></div>
+              <p className="mt-1 text-xs text-gray-500">{dateLabel} · Place {ordinal(match.rank)}{pointsSuffix}</p>
+            </div>
           </div>
-        </div>
-      ),
-    }];
-  });
+        ),
+      };
+    });
 
   const attended = [...offline, ...online].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
   const copyText = attended.length > 0

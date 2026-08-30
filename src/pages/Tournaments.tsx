@@ -6,6 +6,9 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetLive, appendRows, clearSheetRange } from '../lib/sheets';
+import { matchOnlineTournamentResults, ordinal, type MatchedOnlineResult, type OnlinePlayerDirectory } from '../lib/onlineTournamentMatch';
+import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
+import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { SHEET_ID, TABS } from '../config';
 import type { TournamentEntry } from '../types';
 
@@ -14,6 +17,8 @@ const MEDALS  = ['Gold','Silver','Bronze','Participation','Best Game','None'];
 const EMPTY_F = { studentName:'', month:'', tournamentName:'', type:'Internal', date:'', venue:'', rounds:'', wins:'', draws:'', losses:'', position:'', ratingBefore:'', ratingAfter:'', medal:'None', prize:'', coachNotes:'' };
 
 const MEDAL_ICON: Record<string, string> = { Gold:'🥇', Silver:'🥈', Bronze:'🥉', Participation:'🎖', 'Best Game':'⭐', None:'' };
+
+interface ResultItem { key: string; sortKey: string; copyText: string; entry: TournamentEntry | null; node: React.ReactNode }
 
 function entryCopyText(entry: TournamentEntry): string {
   const lines = [`*${entry.studentName} \u2013 ${entry.tournamentName}*`, `${entry.type} \u00b7 ${entry.date || 'Date not recorded'}`];
@@ -24,10 +29,103 @@ function entryCopyText(entry: TournamentEntry): string {
   return lines.join('\n');
 }
 
-function groupCopyText(title: string, entries: TournamentEntry[]): string {
-  if (entries.length === 0) return '';
-  return [`*${title}*`, ...entries.map(entry => `\u2022 ${entry.studentName} \u2013 ${entry.tournamentName} (${entry.date || entry.type})`)].join('\n');
+function groupCopyText(title: string, items: ResultItem[]): string {
+  if (items.length === 0) return '';
+  return [`*${title}*`, ...items.map(item => `\u2022 ${item.copyText.split('\n')[0].replace(/^\*|\*$/g, '')}`)].join('\n');
 }
+
+function manualResultItem(entry: TournamentEntry, deleting: number | null, removeEntry: (entry: TournamentEntry) => void): ResultItem {
+  return {
+    key: `manual-${entry.rowIndex}`,
+    sortKey: entry.date || entry.month,
+    copyText: entryCopyText(entry),
+    entry,
+    node: (
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <p className="font-semibold text-gray-900">{entry.studentName}</p>
+            <p className="text-sm text-navy font-medium">{entry.tournamentName}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{entry.type} · {entry.date}</p>
+          </div>
+          {MEDAL_ICON[entry.medal] && <span className="text-3xl ml-2">{MEDAL_ICON[entry.medal]}</span>}
+        </div>
+        <div className="flex gap-3 mt-2 text-xs text-gray-500">
+          {entry.position && <span>📍 Rank: <strong>{entry.position}</strong></span>}
+          {(entry.wins || entry.draws || entry.losses) && <span>W{entry.wins}/D{entry.draws}/L{entry.losses}</span>}
+          {entry.ratingChange && (
+            <span className={Number.parseFloat(entry.ratingChange) >= 0 ? 'text-green-600' : 'text-red-600'}>
+              Rating: {Number.parseFloat(entry.ratingChange) >= 0 ? '+' : ''}{entry.ratingChange}
+            </span>
+          )}
+        </div>
+        <div className="mt-3 flex justify-end gap-1.5">
+          <CopyButton text={entryCopyText(entry)} label={`Copy ${entry.tournamentName} result`} />
+          <button type="button" onClick={() => removeEntry(entry)} disabled={deleting === entry.rowIndex}
+            aria-label={`Remove ${entry.tournamentName} result`} title="Remove tournament result"
+            className="icon-button-danger">
+            <Trash2 size={15} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    ),
+  };
+}
+
+function autoOfflineItem(registration: TournamentRegistration): ResultItem {
+  const dateLabel = registration.tournamentDate || monthLabel(registration.month);
+  const copyText = `• [Offline · Auto-tracked] ${registration.studentName} – ${registration.tournamentName} (${dateLabel})`;
+  return {
+    key: `auto-offline-${registration.rowIndex}`,
+    sortKey: registration.tournamentDate || registration.month,
+    copyText,
+    entry: null,
+    node: (
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-1.5"><span className="badge-gray">Auto-tracked</span><p className="font-semibold text-gray-900">{registration.studentName}</p></div>
+            <p className="text-sm text-navy font-medium">{registration.tournamentName}</p>
+            <p className="text-xs text-gray-400 mt-0.5">Tournament event · {dateLabel}</p>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">Fee {registration.feePaid ? 'paid' : 'pending'}</p>
+        <div className="mt-3 flex justify-end"><CopyButton text={copyText} label={`Copy ${registration.studentName}'s result`} /></div>
+      </div>
+    ),
+  };
+}
+
+function autoOnlineItem(match: MatchedOnlineResult): ResultItem {
+  const tournament = match.tournament;
+  const dateValue = tournament.completedAt || tournament.startedAt;
+  const dateLabel = dateValue && !Number.isNaN(new Date(dateValue).getTime())
+    ? new Date(dateValue).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : 'Date not recorded';
+  const sourceLabel = match.source === 'chess.com' ? 'Chess.com' : 'Lichess';
+  const pointsSuffix = match.score ? ` · ${match.score} pts` : '';
+  const copyText = `• [Online · ${sourceLabel} · Auto-tracked] ${match.studentName} – ${tournament.name} (${dateLabel}) · Place ${ordinal(match.rank)}${pointsSuffix}`;
+  return {
+    key: `auto-online-${tournament.rowIndex}-${match.studentName}`,
+    sortKey: dateValue,
+    copyText,
+    entry: null,
+    node: (
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-1.5"><span className="badge-gray">Auto-tracked</span><p className="font-semibold text-gray-900">{match.studentName}</p></div>
+            <p className="text-sm text-navy font-medium">{tournament.name}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{sourceLabel} · {dateLabel}</p>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">Place {ordinal(match.rank)}{pointsSuffix}</p>
+        <div className="mt-3 flex justify-end"><CopyButton text={copyText} label={`Copy ${match.studentName}'s result`} /></div>
+      </div>
+    ),
+  };
+}
+
 
 function rowToEntry(row: string[], idx: number): TournamentEntry {
   return {
@@ -45,6 +143,9 @@ export function Tournaments() {
   const toast = useToast();
   const [entries, setEntries] = useState<TournamentEntry[]>([]);
   const [students, setStudents] = useState<string[]>([]);
+  const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayerDirectory[]>([]);
+  const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
+  const [weeklyResults, setWeeklyResults] = useState<SavedWeeklyOnlineTournament[]>([]);
   const [studentDetails, setStudentDetails] = useState<Map<string, { batch: string; level: string }>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,15 +158,22 @@ export function Tournaments() {
     if (!token) return;
     setLoading(true); setError('');
     try {
-      const [tRows, sRows] = await Promise.all([
+      const [tRows, sRows, registrationRows, weeklyRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
+        readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
+        readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`).catch(() => []),
       ]);
       setEntries(tRows.slice(1).map((row, index) => rowToEntry(row, index)).filter(entry => entry.studentName.trim()));
       setStudents(sRows.slice(1).map(r => r[0]).filter(Boolean));
       setStudentDetails(new Map(sRows.slice(1).filter(row => row[0]).map(row => [
         row[0], { batch: row[5] ?? '', level: row[6] ?? '' },
       ])));
+      setOnlinePlayers(sRows.slice(1).filter(row => row[0]).map(row => ({
+        name: row[0], chessComUsername: row[30] ?? '', lichessUsername: row[31] ?? '',
+      })));
+      setRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
+      setWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
     } catch (e: any) {
       if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
       setError(e.message);
@@ -125,8 +233,12 @@ export function Tournaments() {
 
   if (loading) return <Layout title="Tournaments" showBack><PageSkeleton /></Layout>;
 
-  const onlineEntries = entries.filter(e => e.type === 'Online');
-  const offlineEntries = entries.filter(e => e.type !== 'Online');
+  const manualOffline = entries.filter(e => e.type !== 'Online').map(entry => manualResultItem(entry, deleting, removeEntry));
+  const manualOnline = entries.filter(e => e.type === 'Online').map(entry => manualResultItem(entry, deleting, removeEntry));
+  const autoOffline = registrations.map(autoOfflineItem);
+  const autoOnline = matchOnlineTournamentResults(weeklyResults, onlinePlayers).map(autoOnlineItem);
+  const offlineItems = [...manualOffline, ...autoOffline].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
+  const onlineItems = [...manualOnline, ...autoOnline].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
 
   return (
     <Layout title="Tournaments" showBack action={
@@ -135,51 +247,21 @@ export function Tournaments() {
       <div className="p-4 space-y-4">
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
-        {entries.length === 0 && (
+        {offlineItems.length === 0 && onlineItems.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <p className="text-4xl mb-2">🏆</p>
             <p>No tournament results yet.</p>
           </div>
         )}
 
-        {([['Offline results', 'badge-blue', offlineEntries], ['Online results', 'badge-green', onlineEntries]] as const).map(([title, badgeClass, group]) =>
+        {([['Offline results', 'badge-blue', offlineItems], ['Online results', 'badge-green', onlineItems]] as const).map(([title, badgeClass, group]) =>
           group.length > 0 && (
             <section key={title} className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="section-label flex items-center gap-2"><span className={badgeClass}>{group.length}</span>{title}</h2>
                 <CopyButton text={groupCopyText(title, group)} label={`Copy ${title}`} />
               </div>
-              {group.map(e => (
-                <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{e.studentName}</p>
-                      <p className="text-sm text-navy font-medium">{e.tournamentName}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{e.type} · {e.date}</p>
-                    </div>
-                    {MEDAL_ICON[e.medal] && <span className="text-3xl ml-2">{MEDAL_ICON[e.medal]}</span>}
-                  </div>
-                  <div className="flex gap-3 mt-2 text-xs text-gray-500">
-                    {e.position && <span>📍 Rank: <strong>{e.position}</strong></span>}
-                    {(e.wins || e.draws || e.losses) && (
-                      <span>W{e.wins}/D{e.draws}/L{e.losses}</span>
-                    )}
-                    {e.ratingChange && (
-                      <span className={Number.parseFloat(e.ratingChange) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        Rating: {Number.parseFloat(e.ratingChange) >= 0 ? '+' : ''}{e.ratingChange}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-3 flex justify-end gap-1.5">
-                    <CopyButton text={entryCopyText(e)} label={`Copy ${e.tournamentName} result`} />
-                    <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
-                      aria-label={`Remove ${e.tournamentName} result`} title="Remove tournament result"
-                      className="icon-button-danger">
-                      <Trash2 size={15} aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+              {group.map(item => <div key={item.key}>{item.node}</div>)}
             </section>
           )
         )}

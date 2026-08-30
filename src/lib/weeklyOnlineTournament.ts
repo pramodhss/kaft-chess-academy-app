@@ -90,8 +90,7 @@ function lichessTournamentLink(sourceUrl: string): LichessTournamentLink {
 function chesscomTournamentId(sourceUrl: string): string {
   const path = new URL(sourceUrl.trim()).pathname.split('/').filter(Boolean);
   const tournamentIndex = path.indexOf('tournament');
-  const afterTournament = path.slice(tournamentIndex + 1).filter(segment => segment !== 'live');
-  const id = afterTournament[0];
+  const id = path.slice(tournamentIndex + 1).find(segment => segment !== 'live');
   if (!id) throw new Error('Paste a Chess.com tournament link.');
   return id;
 }
@@ -202,12 +201,36 @@ function timeControl(clock: unknown): string {
   return `${minutes}${increment}`;
 }
 
-export async function fetchWeeklyOnlineTournament(sourceUrl: string): Promise<WeeklyOnlineTournament> {
-  const source = weeklyTournamentSource(sourceUrl);
-  if (source === 'chess.com') return fetchChesscomTournament(sourceUrl);
-  if (source !== 'lichess') throw new Error('Weekly imports currently support completed Lichess or Chess.com tournament links.');
+function lichessName(payload: { fullName?: unknown; name?: unknown; id?: unknown }): string {
+  if (typeof payload.fullName === 'string') return payload.fullName;
+  if (typeof payload.name === 'string') return payload.name;
+  return typeof payload.id === 'string' ? payload.id : '';
+}
 
-  const tournament = lichessTournamentLink(sourceUrl);
+function lichessVariant(payload: { variant?: unknown }): string {
+  const variant = payload.variant;
+  if (variant && typeof variant === 'object' && typeof (variant as { name?: unknown }).name === 'string') return (variant as { name: string }).name;
+  if (typeof variant === 'string') return variant;
+  return 'Standard';
+}
+
+function lichessPlayerName(player: { name?: unknown; username?: unknown }): string {
+  if (typeof player.name === 'string') return player.name;
+  if (typeof player.username === 'string') return player.username;
+  return 'Unknown player';
+}
+
+function lichessPlayerScore(player: { score?: unknown; points?: unknown }): string {
+  if (typeof player.score === 'number') return String(player.score);
+  if (typeof player.points === 'number') return String(player.points);
+  return '';
+}
+
+function arenaPlayers(payload: { standing?: { players?: unknown } }): any[] {
+  return Array.isArray(payload.standing?.players) ? payload.standing.players : [];
+}
+
+async function fetchLichessTournamentPayload(tournament: LichessTournamentLink): Promise<any> {
   const endpoint = tournament.type === 'swiss' ? 'swiss' : 'tournament';
   let response: Response;
   try {
@@ -217,23 +240,28 @@ export async function fetchWeeklyOnlineTournament(sourceUrl: string): Promise<We
   } catch {
     throw new Error('Could not reach Lichess. Check your connection and try again.');
   }
-
   if (response.status === 404) throw new Error('Lichess could not find that tournament. Check that the event is public and the full link was copied.');
   if (!response.ok) throw new Error('Lichess could not load this tournament right now.');
+  return response.json();
+}
 
-  const payload = await response.json();
+export async function fetchWeeklyOnlineTournament(sourceUrl: string): Promise<WeeklyOnlineTournament> {
+  const source = weeklyTournamentSource(sourceUrl);
+  if (source === 'chess.com') return fetchChesscomTournament(sourceUrl);
+  if (source !== 'lichess') throw new Error('Weekly imports currently support completed Lichess or Chess.com tournament links.');
+
+  const tournament = lichessTournamentLink(sourceUrl);
+  const payload = await fetchLichessTournamentPayload(tournament);
   const completed = payload.isFinished === true || payload.finished === true || payload.status === 'finished';
   if (!completed) throw new Error('This tournament has not completed yet. Paste the link after it finishes.');
 
-  const players = tournament.type === 'swiss'
-    ? await fetchSwissStandings(tournament.id)
-    : (Array.isArray(payload.standing?.players) ? payload.standing.players : []);
+  const players = tournament.type === 'swiss' ? await fetchSwissStandings(tournament.id) : arenaPlayers(payload);
   if (players.length === 0) throw new Error('No final standings are available for this tournament.');
 
   return {
-    name: typeof payload.fullName === 'string' ? payload.fullName : (typeof payload.name === 'string' ? payload.name : payload.id),
+    name: lichessName(payload),
     format: tournament.type === 'swiss' ? 'Swiss' : 'Arena',
-    variant: typeof payload.variant?.name === 'string' ? payload.variant.name : (typeof payload.variant === 'string' ? payload.variant : 'Standard'),
+    variant: lichessVariant(payload),
     timeControl: timeControl(payload.clock),
     rounds: typeof payload.nbRounds === 'number' ? String(payload.nbRounds) : '',
     playerCount: typeof payload.nbPlayers === 'number' ? String(payload.nbPlayers) : '',
@@ -244,8 +272,8 @@ export async function fetchWeeklyOnlineTournament(sourceUrl: string): Promise<We
     sourceUrl: sourceUrl.trim(),
     standings: players.slice(0, 5).map((player: { rank?: number; name?: string; username?: string; score?: number; points?: number }, index: number) => ({
       rank: typeof player.rank === 'number' ? player.rank : index + 1,
-      playerName: typeof player.name === 'string' ? player.name : (typeof player.username === 'string' ? player.username : 'Unknown player'),
-      score: typeof player.score === 'number' ? String(player.score) : (typeof player.points === 'number' ? String(player.points) : ''),
+      playerName: lichessPlayerName(player),
+      score: lichessPlayerScore(player),
     })),
   };
 }

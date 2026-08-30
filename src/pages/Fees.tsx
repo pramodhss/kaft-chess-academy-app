@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange, SheetConflictError } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange, clearSheetReadCache, SheetConflictError } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
 import { SHEET_ID, TABS } from '../config';
 import { parseSheetNumber } from '../lib/values';
@@ -284,6 +284,7 @@ export function Fees() {
   const [drafts, setDrafts] = useState<Map<string, FeeDraft>>(new Map());
   const [rosterSaving, setRosterSaving] = useState('');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const toast = useToast();
   const coachName = savedCoachName || 'Coach';
 
@@ -313,6 +314,14 @@ export function Fees() {
   };
 
   useEffect(() => { load(); }, [token]);
+
+  // Sheets reads are cached briefly for performance, so another coach's edits
+  // may not appear immediately — this forces a fresh fetch on demand.
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    setSyncing(true);
+    void load().finally(() => setSyncing(false));
+  };
 
   const handleAdd = async () => {
     if (!token) return;
@@ -633,9 +642,13 @@ export function Fees() {
 
   return (
     <Layout title="Fees" action={
-      <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
-        aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
-        className="icon-button-add"><Plus size={18} /></button>
+      <>
+        <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+          className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+        <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
+          aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
+          className="icon-button-add"><Plus size={18} /></button>
+      </>
     }>
       <div className="fee-workspace page-stack mx-auto w-full max-w-4xl">
         {error && <div role="alert" className="error-state">{error}</div>}
