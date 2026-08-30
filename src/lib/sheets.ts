@@ -1,7 +1,7 @@
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 export const SHEETS_READ_CACHE = 'sheets-read-cache-v1';
 export type SheetValue = string | number | boolean;
-const READ_CACHE_TTL_MS = 300_000; // 5 minutes — stable data rarely changes mid-session
+const READ_CACHE_TTL_MS = 15_000; // 15 seconds — prevents stale reads when switching tabs
 type CachedRead = { data: any; expiresAt: number };
 const recentReads = new Map<string, CachedRead>();
 const pendingReads = new Map<string, Promise<any>>();
@@ -23,11 +23,25 @@ export function clearSheetReadCache(sheetId?: string): void {
   if (!sheetId) {
     recentReads.clear();
     pendingReads.clear();
+    if (typeof caches !== 'undefined') {
+      try { void caches.delete(SHEETS_READ_CACHE); } catch { /* ignore */ }
+    }
     return;
   }
   const fragment = sheetUrlFragment(sheetId);
   for (const key of recentReads.keys()) if (key.includes(fragment)) recentReads.delete(key);
   for (const key of pendingReads.keys()) if (key.includes(fragment)) pendingReads.delete(key);
+  if (typeof caches !== 'undefined') {
+    try {
+      void caches.open(SHEETS_READ_CACHE).then(cache => {
+        return cache.keys().then(requests => {
+          return Promise.all(requests
+            .filter(request => request.url.includes(fragment))
+            .map(request => cache.delete(request)));
+        });
+      });
+    } catch { /* ignore */ }
+  }
 }
 
 async function invalidateSheetReadCache(sheetId: string): Promise<void> {
