@@ -27,7 +27,6 @@ const Timetable = lazy(loadTimetable);
 const More = lazy(loadMore);
 const MonthlyReport = lazy(() => import('./pages/MonthlyReport').then(module => ({ default: module.MonthlyReport })));
 const Resources = lazy(() => import('./pages/Resources').then(module => ({ default: module.Resources })));
-const Leaderboard = lazy(() => import('./pages/Leaderboard').then(module => ({ default: module.Leaderboard })));
 const StudentProgress = lazy(() => import('./pages/StudentProgress').then(module => ({ default: module.StudentProgress })));
 const Curriculum = lazy(() => import('./pages/Curriculum').then(module => ({ default: module.Curriculum })));
 const AdminSettings = lazy(() => import('./pages/AdminSettings').then(module => ({ default: module.AdminSettings })));
@@ -94,7 +93,7 @@ function AppRoutes() {
         <Route path="/operations"        element={<OperationsCenter />} />
         <Route path="/timeline"          element={<StudentTimeline />} />
         <Route path="/monthly-report"    element={<MonthlyReport />} />
-        <Route path="/leaderboard"       element={<Leaderboard />} />
+        <Route path="/leaderboard"       element={<Navigate to="/tournaments?tab=leaderboard" replace />} />
         <Route path="/progress"          element={<StudentProgress />} />
         <Route path="/parent"            element={<ParentPortal />} />
         <Route path="/more"              element={<More />} />
