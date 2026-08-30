@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, LayoutGrid, MapPin, ReceiptIndianRupee, Trophy, UserRound, Users } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, GraduationCap, LayoutGrid, MapPin, RefreshCw, Trophy, UserRound, Wallet } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { readSheet } from '../lib/sheets';
+import { clearSheetReadCache, readSheet } from '../lib/sheets';
 import { parseSheetNumber } from '../lib/values';
 import { normalizeTimetableRows, upcomingClasses } from '../lib/timetable';
 import { useCoachName } from '../hooks/useCoachName';
@@ -54,9 +54,9 @@ function upcomingBirthdays(studentRows: string[][]): { name: string; dob: string
 }
 
 const QUICK_LINKS = [
-  { to: '/students',   Icon: Users, label: 'Students' },
+  { to: '/students',   Icon: GraduationCap, label: 'Students' },
   { to: '/attendance', Icon: CalendarCheck, label: 'Attendance' },
-  { to: '/fees',       Icon: ReceiptIndianRupee, label: 'Fees' },
+  { to: '/fees',       Icon: Wallet, label: 'Fees' },
   { to: '/upcoming',   Icon: Trophy, label: 'Tournaments' },
   { to: '/resources',  Icon: BookOpen, label: 'Resources' },
   { to: '/more',       Icon: LayoutGrid, label: 'More' },
@@ -64,8 +64,8 @@ const QUICK_LINKS = [
 
 const PRIMARY_ACTIONS = [
   { to: '/attendance', Icon: CalendarCheck, label: 'Mark attendance', tone: 'blue' },
-  { to: '/fees', Icon: ReceiptIndianRupee, label: 'Collect fee', tone: 'green' },
-  { to: '/students', Icon: Users, label: 'Add student', tone: 'gold' },
+  { to: '/fees', Icon: Wallet, label: 'Collect fee', tone: 'green' },
+  { to: '/students', Icon: GraduationCap, label: 'Add student', tone: 'gold' },
 ] as const;
 
 export function Dashboard() {
@@ -77,41 +77,50 @@ export function Dashboard() {
   const [classes, setClasses] = useState<ReturnType<typeof upcomingClasses>>([]);
   const [overdueCount, setOverdueCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const nextSession = nextWeekendDate();
 
-  useEffect(() => {
+  const load = async (isBackgroundSync = false) => {
     if (!token) return;
-    (async () => {
-      try {
-        const [studentRows, feeRows, timetableRows] = await Promise.all([
-          readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
-          readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
-          readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`).catch(() => []),
-        ]);
-        const data = studentRows.slice(1).filter(r => r[0]?.trim());
-        const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
-        let collected = 0, outstanding = 0;
-        feeRows.slice(1).forEach(r => {
-          collected   += nonNegativeSheetNumber(r[6] ?? '');
-          outstanding += nonNegativeSheetNumber(r[7] ?? '');
-        });
-        setStats({ total: data.length, active, collected, outstanding });
-        setBirthdays(upcomingBirthdays(studentRows));
-        setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
-        const overdueMap = new Map<string, number>();
-        feeRows.slice(1).forEach(r => {
-          const name = (r[1] ?? '').trim();
-          const balance = nonNegativeSheetNumber(r[7] ?? '');
-          if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);
-        });
-        setOverdueCount(overdueMap.size);
-      } catch (e: any) {
-        if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
-        setError(e.message);
-      } finally { setLoading(false); }
-    })();
-  }, [token, logout]);
+    if (isBackgroundSync) setSyncing(true); else setLoading(true);
+    setError('');
+    try {
+      const [studentRows, feeRows, timetableRows] = await Promise.all([
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
+        readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
+        readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`).catch(() => []),
+      ]);
+      const data = studentRows.slice(1).filter(r => r[0]?.trim());
+      const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
+      let collected = 0, outstanding = 0;
+      feeRows.slice(1).forEach(r => {
+        collected   += nonNegativeSheetNumber(r[6] ?? '');
+        outstanding += nonNegativeSheetNumber(r[7] ?? '');
+      });
+      setStats({ total: data.length, active, collected, outstanding });
+      setBirthdays(upcomingBirthdays(studentRows));
+      setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
+      const overdueMap = new Map<string, number>();
+      feeRows.slice(1).forEach(r => {
+        const name = (r[1] ?? '').trim();
+        const balance = nonNegativeSheetNumber(r[7] ?? '');
+        if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);
+      });
+      setOverdueCount(overdueMap.size);
+      setLastSynced(new Date());
+    } catch (e: any) {
+      if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
+      setError(e.message);
+    } finally { setLoading(false); setSyncing(false); }
+  };
+
+  useEffect(() => { void load(); }, [token]);
+
+  // Sheets reads are cached for a few minutes for performance, so other coaches'
+  // edits may not appear immediately — this forces a fresh fetch on demand.
+  const sync = () => { clearSheetReadCache(SHEET_ID); void load(true); };
 
   let content: React.ReactNode;
   if (loading) {
@@ -129,13 +138,17 @@ export function Dashboard() {
       <div className="dashboard-screen space-y-5 p-3 sm:p-4 md:p-6">
         <section className="dashboard-intro">
           <div className="flex items-start justify-between gap-3">
-            <div><p className="section-label">{new Date().toLocaleDateString('en-IN', { weekday: 'long' })} · KAFT Chess</p><h2 className="mt-1 text-xl font-bold text-gray-900 sm:text-2xl">Good morning{coachName ? `, ${coachName.split(' ')[0]}` : ''}</h2></div>
-            <span className="dashboard-live-status"><span />Synced</span>
+            <div><p className="section-label">{new Date().toLocaleDateString('en-IN', { weekday: 'long' })} · KAFT Chess Academy</p><h2 className="mt-1 text-xl font-bold text-gray-900 sm:text-2xl">Good morning{coachName ? `, ${coachName.split(' ')[0]}` : ''}</h2></div>
+            <button type="button" onClick={sync} disabled={syncing} className="dashboard-live-status"
+              aria-label="Sync latest changes from other coaches"
+              title={lastSynced ? `Last synced ${lastSynced.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Sync now'}>
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} aria-hidden="true" />{syncing ? 'Syncing…' : 'Sync'}
+            </button>
           </div>
         </section>
         {/* Stat cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Students" value={stats.active} sub={`${stats.total - stats.active} inactive`} tone="blue" icon={<Users size={19} />} />
+          <StatCard label="Students" value={stats.active} sub={`${stats.total - stats.active} inactive`} tone="blue" icon={<GraduationCap size={19} />} />
           <StatCard label="Next class" value={`${DAYS_S[nextDate.getDay()]} ${nextDate.getDate()}`} sub={`${MONTHS_S[nextDate.getMonth()]} session`} tone="green" icon={<CalendarCheck size={19} />} />
           <StatCard label="Fees collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} sub="This month" tone="gold" icon={<Trophy size={19} />} />
           <StatCard label="Fee pending" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} sub={`${overdueCount} accounts`} tone="red" icon={<AlertCircle size={19} />} />

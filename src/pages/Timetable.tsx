@@ -121,7 +121,7 @@ export function Timetable() {
   if (editing) saveLabel = 'Save changes';
   if (saving) saveLabel = 'Saving…';
 
-  return <Layout title="Weekly Classes" action={<button type="button" onClick={openCreate} className="header-action" aria-label="Add weekly class"><Plus size={15} />Add</button>}>
+  return <Layout title="Weekly Classes" action={<button type="button" onClick={openCreate} className="header-action-add" aria-label="Add weekly class"><Plus size={16} />Add</button>}>
     <div className="timetable-screen page-stack">
       {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
       {!error && rows.length === 0 && <div className="empty-state"><CalendarDays size={24} /><p>No weekly classes scheduled yet.</p><button type="button" onClick={openCreate} className="primary-action"><Plus size={16} />Add first class</button></div>}

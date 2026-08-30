@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import {
-  BookOpenCheck, CalendarDays, ChartNoAxesCombined, ChevronRight, CircleUserRound,
+  BookOpenCheck, CalendarDays, ChevronRight, CircleUserRound,
   ExternalLink, Gauge, Library, LogOut, Medal,
-  Moon, ReceiptText, Sun, Swords, Trophy, Workflow,
+  Moon, ReceiptText, SlidersHorizontal, Sun, Swords, TrendingUp, Trophy,
   Type,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
@@ -15,9 +15,9 @@ import { ACADEMY_LINKS, SOCIAL } from '../config';
 
 const GROUPS = [
   { title:'Coach Tools', items:[
-    { to:'/progress',   Icon:ChartNoAxesCombined, label:'Student Progress',  desc:'Attendance charts, skill ratings and PDF reports' },
+    { to:'/progress',   Icon:TrendingUp, label:'Student Progress',  desc:'Attendance charts, skill ratings and PDF reports' },
     { to:'/timetable',  Icon:CalendarDays,         label:'Timetable',          desc:'Class schedule, batches, coaches and rooms' },
-    { to:'/operations', Icon:Workflow,              label:'Reports & Data',    desc:'Exports, data quality checks and audit log' },
+    { to:'/operations', Icon:SlidersHorizontal,              label:'Reports & Data',    desc:'Exports, data quality checks and audit log' },
   ]},
   { title:'Tournaments', items:[
     { to:'/van',           Icon:Swords,    label:'Tournament Events',  desc:'Create events, rosters, payments and van' },

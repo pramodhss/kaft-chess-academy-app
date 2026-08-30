@@ -351,8 +351,8 @@ export function Attendance() {
           {!saving && <Check size={15} aria-hidden="true" />}{saving ? 'Saving…' : `Save ${dirty.size}`}
         </button>
       ) : (
-        <button type="button" onClick={() => setShowAddDate(true)} className="header-action" aria-label="Add class date" title="Add a new class date">
-          <Plus size={15} />
+        <button type="button" onClick={() => setShowAddDate(true)} className="icon-button-add" aria-label="Add class date" title="Add a new class date">
+          <Plus size={18} />
         </button>
       )
     }>

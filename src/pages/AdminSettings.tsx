@@ -121,7 +121,7 @@ function OptionEditor({ title, values, saving, onChange, onSave }: Readonly<{
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-bold text-navy">{title}</h2>
         <button type="button" onClick={() => onChange([...values, ''])}
-          className="icon-button"
+          className="icon-button-add"
           aria-label={`Add ${title}`} title={`Add ${title}`}>
           <Plus size={18} aria-hidden="true" />
         </button>

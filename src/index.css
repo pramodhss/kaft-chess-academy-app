@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,7 +7,7 @@
 :root {
   color: #18182a;
   background: #f8f7f4;
-  font-family: 'Outfit', 'Manrope Variable', sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Manrope Variable', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --app-page: #f8f7f4;
@@ -73,12 +73,25 @@ body {
 .academy-sidebar-link.is-active { background: rgba(201,151,10,0.14); color: #f4c94c; }
 .academy-sidebar-link.is-active::before { content: ''; position: absolute; left: -0.6rem; width: 3px; height: 22px; border-radius: 0 3px 3px 0; background: #c9970a; }
 .academy-sidebar-footer { border-top: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.34); font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; }
-.student-add-button { display: inline-flex; height: 2.25rem; width: 2.25rem; align-items: center; justify-content: center; border-radius: 0.55rem; background: var(--app-gold); color: var(--app-navy); }
+/* Shared gold-filled "add new record" treatment — every + action in the app
+   (Students, Attendance, Fees, Resources, Timetable, Tournaments, Van, Admin
+   Settings) uses one of these two so the create affordance always reads the same. */
+.icon-button-add { display: inline-flex; height: 2.25rem; width: 2.25rem; flex: none; align-items: center; justify-content: center; border-radius: 0.55rem; background: var(--app-gold); color: var(--app-navy); transition: background-color 140ms ease, box-shadow 140ms ease; }
+.icon-button-add:hover:not(:disabled) { background: #e0af19; box-shadow: 0 4px 12px rgba(201, 151, 10, 0.25); }
+.icon-button-add:disabled { opacity: 0.5; }
+.header-action-add {
+  @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold;
+  background: var(--app-gold);
+  color: var(--app-navy);
+  border: 1px solid transparent;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+.header-action-add:hover:not(:disabled) { background: #e0af19; box-shadow: 0 4px 12px rgba(201, 151, 10, 0.25); }
 
 .app-header-inner h1 {
   font-weight: 800;
   letter-spacing: 0;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
 .app-header-inner {
@@ -439,8 +452,10 @@ button:not(:disabled):active {
 .stat-card-gold .stat-card-icon { background: rgba(201, 151, 10, 0.12); color: #a87900; }
 .stat-card-green .stat-card-icon { background: rgba(39, 174, 96, 0.12); color: #18854a; }
 .stat-card-red .stat-card-icon { background: rgba(232, 93, 117, 0.12); color: #c6425a; }
-.dashboard-live-status { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--app-subtle); font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; white-space: nowrap; }
-.dashboard-live-status span { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: #27ae60; }
+.dashboard-live-status { display: inline-flex; align-items: center; gap: 0.35rem; border: none; cursor: pointer; color: #18854a; background: rgba(39,174,96,0.1); font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; white-space: nowrap; transition: background-color 140ms ease, opacity 140ms ease; }
+.dashboard-live-status:hover:not(:disabled) { background: rgba(39,174,96,0.18); }
+.dashboard-live-status:disabled { opacity: 0.6; cursor: not-allowed; }
+html.dark .dashboard-live-status { color: #65d68f; }
 .dashboard-primary-actions h2 { margin-bottom: 0; }
 .dashboard-action { display: flex; min-height: 4.65rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.45rem; border: 1px solid var(--app-border); border-radius: 0.6rem; background: var(--app-surface); color: var(--app-text); }
 .dashboard-action span { display: flex; height: 1.8rem; width: 1.8rem; align-items: center; justify-content: center; border-radius: 0.45rem; }

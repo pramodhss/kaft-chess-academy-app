@@ -20,7 +20,31 @@ describe('weekly online tournament importer', () => {
   });
 
   it('rejects unsupported tournament providers before fetching', async () => {
-    await expect(fetchWeeklyOnlineTournament('https://chess-results.com/event')).rejects.toThrow('currently support completed Lichess arena or Swiss links');
+    await expect(fetchWeeklyOnlineTournament('https://chess-results.com/event')).rejects.toThrow('currently support completed Lichess or Chess.com tournament links');
+  });
+
+  it('loads and ranks final Chess.com standings from player placement labels', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      name: 'KAFT Weekly Chess.com Arena', status: 'finished', finish_time: 1_725_000_000,
+      creator: 'kaftcoach',
+      settings: { type: 'swiss', rules: 'chess', time_control: '180+2', total_rounds: 5, registered_user_count: 3 },
+      players: [
+        { username: 'thirdplace', status: '3rd' },
+        { username: 'champ', status: 'winner' },
+        { username: 'runnerup', status: '2nd' },
+        { username: 'dropout', status: 'withdrew' },
+      ],
+    }), { status: 200 })));
+
+    const result = await fetchWeeklyOnlineTournament('https://www.chess.com/tournament/live/kaft-weekly-arena');
+
+    expect(result.name).toBe('KAFT Weekly Chess.com Arena');
+    expect(result.format).toBe('Swiss');
+    expect(result.standings).toEqual([
+      { rank: 1, playerName: 'champ', score: '' },
+      { rank: 2, playerName: 'runnerup', score: '' },
+      { rank: 3, playerName: 'thirdplace', score: '' },
+    ]);
   });
 
   it('uses the Swiss endpoint for Lichess Swiss links', async () => {

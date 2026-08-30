@@ -139,7 +139,7 @@ export function Resources() {
 
   return (
     <Layout title="Resources & eBooks" showBack action={
-      <button type="button" onClick={() => setShowAdd(true)} aria-label="+ Add" className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
+      <button type="button" onClick={() => setShowAdd(true)} aria-label="Add resource" className="header-action-add"><Plus size={16} aria-hidden="true" /> Add</button>
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}

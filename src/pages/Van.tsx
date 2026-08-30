@@ -8,7 +8,7 @@ import { useCoachName } from '../hooks/useCoachName';
 import { appendRows, batchWriteRanges, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, SheetConflictError, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
 import { phoneValidationError } from '../lib/validation';
-import { fetchWeeklyOnlineTournament, rowToSavedWeeklyOnlineTournament, WEEKLY_ONLINE_TOURNAMENT_HEADERS, weeklyTournamentValues, weeklyTournamentWhatsAppMessage, type SavedWeeklyOnlineTournament, type WeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
+import { fetchWeeklyOnlineTournament, rowToSavedWeeklyOnlineTournament, WEEKLY_ONLINE_TOURNAMENT_HEADERS, weeklyTournamentSource, weeklyTournamentValues, weeklyTournamentWhatsAppMessage, type SavedWeeklyOnlineTournament, type WeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import {
   EMPTY_TOURNAMENT, REGISTRATION_HEADERS, TOURNAMENT_HEADERS, registrationValues,
   rowToManagedTournament, rowToRegistration, tournamentMonth, tournamentValidationError, tournamentValues,
@@ -314,7 +314,7 @@ export function Van() {
     setStudentNotes={setStudentNotes} save={saveRoster} close={() => setSelected(null)} />;
 
   return (
-    <Layout title="Tournament Management" action={<button type="button" onClick={openCreate} className="header-action" aria-label="Add tournament"><Plus size={15} /> Add</button>}>
+    <Layout title="Tournament Management" action={<button type="button" onClick={openCreate} className="header-action-add" aria-label="Add tournament"><Plus size={16} /> Add</button>}>
       <div className="page-stack">
         {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
         {legacyWarning && <div role="alert" className="error-state"><p><Bus size={14} className="inline mr-1" />{legacyWarning} Legacy transport data was left unchanged.</p></div>}
@@ -327,7 +327,7 @@ export function Van() {
         </div>
         <section className="weekly-workspace" aria-labelledby="weekly-online-title">
           <div className="weekly-workspace-heading"><span className="icon-tile"><Link size={18} /></span><div><p className="section-label">Weekly results</p><h2 id="weekly-online-title">Online tournament</h2></div></div>
-          <label className="weekly-link-field"><span>Completed Lichess event link</span><div className="flex gap-2"><input type="url" value={weeklyLink} onChange={event => setWeeklyLink(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void importWeeklyTournament(); }} className="input min-w-0 flex-1" placeholder="https://lichess.org/swiss/abcdefgh" aria-label="Completed Lichess tournament link" /><button type="button" onClick={() => void importWeeklyTournament()} disabled={weeklyLoading || !weeklyLink.trim()} className="primary-action shrink-0">{weeklyLoading ? <LoaderCircle size={15} className="animate-spin" /> : <Trophy size={15} />} Load results</button></div></label>
+          <label className="weekly-link-field"><span>Completed Lichess or Chess.com event link</span><div className="flex gap-2"><input type="url" value={weeklyLink} onChange={event => setWeeklyLink(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void importWeeklyTournament(); }} className="input min-w-0 flex-1" placeholder="https://lichess.org/swiss/abcdefgh or chess.com/tournament/..." aria-label="Completed Lichess or Chess.com tournament link" /><button type="button" onClick={() => void importWeeklyTournament()} disabled={weeklyLoading || !weeklyLink.trim()} className="primary-action shrink-0">{weeklyLoading ? <LoaderCircle size={15} className="animate-spin" /> : <Trophy size={15} />} Load results</button></div></label>
           {weeklyResult && <div className="weekly-result-view">
             <div className="weekly-result-title"><div className="min-w-0"><p className="section-label">Results ready</p><h3>{weeklyResult.name}</h3><p>{[weeklyResult.format, weeklyResult.variant, weeklyResult.timeControl].filter(Boolean).join(' | ')}</p></div><span className="badge-green">Final</span></div>
             <dl className="weekly-stat-grid"><div><dt>Players</dt><dd>{weeklyResult.playerCount || '-'}</dd></div><div><dt>Rounds</dt><dd>{weeklyResult.rounds || '-'}</dd></div><div><dt>Organizer</dt><dd>{weeklyResult.organizer || '-'}</dd></div></dl>
@@ -338,7 +338,7 @@ export function Van() {
         {savedWeeklyResults.length > 0 && <section className="weekly-history" aria-labelledby="saved-weekly-title">
           <div className="weekly-history-heading"><div><p className="section-label">Archive</p><h2 id="saved-weekly-title">Saved weekly results</h2></div><span>{savedWeeklyResults.length} saved</span></div>
           <div>
-            {[...savedWeeklyResults].sort((left, right) => right.savedAt.localeCompare(left.savedAt)).map(item => <button key={item.rowIndex} type="button" onClick={() => setSelectedWeeklyResult(item)} className="weekly-history-row"><span className="weekly-history-trophy"><Trophy size={15} /></span><span className="min-w-0 flex-1"><strong className="truncate">{item.name}</strong><small>{[item.format, item.variant, item.timeControl].filter(Boolean).join(' | ')} · {item.standings.length} finalists</small></span><span className="weekly-view-label">View <ChevronRight size={15} /></span></button>)}
+            {[...savedWeeklyResults].sort((left, right) => right.savedAt.localeCompare(left.savedAt)).map(item => <button key={item.rowIndex} type="button" onClick={() => setSelectedWeeklyResult(item)} className="weekly-history-row"><span className="weekly-history-trophy"><Trophy size={15} /></span><span className="min-w-0 flex-1"><strong className="truncate">{item.name}</strong><small><span className="badge-blue mr-1">{weeklyTournamentSource(item.sourceUrl) === 'chess.com' ? 'Chess.com' : 'Lichess'}</span>{[item.format, item.variant, item.timeControl].filter(Boolean).join(' | ')} · {item.standings.length} finalists</small></span><span className="weekly-view-label">View <ChevronRight size={15} /></span></button>)}
           </div>
         </section>}
         {tournaments.length === 0 && !error && (

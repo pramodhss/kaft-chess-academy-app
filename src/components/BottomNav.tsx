@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { CalendarCheck, LayoutDashboard, Menu, ReceiptIndianRupee, Users } from 'lucide-react';
+import { CalendarCheck, GraduationCap, Home, LayoutGrid, Wallet } from 'lucide-react';
 
 const NAV = [
-  { to: '/',            Icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/students',    Icon: Users, label: 'Students'  },
+  { to: '/',            Icon: Home, label: 'Dashboard' },
+  { to: '/students',    Icon: GraduationCap, label: 'Students'  },
   { to: '/attendance',  Icon: CalendarCheck, label: 'Attendance' },
-  { to: '/fees',        Icon: ReceiptIndianRupee, label: 'Fees'       },
-  { to: '/more',        Icon: Menu, label: 'More'       },
+  { to: '/fees',        Icon: Wallet, label: 'Fees'       },
+  { to: '/more',        Icon: LayoutGrid, label: 'More'       },
 ];
 
 export function BottomNav() {

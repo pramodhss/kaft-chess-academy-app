@@ -59,16 +59,23 @@ interface LichessTournamentLink {
   type: 'arena' | 'swiss';
 }
 
+/** The site a saved weekly result came from \u2014 derived from the stored source
+ * link so no extra sheet column is needed for existing rows. */
+export function weeklyTournamentSource(sourceUrl: string): 'lichess' | 'chess.com' | 'unknown' {
+  try {
+    const hostname = new URL(sourceUrl.trim()).hostname;
+    if (hostname === 'lichess.org' || hostname === 'www.lichess.org') return 'lichess';
+    if (hostname === 'chess.com' || hostname === 'www.chess.com') return 'chess.com';
+  } catch { /* fall through to unknown for malformed/legacy links */ }
+  return 'unknown';
+}
+
 function lichessTournamentLink(sourceUrl: string): LichessTournamentLink {
   let parsed: URL;
   try {
     parsed = new URL(sourceUrl.trim());
   } catch {
     throw new Error('Paste a valid Lichess tournament link.');
-  }
-
-  if (parsed.hostname !== 'lichess.org' && parsed.hostname !== 'www.lichess.org') {
-    throw new Error('Weekly imports currently support completed Lichess arena or Swiss links.');
   }
 
   const path = parsed.pathname.split('/').filter(Boolean);
@@ -78,6 +85,83 @@ function lichessTournamentLink(sourceUrl: string): LichessTournamentLink {
     throw new Error('Paste a Lichess arena or Swiss tournament link.');
   }
   return { id: tournamentId, type: isSwiss ? 'swiss' : 'arena' };
+}
+
+function chesscomTournamentId(sourceUrl: string): string {
+  const path = new URL(sourceUrl.trim()).pathname.split('/').filter(Boolean);
+  const tournamentIndex = path.indexOf('tournament');
+  const afterTournament = path.slice(tournamentIndex + 1).filter(segment => segment !== 'live');
+  const id = afterTournament[0];
+  if (!id) throw new Error('Paste a Chess.com tournament link.');
+  return id;
+}
+
+/** Chess.com only reports a placement label per player (e.g. "1st", "4th-5th",
+ * "winner") \u2014 not a numeric score, so we parse a rank out of that label. */
+function chesscomPlacementRank(status: string): number | null {
+  if (status === 'winner') return 1;
+  const match = /^(\d+)(st|nd|rd|th)?/.exec(status);
+  return match ? Number(match[1]) : null;
+}
+
+function chesscomTimeControl(timeControl: unknown): string {
+  if (typeof timeControl !== 'string') return '';
+  if (timeControl.includes('/')) {
+    const seconds = Number(timeControl.split('/')[1]);
+    if (!Number.isFinite(seconds)) return timeControl;
+    const days = seconds / 86400;
+    return `${days} day${days === 1 ? '' : 's'}/move`;
+  }
+  const [base, increment] = timeControl.split('+');
+  const baseSeconds = Number(base);
+  if (!Number.isFinite(baseSeconds)) return timeControl;
+  const minutes = baseSeconds >= 60 ? baseSeconds / 60 : baseSeconds;
+  return increment ? `${minutes} + ${increment}` : `${minutes}`;
+}
+
+async function fetchChesscomTournament(sourceUrl: string): Promise<WeeklyOnlineTournament> {
+  const id = chesscomTournamentId(sourceUrl);
+  let response: Response;
+  try {
+    response = await fetch(`https://api.chess.com/pub/tournament/${encodeURIComponent(id)}`, {
+      headers: { Accept: 'application/json' },
+    });
+  } catch {
+    throw new Error('Could not reach Chess.com. Check your connection and try again.');
+  }
+
+  if (response.status === 404) throw new Error('Chess.com could not find that tournament. Check that the event is public and the full link was copied.');
+  if (!response.ok) throw new Error('Chess.com could not load this tournament right now.');
+
+  const payload = await response.json();
+  if (payload.status !== 'finished') throw new Error('This tournament has not completed yet. Paste the link after it finishes.');
+
+  const players = Array.isArray(payload.players) ? payload.players : [];
+  const standings = players
+    .map((player: { username?: string; status?: string }) => ({
+      rank: typeof player.status === 'string' ? chesscomPlacementRank(player.status) : null,
+      playerName: typeof player.username === 'string' ? player.username : 'Unknown player',
+      score: '',
+    }))
+    .filter((player: { rank: number | null }): player is { rank: number; playerName: string; score: string } => player.rank !== null)
+    .sort((left: { rank: number }, right: { rank: number }) => left.rank - right.rank);
+  if (standings.length === 0) throw new Error('No final standings are available for this tournament.');
+
+  const settings = payload.settings ?? {};
+  return {
+    name: typeof payload.name === 'string' ? payload.name : id,
+    format: typeof settings.type === 'string' ? settings.type.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Tournament',
+    variant: typeof settings.rules === 'string' ? settings.rules.replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Chess',
+    timeControl: chesscomTimeControl(settings.time_control),
+    rounds: typeof settings.total_rounds === 'number' ? String(settings.total_rounds) : '',
+    playerCount: typeof settings.registered_user_count === 'number' ? String(settings.registered_user_count) : String(players.length),
+    organizer: typeof payload.creator === 'string' ? payload.creator : '',
+    startedAt: '',
+    completedAt: typeof payload.finish_time === 'number' ? new Date(payload.finish_time * 1000).toISOString() : '',
+    description: typeof payload.description === 'string' ? payload.description.trim() : '',
+    sourceUrl: sourceUrl.trim(),
+    standings: standings.slice(0, 5),
+  };
 }
 
 async function fetchSwissStandings(tournamentId: string): Promise<unknown[]> {
@@ -119,6 +203,10 @@ function timeControl(clock: unknown): string {
 }
 
 export async function fetchWeeklyOnlineTournament(sourceUrl: string): Promise<WeeklyOnlineTournament> {
+  const source = weeklyTournamentSource(sourceUrl);
+  if (source === 'chess.com') return fetchChesscomTournament(sourceUrl);
+  if (source !== 'lichess') throw new Error('Weekly imports currently support completed Lichess or Chess.com tournament links.');
+
   const tournament = lichessTournamentLink(sourceUrl);
   const endpoint = tournament.type === 'swiss' ? 'swiss' : 'tournament';
   let response: Response;

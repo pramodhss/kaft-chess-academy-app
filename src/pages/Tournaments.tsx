@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
+import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -13,6 +14,20 @@ const MEDALS  = ['Gold','Silver','Bronze','Participation','Best Game','None'];
 const EMPTY_F = { studentName:'', month:'', tournamentName:'', type:'Internal', date:'', venue:'', rounds:'', wins:'', draws:'', losses:'', position:'', ratingBefore:'', ratingAfter:'', medal:'None', prize:'', coachNotes:'' };
 
 const MEDAL_ICON: Record<string, string> = { Gold:'🥇', Silver:'🥈', Bronze:'🥉', Participation:'🎖', 'Best Game':'⭐', None:'' };
+
+function entryCopyText(entry: TournamentEntry): string {
+  const lines = [`*${entry.studentName} \u2013 ${entry.tournamentName}*`, `${entry.type} \u00b7 ${entry.date || 'Date not recorded'}`];
+  if (entry.position) lines.push(`Rank: ${entry.position}`);
+  if (entry.wins || entry.draws || entry.losses) lines.push(`W${entry.wins || 0}/D${entry.draws || 0}/L${entry.losses || 0}`);
+  if (entry.ratingChange) lines.push(`Rating change: ${Number.parseFloat(entry.ratingChange) >= 0 ? '+' : ''}${entry.ratingChange}`);
+  if (entry.medal && entry.medal !== 'None') lines.push(`Medal: ${entry.medal}`);
+  return lines.join('\n');
+}
+
+function groupCopyText(title: string, entries: TournamentEntry[]): string {
+  if (entries.length === 0) return '';
+  return [`*${title}*`, ...entries.map(entry => `\u2022 ${entry.studentName} \u2013 ${entry.tournamentName} (${entry.date || entry.type})`)].join('\n');
+}
 
 function rowToEntry(row: string[], idx: number): TournamentEntry {
   return {
@@ -110,11 +125,14 @@ export function Tournaments() {
 
   if (loading) return <Layout title="Tournaments" showBack><PageSkeleton /></Layout>;
 
+  const onlineEntries = entries.filter(e => e.type === 'Online');
+  const offlineEntries = entries.filter(e => e.type !== 'Online');
+
   return (
     <Layout title="Tournaments" showBack action={
-      <button type="button" onClick={() => setShowAdd(true)} aria-label="+ Add" className="header-action"><Plus size={15} aria-hidden="true" /> Add</button>
+      <button type="button" onClick={() => setShowAdd(true)} aria-label="Add tournament result" className="header-action-add"><Plus size={16} aria-hidden="true" /> Add</button>
     }>
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-4">
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
         {entries.length === 0 && (
@@ -124,36 +142,47 @@ export function Tournaments() {
           </div>
         )}
 
-        {entries.map(e => (
-          <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900">{e.studentName}</p>
-                <p className="text-sm text-navy font-medium">{e.tournamentName}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{e.type} · {e.date}</p>
+        {([['Offline results', 'badge-blue', offlineEntries], ['Online results', 'badge-green', onlineEntries]] as const).map(([title, badgeClass, group]) =>
+          group.length > 0 && (
+            <section key={title} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="section-label flex items-center gap-2"><span className={badgeClass}>{group.length}</span>{title}</h2>
+                <CopyButton text={groupCopyText(title, group)} label={`Copy ${title}`} />
               </div>
-              {MEDAL_ICON[e.medal] && <span className="text-3xl ml-2">{MEDAL_ICON[e.medal]}</span>}
-            </div>
-            <div className="flex gap-3 mt-2 text-xs text-gray-500">
-              {e.position && <span>📍 Rank: <strong>{e.position}</strong></span>}
-              {(e.wins || e.draws || e.losses) && (
-                <span>W{e.wins}/D{e.draws}/L{e.losses}</span>
-              )}
-              {e.ratingChange && (
-                <span className={Number.parseFloat(e.ratingChange) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                  Rating: {Number.parseFloat(e.ratingChange) >= 0 ? '+' : ''}{e.ratingChange}
-                </span>
-              )}
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
-                aria-label={`Remove ${e.tournamentName} result`} title="Remove tournament result"
-                className="p-2 rounded-lg bg-red-50 text-red-700 disabled:opacity-50">
-                <Trash2 size={17} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        ))}
+              {group.map(e => (
+                <div key={e.rowIndex} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900">{e.studentName}</p>
+                      <p className="text-sm text-navy font-medium">{e.tournamentName}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{e.type} · {e.date}</p>
+                    </div>
+                    {MEDAL_ICON[e.medal] && <span className="text-3xl ml-2">{MEDAL_ICON[e.medal]}</span>}
+                  </div>
+                  <div className="flex gap-3 mt-2 text-xs text-gray-500">
+                    {e.position && <span>📍 Rank: <strong>{e.position}</strong></span>}
+                    {(e.wins || e.draws || e.losses) && (
+                      <span>W{e.wins}/D{e.draws}/L{e.losses}</span>
+                    )}
+                    {e.ratingChange && (
+                      <span className={Number.parseFloat(e.ratingChange) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        Rating: {Number.parseFloat(e.ratingChange) >= 0 ? '+' : ''}{e.ratingChange}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-3 flex justify-end gap-1.5">
+                    <CopyButton text={entryCopyText(e)} label={`Copy ${e.tournamentName} result`} />
+                    <button type="button" onClick={() => removeEntry(e)} disabled={deleting === e.rowIndex}
+                      aria-label={`Remove ${e.tournamentName} result`} title="Remove tournament result"
+                      className="icon-button-danger">
+                      <Trash2 size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )
+        )}
       </div>
 
       {showAdd && (

@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Outfit', 'Manrope Variable', 'ui-sans-serif', 'sans-serif'],
+        sans: ['Plus Jakarta Sans', 'Manrope Variable', 'ui-sans-serif', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
       },
       colors: {

@@ -635,7 +635,7 @@ export function Fees() {
     <Layout title="Fees" action={
       <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
         aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
-        className="header-action"><Plus size={15} /></button>
+        className="icon-button-add"><Plus size={18} /></button>
     }>
       <div className="fee-workspace page-stack mx-auto w-full max-w-4xl">
         {error && <div role="alert" className="error-state">{error}</div>}
@@ -809,12 +809,12 @@ export function Fees() {
                 <p className="text-xs text-gray-600">Receipt {fee.receiptNo} · {formatCurrency(fee.amountPaid)} paid</p>
               </div>
               <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}}
-                aria-label={`Edit duplicate fee for ${fee.studentName}`} className="w-8 h-8 flex items-center justify-center text-gray-600">
+                aria-label={`Edit duplicate fee for ${fee.studentName}`} className="icon-button">
                 <Pencil size={15} aria-hidden="true" />
               </button>
               <button type="button" onClick={()=>removeFee(fee)} disabled={deleting===fee.rowIndex}
-                aria-label={`Remove duplicate fee for ${fee.studentName}`} className="w-8 h-8 flex items-center justify-center text-red-700 disabled:opacity-50">
-                <Trash2 size={16} aria-hidden="true" />
+                aria-label={`Remove duplicate fee for ${fee.studentName}`} className="icon-button-danger">
+                <Trash2 size={15} aria-hidden="true" />
               </button>
             </div>)}
           </div>
@@ -829,9 +829,9 @@ export function Fees() {
                 <p className="text-xs text-gray-500 truncate">{fee.feeType} · {formatCurrency(fee.amountPaid)} paid</p>
               </div>
               <button type="button" onClick={()=>{setEditTarget(fee);setForm(feeToForm(fee));}} aria-label={`Edit ${fee.feeType} fee`}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500"><Pencil size={15}/></button>
+                className="icon-button"><Pencil size={15}/></button>
               <button type="button" onClick={()=>removeFee(fee)} disabled={deleting===fee.rowIndex} aria-label={`Remove ${fee.feeType} fee`}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-red-600 disabled:opacity-50"><Trash2 size={16}/></button>
+                className="icon-button-danger"><Trash2 size={15}/></button>
             </div>)}
           </div>
         </div>}

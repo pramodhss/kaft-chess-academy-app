@@ -4,7 +4,7 @@ import { openApp } from './fixtures/sheetsMock';
 
 test('uploads a native PDF to Drive and stores its metadata in Resources', async ({ page, sheets }) => {
   await openApp(page, '#/resources');
-  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add resource', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Upload PDF or Image').setInputFiles({ name: 'academy-guide.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
   await dialog.getByLabel('Allow anyone with the link to view this file').check();
@@ -27,7 +27,7 @@ test('uploads a native PDF to Drive and stores its metadata in Resources', async
 test('keeps an uploaded PDF when public sharing is blocked and supports deletion', async ({ page, sheets }) => {
   sheets.failPublicSharing = true;
   await openApp(page, '#/resources');
-  await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add resource', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Upload PDF or Image').setInputFiles({ name: 'private-guide.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF') });
   await dialog.getByLabel('Allow anyone with the link to view this file').check();
