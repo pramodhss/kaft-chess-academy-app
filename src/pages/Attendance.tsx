@@ -341,10 +341,10 @@ export function Attendance() {
   };
 
   /* ─── skeleton list while loading (shows structural chrome) ───────────── */
-  const SkeletonRows = () => (
+  const skeletonView = (
     <div className="flex-1 overflow-y-auto">
-      {[...Array(8)].map((_, i) => (
-        <div key={i} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={`att-skel-${i}`} className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
           <div className="space-y-1.5">
             <div className="skeleton h-3.5 w-32 rounded" />
             <div className="skeleton h-2.5 w-20 rounded" />
@@ -437,7 +437,7 @@ export function Attendance() {
         )}
 
         {/* ── Student list / skeleton ───────────────────────────────────── */}
-        {loading ? <SkeletonRows /> : (
+        {loading ? skeletonView : (
           <div className="flex-1 overflow-y-auto">
             {!error && visibleRows.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-16 text-center text-gray-400">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';import { Layout } from '../components/Layout';
+import { Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, RefreshCw, Share2, Trash2 } from 'lucide-react';
+import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -9,10 +10,11 @@ import { isStudentNameReserved, syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { recordAudit } from '../lib/audit';
-import { DEFAULT_BATCHES, DEFAULT_LEVELS, loadStudentOptions } from '../lib/studentOptions';
+import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
 import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { matchOnlineTournamentResults, ordinal } from '../lib/onlineTournamentMatch';
+import { calculateStudentBadges } from '../lib/studentBadges';
 import {
   dateValidationError,
   digitsOnly,
@@ -305,15 +307,32 @@ function StudentDetailActions({ student, onEdit }: Readonly<{
     });
   };
 
+  const shareParentLink = () => {
+    const pin = student.parent1Phone ? student.parent1Phone.replace(/\D/g, '').slice(-4) : '0000';
+    const origin = window.location.origin;
+    const path = window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
+    const url = `${origin}${path}#/parent?student=${encodeURIComponent(student.name)}&pin=${pin}`;
+    const message = `Hello! Here is the link to view ${student.name}'s KAFT Chess Academy progress, attendance, and tournament record:\n${url}\n(PIN: ${pin})`;
+    void navigator.clipboard.writeText(message).then(() => {
+      toast.success('Parent portal link copied with PIN!');
+    }).catch(() => {
+      toast.error('Could not copy parent link.');
+    });
+  };
+
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
+      <button type="button" onClick={shareParentLink} aria-label="Share parent portal link" title="Share parent progress link for WhatsApp"
+        className="icon-button">
+        <Share2 size={16} aria-hidden="true" />
+      </button>
       <button type="button" onClick={copy} aria-label="Copy student details" title="Copy student details"
-        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
-        {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
+        className="icon-button">
+        {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
       </button>
       <button type="button" onClick={onEdit} aria-label="Edit student" title="Edit student"
-        className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 text-white">
-        <Pencil size={18} aria-hidden="true" />
+        className="icon-button">
+        <Pencil size={16} aria-hidden="true" />
       </button>
     </div>
   );
@@ -544,6 +563,127 @@ async function deleteStudent(deps: Readonly<{
   finally { setDeleting(false); }
 }
 
+function StudentChessTab({ selected, registrations, weeklyResults }: Readonly<{
+  selected: Student;
+  registrations: TournamentRegistration[];
+  weeklyResults: SavedWeeklyOnlineTournament[];
+}>) {
+  const badges = calculateStudentBadges(selected, [], registrations, weeklyResults);
+  return (
+    <>
+      {badges.length > 0 && (
+        <InfoSection title="🏆 Earned Milestones & Badges" copyText={badges.map(b => `${b.icon} ${b.title}: ${b.description}`).join('\n')}>
+          <div className="grid grid-cols-2 gap-2">
+            {badges.map(b => (
+              <div key={b.id} className="surface-card p-2.5 flex items-center gap-2 border border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20">
+                <span className="text-2xl flex-shrink-0">{b.icon}</span>
+                <div className="min-w-0">
+                  <strong className="block text-xs font-bold text-gray-900 dark:text-white truncate">{b.title}</strong>
+                  <span className="block text-[10px] text-gray-500 truncate">{b.description}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </InfoSection>
+      )}
+      <InfoSection title="Chess Profile" copyText={sectionCopyText(selected.name, 'Chess Profile', [
+        ['Classical', selected.ratingClassical], ['Rapid', selected.ratingRapid], ['Blitz', selected.ratingBlitz],
+        ['Coach', selected.coachName], ['Joined', selected.joiningDate],
+        ['TNSCA ID', selected.tnscaId], ['FIDE ID', selected.fideId], ['AICF ID', selected.aicfId],
+        ['Chess.com', selected.chessComUsername], ['Lichess', selected.lichessUsername],
+      ])}>
+        {(selected.ratingClassical||selected.ratingRapid||selected.ratingBlitz) && (
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {selected.ratingClassical && <RatingBox label="Classical" value={selected.ratingClassical}/>}
+            {selected.ratingRapid     && <RatingBox label="Rapid"     value={selected.ratingRapid}/>}
+            {selected.ratingBlitz     && <RatingBox label="Blitz"     value={selected.ratingBlitz}/>}
+          </div>
+        )}
+        <Row label="Coach"       value={selected.coachName}/>
+        <Row label="Joined"      value={selected.joiningDate}/>
+        <Row label="This month"  value={`${selected.thisMonthAttended||0} days attended`}/>
+        <Row label="TNSCA ID"    value={selected.tnscaId}/>
+        <Row label="FIDE ID">
+          {selected.fideId ? <a href={`https://ratings.fide.com/profile/${encodeURIComponent(selected.fideId)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.fideId}</a> : null}
+        </Row>
+        <Row label="AICF ID"     value={selected.aicfId}/>
+        <Row label="Chess.com">
+          {selected.chessComUsername ? <a href={`https://www.chess.com/member/${encodeURIComponent(selected.chessComUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.chessComUsername}</a> : null}
+        </Row>
+        <Row label="Lichess">
+          {selected.lichessUsername ? <a href={`https://lichess.org/@/${encodeURIComponent(selected.lichessUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.lichessUsername}</a> : null}
+        </Row>
+      </InfoSection>
+      <TournamentAttendance studentName={selected.name} lichessUsername={selected.lichessUsername} chessComUsername={selected.chessComUsername} registrations={registrations} weeklyResults={weeklyResults} />
+    </>
+  );
+}
+
+function StudentContactTab({ selected }: Readonly<{ selected: Student }>) {
+  return (
+    <>
+      <InfoSection title="Parent / Guardian" copyText={sectionCopyText(selected.name, 'Parent / Guardian', [
+        ['Name', selected.parent1Name], ['Phone', selected.parent1Phone],
+        ['WhatsApp', selected.parent1WhatsApp], ['Email', selected.parent1Email],
+      ])}>
+        <Row label="Name" value={selected.parent1Name}/>
+        <Row label="Phone">
+          {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
+        </Row>
+        <Row label="WhatsApp">
+          {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
+        </Row>
+        <Row label="Email" value={selected.parent1Email}/>
+      </InfoSection>
+      {(selected.parent2Name||selected.parent2Phone) && (
+        <InfoSection title="Parent 2" copyText={sectionCopyText(selected.name, 'Parent 2', [['Name', selected.parent2Name], ['Phone', selected.parent2Phone]])}>
+          <Row label="Name" value={selected.parent2Name}/>
+          <Row label="Phone">
+            {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
+          </Row>
+        </InfoSection>
+      )}
+      {(selected.emergencyContact||selected.emergencyPhone) && (
+        <InfoSection title="Emergency" copyText={sectionCopyText(selected.name, 'Emergency', [['Name', selected.emergencyContact], ['Phone', selected.emergencyPhone]])}>
+          <Row label="Name"  value={selected.emergencyContact}/>
+          <Row label="Phone">
+            {selected.emergencyPhone ? <a href={`tel:${selected.emergencyPhone}`} className="font-medium text-chess-blue underline">{selected.emergencyPhone}</a> : null}
+          </Row>
+        </InfoSection>
+      )}
+    </>
+  );
+}
+
+function StudentInfoTab({ selected }: Readonly<{ selected: Student }>) {
+  return (
+    <>
+      <InfoSection title="Personal" copyText={sectionCopyText(selected.name, 'Personal', [
+        ['DOB', selected.dob], ['Age', selected.age ? `${selected.age} yrs` : ''], ['Gender', selected.gender],
+      ])}>
+        <Row label="DOB"    value={selected.dob}/>
+        <Row label="Age"    value={selected.age ? `${selected.age} yrs` : ''}/>
+        <Row label="Gender" value={selected.gender}/>
+      </InfoSection>
+      <InfoSection title="Academic" copyText={sectionCopyText(selected.name, 'Academic', [
+        ['School', selected.school || selected.grade], ['Standard', selected.standard], ['Combined', selected.school && selected.grade ? selected.grade : ''],
+      ])}>
+        <Row label="School"   value={selected.school||selected.grade}/>
+        <Row label="Standard" value={selected.standard}/>
+        {selected.school && selected.grade && <Row label="Combined" value={selected.grade}/>}
+      </InfoSection>
+      {selected.address && <InfoSection title="Address" copyText={`*${selected.name} – Address*\n${selected.address}`}><p className="text-sm text-gray-700 break-words leading-5">{selected.address}</p></InfoSection>}
+      {selected.notes   && <InfoSection title="Notes" copyText={`*${selected.name} – Notes*\n${selected.notes}`}><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
+    </>
+  );
+}
+
+const DETAIL_TAB_LABELS: Record<'info' | 'contact' | 'chess', string> = {
+  info: '👤 Info',
+  contact: '📞 Contact',
+  chess: '♟ Chess',
+};
+
 export function Students() {
   const { token, logout } = useAuth();
   const { coachName } = useCoachName();
@@ -563,15 +703,14 @@ export function Students() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
-  const [levels, setLevels] = useState([...DEFAULT_LEVELS]);
-  const [sortKey, setSortKey] = useState<'name'|'batch'|'level'|'status'|'attendance'>('name');
+  const [sortKey, setSortKey] = useState<'name'|'batch'|'status'|'attendance'>('name');
   const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('info');
   const [syncing, setSyncing] = useState(false);
   const toast = useToast();
 
   const load = () => loadStudents({
     token, logout, setLoading, setError, setStudents, setFiltered,
-    setBatches, setLevels, setTournamentRegistrations, setWeeklyResults,
+    setBatches, setLevels: () => {}, setTournamentRegistrations, setWeeklyResults,
   });
 
   useEffect(() => { load(); }, [token]);
@@ -579,8 +718,8 @@ export function Students() {
     const q = search.toLowerCase();
     setFiltered(students.filter(s =>
       s.name.toLowerCase().includes(q) || s.batch.toLowerCase().includes(q) ||
-      s.level.toLowerCase().includes(q) || s.tnscaId.toLowerCase().includes(q) ||
-      s.fideId.toLowerCase().includes(q) || s.school.toLowerCase().includes(q)
+      s.tnscaId.toLowerCase().includes(q) || s.fideId.toLowerCase().includes(q) ||
+      s.school.toLowerCase().includes(q)
     ));
   }, [search, students]);
 
@@ -607,7 +746,7 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} levels={levels} />
+          <StudentForm form={form} setForm={setForm} batches={batches} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
@@ -637,7 +776,7 @@ export function Students() {
               <div className="min-w-0 flex-1 flex flex-wrap gap-1.5 items-center">
                 <span className={selected.status==='Active'?'badge-green':'badge-gray'}>{selected.status}</span>
                 {category && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[category]??'badge-blue'}`}>{category}</span>}
-                <span className="text-xs text-gray-500">{selected.batch} · {selected.level}</span>
+                <span className="text-xs text-gray-500">{selected.batch}</span>
               </div>
             </div>
             {(selected.parent1Phone || (selected.parent1WhatsApp && parentWa)) && (
@@ -666,101 +805,16 @@ export function Students() {
               <button key={tab} type="button" onClick={() => setDetailTab(tab)}
                 className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors
                   ${detailTab===tab ? 'border-chess-blue text-chess-blue' : 'border-transparent text-gray-400'}`}>
-                {tab==='chess' ? '♟ Chess' : tab==='contact' ? '📞 Contact' : '👤 Info'}
+                {DETAIL_TAB_LABELS[tab]}
               </button>
             ))}
           </div>
 
           {/* Tab content */}
           <div className="flex-1 p-4 space-y-3 overflow-y-auto pb-4">
-            {detailTab === 'chess' && (
-              <>
-                <InfoSection title="Chess Profile" copyText={sectionCopyText(selected.name, 'Chess Profile', [
-                  ['Classical', selected.ratingClassical], ['Rapid', selected.ratingRapid], ['Blitz', selected.ratingBlitz],
-                  ['Coach', selected.coachName], ['Joined', selected.joiningDate],
-                  ['TNSCA ID', selected.tnscaId], ['FIDE ID', selected.fideId], ['AICF ID', selected.aicfId],
-                  ['Chess.com', selected.chessComUsername], ['Lichess', selected.lichessUsername],
-                ])}>
-                  {(selected.ratingClassical||selected.ratingRapid||selected.ratingBlitz) && (
-                    <div className="grid grid-cols-3 gap-2 mb-3">
-                      {selected.ratingClassical && <RatingBox label="Classical" value={selected.ratingClassical}/>}
-                      {selected.ratingRapid     && <RatingBox label="Rapid"     value={selected.ratingRapid}/>}
-                      {selected.ratingBlitz     && <RatingBox label="Blitz"     value={selected.ratingBlitz}/>}
-                    </div>
-                  )}
-                  <Row label="Coach"       value={selected.coachName}/>
-                  <Row label="Joined"      value={selected.joiningDate}/>
-                  <Row label="This month"  value={`${selected.thisMonthAttended||0} days attended`}/>
-                  <Row label="TNSCA ID"    value={selected.tnscaId}/>
-                  <Row label="FIDE ID">
-                    {selected.fideId ? <a href={`https://ratings.fide.com/profile/${encodeURIComponent(selected.fideId)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.fideId}</a> : null}
-                  </Row>
-                  <Row label="AICF ID"     value={selected.aicfId}/>
-                  <Row label="Chess.com">
-                    {selected.chessComUsername ? <a href={`https://www.chess.com/member/${encodeURIComponent(selected.chessComUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.chessComUsername}</a> : null}
-                  </Row>
-                  <Row label="Lichess">
-                    {selected.lichessUsername ? <a href={`https://lichess.org/@/${encodeURIComponent(selected.lichessUsername)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-chess-blue underline">{selected.lichessUsername}</a> : null}
-                  </Row>
-                </InfoSection>
-                <TournamentAttendance studentName={selected.name} lichessUsername={selected.lichessUsername} chessComUsername={selected.chessComUsername} registrations={tournamentRegistrations} weeklyResults={weeklyResults} />
-              </>
-            )}
-
-            {detailTab === 'contact' && (
-              <>
-                <InfoSection title="Parent / Guardian" copyText={sectionCopyText(selected.name, 'Parent / Guardian', [
-                  ['Name', selected.parent1Name], ['Phone', selected.parent1Phone],
-                  ['WhatsApp', selected.parent1WhatsApp], ['Email', selected.parent1Email],
-                ])}>
-                  <Row label="Name" value={selected.parent1Name}/>
-                  <Row label="Phone">
-                    {selected.parent1Phone ? <a href={`tel:${selected.parent1Phone}`} className="font-medium text-chess-blue underline">{selected.parent1Phone}</a> : null}
-                  </Row>
-                  <Row label="WhatsApp">
-                    {selected.parent1WhatsApp ? <a href={`https://wa.me/91${selected.parent1WhatsApp.replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noopener noreferrer" className="font-medium text-green-600 underline">{selected.parent1WhatsApp} 💬</a> : null}
-                  </Row>
-                  <Row label="Email" value={selected.parent1Email}/>
-                </InfoSection>
-                {(selected.parent2Name||selected.parent2Phone) && (
-                  <InfoSection title="Parent 2" copyText={sectionCopyText(selected.name, 'Parent 2', [['Name', selected.parent2Name], ['Phone', selected.parent2Phone]])}>
-                    <Row label="Name" value={selected.parent2Name}/>
-                    <Row label="Phone">
-                      {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
-                    </Row>
-                  </InfoSection>
-                )}
-                {(selected.emergencyContact||selected.emergencyPhone) && (
-                  <InfoSection title="Emergency" copyText={sectionCopyText(selected.name, 'Emergency', [['Name', selected.emergencyContact], ['Phone', selected.emergencyPhone]])}>
-                    <Row label="Name"  value={selected.emergencyContact}/>
-                    <Row label="Phone">
-                      {selected.emergencyPhone ? <a href={`tel:${selected.emergencyPhone}`} className="font-medium text-chess-blue underline">{selected.emergencyPhone}</a> : null}
-                    </Row>
-                  </InfoSection>
-                )}
-              </>
-            )}
-
-            {detailTab === 'info' && (
-              <>
-                <InfoSection title="Personal" copyText={sectionCopyText(selected.name, 'Personal', [
-                  ['DOB', selected.dob], ['Age', selected.age ? `${selected.age} yrs` : ''], ['Gender', selected.gender],
-                ])}>
-                  <Row label="DOB"    value={selected.dob}/>
-                  <Row label="Age"    value={selected.age ? `${selected.age} yrs` : ''}/>
-                  <Row label="Gender" value={selected.gender}/>
-                </InfoSection>
-                <InfoSection title="Academic" copyText={sectionCopyText(selected.name, 'Academic', [
-                  ['School', selected.school || selected.grade], ['Standard', selected.standard], ['Combined', selected.school && selected.grade ? selected.grade : ''],
-                ])}>
-                  <Row label="School"   value={selected.school||selected.grade}/>
-                  <Row label="Standard" value={selected.standard}/>
-                  {selected.school && selected.grade && <Row label="Combined" value={selected.grade}/>}
-                </InfoSection>
-                {selected.address && <InfoSection title="Address" copyText={`*${selected.name} – Address*\n${selected.address}`}><p className="text-sm text-gray-700 break-words leading-5">{selected.address}</p></InfoSection>}
-                {selected.notes   && <InfoSection title="Notes" copyText={`*${selected.name} – Notes*\n${selected.notes}`}><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
-              </>
-            )}
+            {detailTab === 'chess' && <StudentChessTab selected={selected} registrations={tournamentRegistrations} weeklyResults={weeklyResults} />}
+            {detailTab === 'contact' && <StudentContactTab selected={selected} />}
+            {detailTab === 'info' && <StudentInfoTab selected={selected} />}
 
             {/* Actions */}
             <button type="button" onClick={() => navigate(`/timeline?student=${encodeURIComponent(selected.name)}`)} className="w-full border border-chess-blue/30 text-chess-blue py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2">
@@ -786,8 +840,8 @@ export function Students() {
         <button type="button" onClick={() => {
           setForm({
             ...EMPTY,
-            batch: batches[0] ?? '',
-            level: levels[0] ?? '',
+            batch: batches[0] ?? 'Beginner',
+            level: batches[0] ?? 'Beginner',
             coachName,
           });
           setShowAdd(true);
@@ -807,7 +861,6 @@ export function Students() {
             className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white">
             <option value="name">A → Z</option>
             <option value="batch">By Batch</option>
-            <option value="level">By Level</option>
             <option value="status">Active First</option>
             <option value="attendance">Attendance ↓</option>
           </select>
@@ -815,12 +868,6 @@ export function Students() {
         {[...filtered].sort((a,b)=>{
             if(sortKey==='name')       return a.name.localeCompare(b.name);
             if(sortKey==='batch')      return a.batch.localeCompare(b.batch);
-            if(sortKey==='level')      {
-              const aIndex = levels.indexOf(a.level);
-              const bIndex = levels.indexOf(b.level);
-              return (aIndex < 0 ? levels.length : aIndex) - (bIndex < 0 ? levels.length : bIndex)
-                || a.level.localeCompare(b.level);
-            }
             if(sortKey==='status')     return a.status==='Active'?-1:1;
             if(sortKey==='attendance') return Number.parseInt(b.thisMonthAttended||'0')-Number.parseInt(a.thisMonthAttended||'0');
             return 0;
@@ -853,7 +900,7 @@ export function Students() {
       {showAdd && (
         <Modal title="Add Student" onClose={() => setShowAdd(false)}>
           <div className="max-h-[65vh] overflow-y-auto pr-1">
-            <StudentForm form={form} setForm={setForm} batches={batches} levels={levels}/>
+            <StudentForm form={form} setForm={setForm} batches={batches} />
           </div>
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mt-3">{formValidationError(form)}</p>}
           <button type="button" onClick={handleAdd} disabled={saving}
@@ -867,11 +914,10 @@ export function Students() {
   );
 }
 
-function StudentForm({ form, setForm, batches, levels }: Readonly<{
+function StudentForm({ form, setForm, batches }: Readonly<{
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
-  levels: string[];
 }>) {
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
@@ -916,20 +962,12 @@ function StudentForm({ form, setForm, batches, levels }: Readonly<{
 
       {/* Chess */}
       <Section title="Chess Profile">
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Batch">
-            <select value={form.batch} onChange={f('batch')} className="input">
-              {!batches.includes(form.batch) && form.batch && <option>{form.batch}</option>}
-              {batches.map(option => <option key={option}>{option}</option>)}
-            </select>
-          </Field>
-          <Field label="Chess Level">
-            <select value={form.level} onChange={f('level')} className="input">
-              {!levels.includes(form.level) && form.level && <option>{form.level}</option>}
-              {levels.map(option => <option key={option}>{option}</option>)}
-            </select>
-          </Field>
-        </div>
+        <Field label="Batch">
+          <select value={form.batch} onChange={e => setForm({ ...form, batch: e.target.value, level: e.target.value })} className="input">
+            {!batches.includes(form.batch) && form.batch && <option>{form.batch}</option>}
+            {batches.map(option => <option key={option}>{option}</option>)}
+          </select>
+        </Field>
         <Field label="Assigned Coach"><input maxLength={100} value={form.coachName} onChange={f('coachName')} className="input" placeholder="Coach name"/></Field>
         <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
       </Section>

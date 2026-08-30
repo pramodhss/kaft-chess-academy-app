@@ -56,9 +56,15 @@ body {
 .app-header {
   min-height: calc(var(--app-header-height) + env(safe-area-inset-top, 0px));
   padding-top: env(safe-area-inset-top, 0px);
-  background: var(--app-surface);
+  background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid var(--app-border);
   color: var(--app-text);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+html.dark .app-header {
+  background: rgba(24, 24, 40, 0.92);
 }
 .app-header-kicker { color: var(--app-subtle); font-family: 'JetBrains Mono', monospace; font-size: 0.63rem; text-transform: uppercase; }
 .app-back-button { border: 1px solid var(--app-border); background: var(--app-hover); color: var(--app-text); }
@@ -194,13 +200,14 @@ html.dark .card-btn:not(:disabled):hover {
 html.dark .card-btn:hover .hover-arrow { color: #fcd34d !important; }
 
 .header-action {
-  @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold;
+  @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold;
   background: var(--app-hover);
   color: var(--app-text);
   border: 1px solid var(--app-border);
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
-.header-action:hover { background: var(--app-accent-soft); border-color: rgba(201, 151, 10, 0.45); }
+.header-action:not(:disabled):hover { background: var(--app-accent-soft); border-color: rgba(201, 151, 10, 0.45); }
+.header-action:not(:disabled):active { transform: scale(0.97); }
 
 .section-label {
   @apply text-[10px] font-bold uppercase;
@@ -209,39 +216,44 @@ html.dark .card-btn:hover .hover-arrow { color: #fcd34d !important; }
 }
 
 .surface-card {
-  @apply rounded-xl border bg-white;
+  @apply rounded-2xl border bg-white;
   border-color: var(--app-border);
-  box-shadow: 0 1px 2px rgba(13, 13, 26, 0.04);
+  box-shadow: 0 1px 3px rgba(13, 13, 26, 0.04), 0 4px 12px rgba(13, 13, 26, 0.02);
   transition: border-color 180ms ease, box-shadow 200ms ease, transform 200ms ease, background-color 180ms ease;
 }
 
 .primary-action {
-  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
   background: var(--app-gold);
   color: var(--app-navy);
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(201, 151, 10, 0.2);
   letter-spacing: 0.01em;
-  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+  transition: transform 140ms ease, box-shadow 160ms ease, opacity 160ms ease, background-color 140ms ease;
 }
 .primary-action:not(:disabled):hover {
   background: #e0af19;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(201, 151, 10, 0.2);
+  box-shadow: 0 4px 14px rgba(201, 151, 10, 0.3);
+}
+.primary-action:not(:disabled):active {
+  transform: scale(0.98);
 }
 
 /* Shared full-width destructive action — same shape/weight as .primary-action so
    every Remove/Delete confirmation across the app reads identically. */
 .danger-action {
-  @apply inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-3.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50;
   background: rgba(239, 68, 68, 0.12);
   color: #dc2626;
   border: 1px solid rgba(239, 68, 68, 0.35);
-  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 140ms ease;
 }
 .danger-action:not(:disabled):hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
+.danger-action:not(:disabled):active { transform: scale(0.98); }
 html.dark .danger-action { color: #ff8080; border-color: rgba(255, 128, 128, 0.4); }
 html.dark .danger-action:not(:disabled):hover { background: rgba(239, 68, 68, 0.28); }
-.resource-action { @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold; }
+.resource-action { @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold; transition: transform 140ms ease; }
+.resource-action:not(:disabled):active { transform: scale(0.97); }
 
 .page-stack { @apply space-y-3 p-3 sm:p-4 md:p-6; }
 .form-grid { @apply space-y-2.5; }
@@ -251,23 +263,28 @@ html.dark .danger-action:not(:disabled):hover { background: rgba(239, 68, 68, 0.
   background: linear-gradient(135deg, rgba(201, 151, 10, 0.1) 0%, rgba(13, 13, 26, 0.06) 100%);
 }
 html.dark .icon-tile { color: var(--app-gold); }
-.icon-button { @apply flex h-9 w-9 flex-none items-center justify-center rounded-xl border disabled:opacity-40; background: var(--app-surface); border-color: var(--app-border); color: var(--app-subtle); }
-.icon-button-danger { @apply flex h-8 w-8 flex-none items-center justify-center rounded-xl disabled:opacity-50; background: rgba(232,93,117,0.12); color: #e0455f; }
-.error-state { @apply rounded-xl border p-3 text-xs; border-color: rgba(232,93,117,0.35); background: rgba(232,93,117,0.08); color: #e0455f; }
+.icon-button { @apply flex h-9 w-9 flex-none items-center justify-center rounded-xl border disabled:opacity-40; background: var(--app-surface); border-color: var(--app-border); color: var(--app-subtle); transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease; }
+.icon-button:not(:disabled):hover { background: var(--app-hover); color: var(--app-text); border-color: rgba(201, 151, 10, 0.3); }
+.icon-button:not(:disabled):active { transform: scale(0.95); }
+.icon-button-danger { @apply flex h-8 w-8 flex-none items-center justify-center rounded-xl disabled:opacity-50; background: rgba(232,93,117,0.12); color: #e0455f; transition: background-color 140ms ease, color 140ms ease, transform 140ms ease; }
+.icon-button-danger:not(:disabled):hover { background: rgba(232, 93, 117, 0.22); color: #dc2626; }
+.icon-button-danger:not(:disabled):active { transform: scale(0.95); }
+.error-state { @apply rounded-2xl border p-3.5 text-xs; border-color: rgba(232,93,117,0.35); background: rgba(232,93,117,0.08); color: #e0455f; }
 .error-state button { @apply mt-2 font-semibold underline; }
 .empty-state { @apply flex flex-col items-center gap-2 rounded-2xl border border-dashed px-4 py-10 text-center text-sm; border-color: var(--app-border); background: var(--app-surface); color: var(--app-subtle); }
 
 .modal-backdrop {
-  @apply fixed inset-0 z-50 flex bg-black/60 p-3;
-  backdrop-filter: blur(6px);
+  @apply fixed inset-0 z-50 flex bg-black/60 p-0 sm:p-4;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   animation: backdrop-enter 180ms ease-out;
 }
 
 .modal-panel {
-  @apply w-full rounded-2xl shadow-xl;
+  @apply w-full rounded-t-3xl sm:rounded-2xl shadow-2xl;
   background: var(--app-surface);
   color: var(--app-text);
-  animation: modal-enter 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: modal-enter 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* hide scrollbars on mobile list panels */
@@ -690,7 +707,7 @@ html.dark .skeleton { background: linear-gradient(90deg, #1a2133 25%, #212840 50
   to { opacity: 1; }
 }
 @keyframes modal-enter {
-  from { transform: translateY(10px) scale(0.985); opacity: 0; }
+  from { transform: translateY(16px) scale(0.97); opacity: 0; }
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 @keyframes section-expand {

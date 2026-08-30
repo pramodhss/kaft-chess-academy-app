@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Download, Eye, FileImage, FileText, Library, Link2, Plus, Share2, Trash2, X } from 'lucide-react';
+import { Download, Eye, FileImage, FileText, Library, Link2, Plus, RefreshCw, Share2, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
+import { clearSheetReadCache, readSheet, readSheetLive, appendRows, clearSheetRange, ensureSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 import { useCoachName } from '../hooks/useCoachName';
 import { deleteDriveFile, uploadFileToDrive, uploadPdf, validateImage, validatePdf } from '../lib/drive';
@@ -48,6 +48,7 @@ export function Resources() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
+  const [syncing, setSyncing] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [shareByLink, setShareByLink] = useState(false);
   const coachName = savedCoachName || 'Coach';
@@ -63,7 +64,13 @@ export function Resources() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [token]);
+  useEffect(() => { void load(); }, [token]);
+
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    setSyncing(true);
+    void load().finally(() => setSyncing(false));
+  };
 
   const handleAdd = async () => {
     if (!token || !form.name.trim() || (!form.url.trim() && !uploadFile)) return;
@@ -139,7 +146,11 @@ export function Resources() {
 
   return (
     <Layout title="Resources & eBooks" showBack action={
-      <button type="button" onClick={() => setShowAdd(true)} aria-label="Add resource" className="header-action-add"><Plus size={16} aria-hidden="true" /> Add</button>
+      <>
+        <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+          className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+        <button type="button" onClick={() => setShowAdd(true)} aria-label="Add resource" className="header-action-add"><Plus size={16} aria-hidden="true" /> Add</button>
+      </>
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}

@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { CalendarCheck, GraduationCap, Home, LayoutGrid, Wallet } from 'lucide-react';
+import { CalendarCheck, LayoutDashboard, LayoutGrid, Users, Wallet } from 'lucide-react';
 
 const NAV = [
-  { to: '/',            Icon: Home, label: 'Dashboard' },
-  { to: '/students',    Icon: GraduationCap, label: 'Students'  },
-  { to: '/attendance',  Icon: CalendarCheck, label: 'Attendance' },
-  { to: '/fees',        Icon: Wallet, label: 'Fees'       },
-  { to: '/more',        Icon: LayoutGrid, label: 'More'       },
+  { to: '/',            Icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/students',    Icon: Users,           label: 'Students'  },
+  { to: '/attendance',  Icon: CalendarCheck,   label: 'Attendance' },
+  { to: '/fees',        Icon: Wallet,          label: 'Fees'       },
+  { to: '/more',        Icon: LayoutGrid,      label: 'More'       },
 ];
 
 export function BottomNav() {
@@ -24,7 +24,7 @@ export function BottomNav() {
         >
           {({ isActive }) => <>
             <span className={`bottom-nav-indicator absolute top-0 h-0.5 rounded-full ${isActive ? 'w-8 bg-gold' : 'w-0 bg-transparent'}`} />
-            <Icon size={20} strokeWidth={isActive ? 2.2 : 1.7} className="mb-0.5" aria-hidden="true" />
+            <Icon size={20} strokeWidth={isActive ? 2.2 : 1.75} className="mb-0.5" aria-hidden="true" />
             <span>{label}</span>
           </>}
         </NavLink>

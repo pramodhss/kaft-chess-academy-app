@@ -1,8 +1,8 @@
 import { TABS } from '../config';
 import { appendRows, ensureSheet, readSheet, readSheetLive } from './sheets';
 
-export const DEFAULT_BATCHES = ['Beginner A', 'Beginner B', 'Intermediate', 'Advanced', 'Competitive'];
-export const DEFAULT_LEVELS = ['Beginner', 'Intermediate', 'Advanced', 'Competitive'];
+export const DEFAULT_BATCHES = ['Beginner', 'Intermediate', 'Advanced'];
+const DEFAULT_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
 export type StudentOptionKey = 'student_batches' | 'student_levels';
 

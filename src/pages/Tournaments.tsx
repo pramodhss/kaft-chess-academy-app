@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Medal, Plus, RefreshCw, Search, Trash2, Trophy } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { readSheet, readSheetLive, appendRows, clearSheetRange } from '../lib/sheets';
+import { clearSheetReadCache, readSheet, readSheetLive, appendRows, clearSheetRange } from '../lib/sheets';
 import { matchOnlineTournamentResults, ordinal, type MatchedOnlineResult, type OnlinePlayerDirectory } from '../lib/onlineTournamentMatch';
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
 import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
@@ -17,6 +18,18 @@ const MEDALS  = ['Gold','Silver','Bronze','Participation','Best Game','None'];
 const EMPTY_F = { studentName:'', month:'', tournamentName:'', type:'Internal', date:'', venue:'', rounds:'', wins:'', draws:'', losses:'', position:'', ratingBefore:'', ratingAfter:'', medal:'None', prize:'', coachNotes:'' };
 
 const MEDAL_ICON: Record<string, string> = { Gold:'🥇', Silver:'🥈', Bronze:'🥉', Participation:'🎖', 'Best Game':'⭐', None:'' };
+const MEDAL_SCORE = { Gold: 10, Silver: 6, Bronze: 3, Participation: 1, 'Best Game': 2, None: 0 };
+
+interface LeaderboardItem {
+  name: string;
+  batch: string;
+  gold: number;
+  silver: number;
+  bronze: number;
+  wins: number;
+  ratingGain: number;
+  total: number;
+}
 
 interface ResultItem { key: string; sortKey: string; copyText: string; entry: TournamentEntry | null; node: React.ReactNode }
 
@@ -34,6 +47,49 @@ function groupCopyText(title: string, items: ResultItem[]): string {
   return [`*${title}*`, ...items.map(item => `\u2022 ${item.copyText.split('\n')[0].replace(/^\*|\*$/g, '')}`)].join('\n');
 }
 
+function leaderboardCopyText(board: LeaderboardItem[]): string {
+  if (board.length === 0) return '';
+  return [
+    '*KAFT Chess Academy \u2013 Tournament Leaderboard*',
+    '',
+    ...board.map((e, i) => {
+      const medals = [e.gold > 0 ? `\ud83e\udd47${e.gold}` : '', e.silver > 0 ? `\ud83e\udd48${e.silver}` : '', e.bronze > 0 ? `\ud83e\udd49${e.bronze}` : ''].filter(Boolean).join(' ');
+      const medalStr = medals ? ` (${medals})` : '';
+      return `${i + 1}. ${e.name}${medalStr} \u2013 ${e.wins} wins \u00b7 ${e.total} pts`;
+    }),
+    '',
+    '\u2014 KAFT Chess Academy',
+  ].join('\n');
+}
+
+function leaderboardBadgeClass(index: number): string {
+  if (index === 0) return 'bg-amber-400 text-slate-900 shadow-sm';
+  if (index === 1) return 'bg-slate-300 text-slate-800';
+  if (index === 2) return 'bg-amber-600 text-white';
+  return 'bg-gray-100 text-gray-600';
+}
+
+function computeLeaderboard(entries: TournamentEntry[]): LeaderboardItem[] {
+  const map = new Map<string, LeaderboardItem>();
+  entries.forEach(entry => {
+    const name = entry.studentName.trim();
+    if (!name) return;
+    const batch = entry.batch || '';
+    const medal = entry.medal || 'None';
+    const wins = Number.parseInt(entry.wins || '0', 10) || 0;
+    const ratingChange = Number.parseFloat(entry.ratingChange || '0') || 0;
+    if (!map.has(name)) map.set(name, { name, batch, gold: 0, silver: 0, bronze: 0, wins: 0, ratingGain: 0, total: 0 });
+    const e = map.get(name)!;
+    if (medal === 'Gold') e.gold++;
+    else if (medal === 'Silver') e.silver++;
+    else if (medal === 'Bronze') e.bronze++;
+    e.wins += wins;
+    e.ratingGain += ratingChange;
+    e.total += MEDAL_SCORE[medal as keyof typeof MEDAL_SCORE] ?? 0;
+  });
+  return [...map.values()].sort((a, b) => b.total - a.total || b.gold - a.gold || b.silver - a.silver || b.wins - a.wins);
+}
+
 function manualResultItem(entry: TournamentEntry, deleting: number | null, removeEntry: (entry: TournamentEntry) => void): ResultItem {
   return {
     key: `manual-${entry.rowIndex}`,
@@ -41,7 +97,7 @@ function manualResultItem(entry: TournamentEntry, deleting: number | null, remov
     copyText: entryCopyText(entry),
     entry,
     node: (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="surface-card p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <p className="font-semibold text-gray-900">{entry.studentName}</p>
@@ -81,7 +137,7 @@ function autoOfflineItem(registration: TournamentRegistration): ResultItem {
     copyText,
     entry: null,
     node: (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="surface-card p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-1.5"><span className="badge-gray">Auto-tracked</span><p className="font-semibold text-gray-900">{registration.studentName}</p></div>
@@ -111,7 +167,7 @@ function autoOnlineItem(match: MatchedOnlineResult): ResultItem {
     copyText,
     entry: null,
     node: (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="surface-card p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-1.5"><span className="badge-gray">Auto-tracked</span><p className="font-semibold text-gray-900">{match.studentName}</p></div>
@@ -125,7 +181,6 @@ function autoOnlineItem(match: MatchedOnlineResult): ResultItem {
     ),
   };
 }
-
 
 function rowToEntry(row: string[], idx: number): TournamentEntry {
   return {
@@ -141,6 +196,9 @@ function rowToEntry(row: string[], idx: number): TournamentEntry {
 export function Tournaments() {
   const { token, logout } = useAuth();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'results' | 'leaderboard'>(() => searchParams.get('tab') === 'leaderboard' ? 'leaderboard' : 'results');
+  const [search, setSearch] = useState('');
   const [entries, setEntries] = useState<TournamentEntry[]>([]);
   const [students, setStudents] = useState<string[]>([]);
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayerDirectory[]>([]);
@@ -148,6 +206,7 @@ export function Tournaments() {
   const [weeklyResults, setWeeklyResults] = useState<SavedWeeklyOnlineTournament[]>([]);
   const [studentDetails, setStudentDetails] = useState<Map<string, { batch: string; level: string }>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_F });
@@ -180,7 +239,13 @@ export function Tournaments() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [token]);
+  useEffect(() => { void load(); }, [token]);
+
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    setSyncing(true);
+    void load().finally(() => setSyncing(false));
+  };
 
   const upd = (k: keyof typeof EMPTY_F) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm({ ...form, [k]: e.target.value });
@@ -231,6 +296,8 @@ export function Tournaments() {
     finally { setDeleting(null); }
   };
 
+  const leaderboard = useMemo(() => computeLeaderboard(entries), [entries]);
+
   if (loading) return <Layout title="Tournaments" showBack><PageSkeleton /></Layout>;
 
   const manualOffline = entries.filter(e => e.type !== 'Online').map(entry => manualResultItem(entry, deleting, removeEntry));
@@ -240,30 +307,110 @@ export function Tournaments() {
   const offlineItems = [...manualOffline, ...autoOffline].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
   const onlineItems = [...manualOnline, ...autoOnline].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
 
+  const q = search.trim().toLowerCase();
+  const visibleOffline = q ? offlineItems.filter(item => item.copyText.toLowerCase().includes(q)) : offlineItems;
+  const visibleOnline = q ? onlineItems.filter(item => item.copyText.toLowerCase().includes(q)) : onlineItems;
+
+  const handleTabChange = (tab: 'results' | 'leaderboard') => {
+    setActiveTab(tab);
+    setSearchParams(tab === 'leaderboard' ? { tab: 'leaderboard' } : {});
+  };
+
   return (
-    <Layout title="Tournaments" showBack action={
-      <button type="button" onClick={() => setShowAdd(true)} aria-label="Add tournament result" className="header-action-add"><Plus size={16} aria-hidden="true" /> Add</button>
+    <Layout title="Tournaments & Leaderboard" showBack action={
+      <>
+        <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+          className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+        <button type="button" onClick={() => setShowAdd(true)} aria-label="Add tournament result" className="header-action-add"><Plus size={16} aria-hidden="true" /> Add</button>
+      </>
     }>
       <div className="p-4 space-y-4">
         {error && <p className="text-red-600 text-sm">{error}</p>}
 
-        {offlineItems.length === 0 && onlineItems.length === 0 && (
-          <div className="text-center py-12 text-gray-400">
-            <p className="text-4xl mb-2">🏆</p>
-            <p>No tournament results yet.</p>
+        {/* Tab switcher */}
+        <div className="surface-card flex p-1 gap-1">
+          <button type="button" onClick={() => handleTabChange('results')}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5
+              ${activeTab === 'results' ? 'bg-navy text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Trophy size={15} /> Results ({offlineItems.length + onlineItems.length})
+          </button>
+          <button type="button" onClick={() => handleTabChange('leaderboard')}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5
+              ${activeTab === 'leaderboard' ? 'bg-navy text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}>
+            <Medal size={15} /> Leaderboard ({leaderboard.length})
+          </button>
+        </div>
+
+        {activeTab === 'results' && (
+          <div className="space-y-4">
+            {/* Search */}
+            <label className="relative block">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search tournament results…" aria-label="Search tournament results"
+                className="input input-with-icon" />
+            </label>
+
+            {visibleOffline.length === 0 && visibleOnline.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-4xl mb-2">🏆</p>
+                <p>{q ? 'No matching tournament results found.' : 'No tournament results yet.'}</p>
+              </div>
+            )}
+
+            {([['Offline results', 'badge-blue', visibleOffline], ['Online results', 'badge-green', visibleOnline]] as const).map(([title, badgeClass, group]) =>
+              group.length > 0 && (
+                <section key={title} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h2 className="section-label flex items-center gap-2"><span className={badgeClass}>{group.length}</span>{title}</h2>
+                    <CopyButton text={groupCopyText(title, group)} label={`Copy ${title}`} />
+                  </div>
+                  {group.map(item => <div key={item.key}>{item.node}</div>)}
+                </section>
+              )
+            )}
           </div>
         )}
 
-        {([['Offline results', 'badge-blue', offlineItems], ['Online results', 'badge-green', onlineItems]] as const).map(([title, badgeClass, group]) =>
-          group.length > 0 && (
-            <section key={title} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="section-label flex items-center gap-2"><span className={badgeClass}>{group.length}</span>{title}</h2>
-                <CopyButton text={groupCopyText(title, group)} label={`Copy ${title}`} />
+        {activeTab === 'leaderboard' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="section-label">Academy Rankings</p>
+                <h2 className="text-sm font-bold text-navy">Student Medal Standings</h2>
               </div>
-              {group.map(item => <div key={item.key}>{item.node}</div>)}
-            </section>
-          )
+              {leaderboard.length > 0 && <CopyButton text={leaderboardCopyText(leaderboard)} label="Copy Leaderboard for WhatsApp" />}
+            </div>
+
+            {leaderboard.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-4xl mb-2">🏅</p>
+                <p>No tournament medals or scores recorded yet.</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {leaderboard.map((e, i) => (
+                <div key={e.name} className="surface-card flex items-center gap-3 p-3.5">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${leaderboardBadgeClass(i)}`}>
+                    {i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-gray-900 truncate">{e.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{e.batch || 'General Batch'}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="flex gap-1.5 text-xs justify-end font-semibold">
+                      {e.gold > 0 && <span>🥇{e.gold}</span>}
+                      {e.silver > 0 && <span>🥈{e.silver}</span>}
+                      {e.bronze > 0 && <span>🥉{e.bronze}</span>}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{e.wins} win{e.wins === 1 ? '' : 's'} · {e.total} pts</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Copy, Link, LoaderCircle, MessageCircle, Pencil, Plus, Save, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
+import { Bus, CalendarDays, ChevronRight, CircleDollarSign, Copy, Link, LoaderCircle, MessageCircle, Pencil, Plus, RefreshCw, Save, Search, StickyNote, Trash2, Trophy, Users, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
-import { appendRows, batchWriteRanges, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, SheetConflictError, writeRange } from '../lib/sheets';
+import { appendRows, batchWriteRanges, clearSheetRange, clearSheetReadCache, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, SheetConflictError, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
 import { phoneValidationError } from '../lib/validation';
 import { fetchWeeklyOnlineTournament, rowToSavedWeeklyOnlineTournament, WEEKLY_ONLINE_TOURNAMENT_HEADERS, weeklyTournamentSource, weeklyTournamentValues, weeklyTournamentWhatsAppMessage, type SavedWeeklyOnlineTournament, type WeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
@@ -73,6 +73,7 @@ export function Van() {
   const [editing, setEditing] = useState<ManagedTournament | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [legacyWarning, setLegacyWarning] = useState('');
@@ -108,6 +109,12 @@ export function Van() {
   };
 
   useEffect(() => { void load(); }, [token]);
+
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    setSyncing(true);
+    void load().finally(() => setSyncing(false));
+  };
 
   const openRoster = (t: ManagedTournament) => { setSelected(t); setRoster(createRoster(students, registrations, t.id)); setQuery(''); };
   const openCreate = () => { setEditing(null); setForm({ ...EMPTY_TOURNAMENT }); setShowForm(true); };
@@ -318,7 +325,13 @@ export function Van() {
     setStudentNotes={setStudentNotes} save={saveRoster} close={() => setSelected(null)} />;
 
   return (
-    <Layout title="Tournament Management" action={<button type="button" onClick={openCreate} className="header-action-add" aria-label="Add tournament"><Plus size={16} /> Add</button>}>
+    <Layout title="Tournament Management" action={
+      <>
+        <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+          className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+        <button type="button" onClick={openCreate} className="header-action-add" aria-label="Add tournament"><Plus size={16} /> Add</button>
+      </>
+    }>
       <div className="page-stack">
         {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
         {legacyWarning && <div role="alert" className="error-state"><p><Bus size={14} className="inline mr-1" />{legacyWarning} Legacy transport data was left unchanged.</p></div>}

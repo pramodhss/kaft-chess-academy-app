@@ -47,8 +47,8 @@ export function GlobalSearch() {
 
   return (
     <>
-      <button type="button" onClick={show} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white hover:bg-white/10" aria-label="Search students" title="Search students">
-        <Search size={18} aria-hidden="true" />
+      <button type="button" onClick={show} className="icon-button" aria-label="Search students" title="Search students">
+        <Search size={16} aria-hidden="true" />
       </button>
       {open && (
         <div className="modal-backdrop items-start justify-center pt-20">
@@ -66,7 +66,7 @@ export function GlobalSearch() {
               {results.map(student => (
                 <button type="button" key={student.name} onClick={() => select(student.name)} className="flex w-full items-center gap-3 rounded-lg p-3 text-left hover:bg-gray-50">
                   <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-navy"><UserRound size={18} /></span>
-                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-gray-900">{student.name}</span><span className="block truncate text-xs text-gray-400">{[student.batch, student.level, student.phone].filter(Boolean).join(' · ')}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-gray-900">{student.name}</span><span className="block truncate text-xs text-gray-400">{[student.batch, student.phone].filter(Boolean).join(' · ')}</span></span>
                 </button>
               ))}
             </div>

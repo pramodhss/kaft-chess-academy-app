@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, GraduationCap, LayoutGrid, MapPin, RefreshCw, Trophy, UserRound, Wallet } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, LayoutGrid, MapPin, RefreshCw, Trophy, UserRound, Users, Wallet } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -54,7 +54,7 @@ function upcomingBirthdays(studentRows: string[][]): { name: string; dob: string
 }
 
 const QUICK_LINKS = [
-  { to: '/students',   Icon: GraduationCap, label: 'Students' },
+  { to: '/students',   Icon: Users, label: 'Students' },
   { to: '/attendance', Icon: CalendarCheck, label: 'Attendance' },
   { to: '/fees',       Icon: Wallet, label: 'Fees' },
   { to: '/upcoming',   Icon: Trophy, label: 'Tournaments' },
@@ -65,7 +65,7 @@ const QUICK_LINKS = [
 const PRIMARY_ACTIONS = [
   { to: '/attendance', Icon: CalendarCheck, label: 'Mark attendance', tone: 'blue' },
   { to: '/fees', Icon: Wallet, label: 'Collect fee', tone: 'green' },
-  { to: '/students', Icon: GraduationCap, label: 'Add student', tone: 'gold' },
+  { to: '/students', Icon: Users, label: 'Add student', tone: 'gold' },
 ] as const;
 
 export function Dashboard() {
@@ -148,7 +148,7 @@ export function Dashboard() {
         </section>
         {/* Stat cards */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="Students" value={stats.active} sub={`${stats.total - stats.active} inactive`} tone="blue" icon={<GraduationCap size={19} />} />
+          <StatCard label="Students" value={stats.active} sub={`${stats.total - stats.active} inactive`} tone="blue" icon={<Users size={19} />} />
           <StatCard label="Next class" value={`${DAYS_S[nextDate.getDay()]} ${nextDate.getDate()}`} sub={`${MONTHS_S[nextDate.getMonth()]} session`} tone="green" icon={<CalendarCheck size={19} />} />
           <StatCard label="Fees collected" value={`₹${stats.collected.toLocaleString('en-IN')}`} sub="This month" tone="gold" icon={<Trophy size={19} />} />
           <StatCard label="Fee pending" value={`₹${stats.outstanding.toLocaleString('en-IN')}`} sub={`${overdueCount} accounts`} tone="red" icon={<AlertCircle size={19} />} />

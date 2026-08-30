@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom';
-import { BookOpen, CalendarCheck, GraduationCap, Home, LayoutGrid, Library, SlidersHorizontal, TrendingUp, Trophy, Wallet } from 'lucide-react';
+import { BookOpen, CalendarCheck, LayoutDashboard, LayoutGrid, Library, SlidersHorizontal, TrendingUp, Trophy, Users, Wallet } from 'lucide-react';
 
 const LINKS = [
-  { to: '/', Icon: Home, label: 'Dashboard' },
-  { to: '/students', Icon: GraduationCap, label: 'Students' },
+  { to: '/', Icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/students', Icon: Users, label: 'Students' },
   { to: '/attendance', Icon: CalendarCheck, label: 'Attendance' },
   { to: '/fees', Icon: Wallet, label: 'Fees' },
   { to: '/upcoming', Icon: Trophy, label: 'Tournaments' },
@@ -28,7 +28,7 @@ export function Sidebar() {
         {LINKS.map(({ to, Icon, label }) => (
           <NavLink key={to} to={to} end={to === '/'}
             className={({ isActive }) => `academy-sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${isActive ? 'is-active' : ''}`}>
-            {({ isActive }) => <><Icon size={19} strokeWidth={isActive ? 2.2 : 1.7} aria-hidden="true" />{label}</>}
+            {({ isActive }) => <><Icon size={19} strokeWidth={isActive ? 2.2 : 1.75} aria-hidden="true" />{label}</>}
           </NavLink>
         ))}
       </nav>

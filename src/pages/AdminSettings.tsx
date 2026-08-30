@@ -35,23 +35,23 @@ export function AdminSettings() {
 
   useEffect(() => { void load(); }, [token]);
 
-  const updateValues = (section: 'batches' | 'levels', values: string[]) => {
+  const updateValues = (values: string[]) => {
     setOptions(current => current ? {
       ...current,
-      [section]: { ...current[section], values },
+      batches: { ...current.batches, values },
     } : current);
   };
 
-  const save = async (section: 'batches' | 'levels', key: StudentOptionKey) => {
+  const save = async () => {
     if (!token || !options) return;
-    setSaving(key);
+    setSaving('student_batches');
     try {
       const result = await saveStudentOptionList(
         token,
         SHEET_ID,
-        key,
-        options[section].values,
-        options[section].version,
+        'student_batches',
+        options.batches.values,
+        options.batches.version,
         coachName || 'Admin',
       );
       const latestOptions = await loadStudentOptions(token, SHEET_ID, true);
@@ -59,7 +59,7 @@ export function AdminSettings() {
       if (result.concurrentUpdate) {
         toast.error('Another admin updated this list at the same time. The latest Sheet values were reloaded; review them before saving again.');
       } else {
-        toast.success(`${section === 'batches' ? 'Student types' : 'Chess levels'} updated successfully.`);
+        toast.success('Student batches updated successfully.');
       }
     } catch (saveError: any) {
       if (saveError.message === 'SETTINGS_CONFLICT') {
@@ -85,22 +85,13 @@ export function AdminSettings() {
           </div>
         )}
         {options && (
-          <>
-            <OptionEditor
-              title="Student Types / Batches"
-              values={options.batches.values}
-              saving={saving === 'student_batches'}
-              onChange={values => updateValues('batches', values)}
-              onSave={() => save('batches', 'student_batches')}
-            />
-            <OptionEditor
-              title="Chess Levels"
-              values={options.levels.values}
-              saving={saving === 'student_levels'}
-              onChange={values => updateValues('levels', values)}
-              onSave={() => save('levels', 'student_levels')}
-            />
-          </>
+          <OptionEditor
+            title="Student Batches"
+            values={options.batches.values}
+            saving={saving === 'student_batches'}
+            onChange={updateValues}
+            onSave={save}
+          />
         )}
       </div>
     </Layout>

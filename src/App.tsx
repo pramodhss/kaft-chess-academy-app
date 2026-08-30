@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { GOOGLE_CLIENT_ID } from './config';
@@ -33,6 +33,7 @@ const Curriculum = lazy(() => import('./pages/Curriculum').then(module => ({ def
 const AdminSettings = lazy(() => import('./pages/AdminSettings').then(module => ({ default: module.AdminSettings })));
 const OperationsCenter = lazy(() => import('./pages/OperationsCenter').then(module => ({ default: module.OperationsCenter })));
 const StudentTimeline = lazy(() => import('./pages/StudentTimeline').then(module => ({ default: module.StudentTimeline })));
+const ParentPortal = lazy(() => import('./pages/ParentPortal').then(module => ({ default: module.ParentPortal })));
 
 function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
   const [val, setVal] = useState('');
@@ -58,6 +59,8 @@ function CoachNameModal({ onSave }: Readonly<{ onSave: (n: string) => void }>) {
 function AppRoutes() {
   const { isLoggedIn } = useAuth();
   const { showPrompt, saveCoachName } = useCoachName();
+  const location = useLocation();
+
   useEffect(() => {
     if (!isLoggedIn) return;
     const timer = window.setTimeout(() => {
@@ -67,6 +70,11 @@ function AppRoutes() {
     }, 1_000);
     return () => window.clearTimeout(timer);
   }, [isLoggedIn]);
+
+  if (location.pathname === '/parent') {
+    return <Suspense fallback={<PageSkeleton />}><ParentPortal /></Suspense>;
+  }
+
   if (!isLoggedIn) return <Login />;
   return (
     <>
@@ -88,6 +96,7 @@ function AppRoutes() {
         <Route path="/monthly-report"    element={<MonthlyReport />} />
         <Route path="/leaderboard"       element={<Leaderboard />} />
         <Route path="/progress"          element={<StudentProgress />} />
+        <Route path="/parent"            element={<ParentPortal />} />
         <Route path="/more"              element={<More />} />
         <Route path="*"                  element={<Navigate to="/" replace />} />
       </Routes></Suspense>

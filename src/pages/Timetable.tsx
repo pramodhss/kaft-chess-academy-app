@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { CalendarDays, Clock3, MapPin, Pencil, Plus, Trash2, UserRound, UsersRound, X } from 'lucide-react';
+import { CalendarDays, Clock3, MapPin, Pencil, Plus, RefreshCw, Trash2, UserRound, UsersRound, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
-import { appendRows, clearSheetRange, ensureSheet, readSheet, readSheetLive, writeRange } from '../lib/sheets';
+import { appendRows, clearSheetRange, clearSheetReadCache, ensureSheet, readSheet, readSheetLive, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
 import {
   EMPTY_TIMETABLE, normalizeTimetableRows, timetableRow, timetableValidationError, timetableValues,
@@ -27,6 +27,7 @@ export function Timetable() {
   const [editing, setEditing] = useState<TimetableEntry | null>(null);
   const [form, setForm] = useState<TimetableDraft>({ ...EMPTY_TIMETABLE });
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
 
   const load = async () => {
@@ -50,6 +51,12 @@ export function Timetable() {
   };
 
   useEffect(() => { void load(); }, [token]);
+
+  const sync = () => {
+    clearSheetReadCache(SHEET_ID);
+    setSyncing(true);
+    void load().finally(() => setSyncing(false));
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -121,7 +128,13 @@ export function Timetable() {
   if (editing) saveLabel = 'Save changes';
   if (saving) saveLabel = 'Saving…';
 
-  return <Layout title="Weekly Classes" action={<button type="button" onClick={openCreate} className="header-action-add" aria-label="Add weekly class"><Plus size={16} />Add</button>}>
+  return <Layout title="Weekly Classes" action={
+    <>
+      <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
+        className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+      <button type="button" onClick={openCreate} className="header-action-add" aria-label="Add weekly class"><Plus size={16} />Add</button>
+    </>
+  }>
     <div className="timetable-screen page-stack">
       {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
       {!error && rows.length === 0 && <div className="empty-state"><CalendarDays size={24} /><p>No weekly classes scheduled yet.</p><button type="button" onClick={openCreate} className="primary-action"><Plus size={16} />Add first class</button></div>}

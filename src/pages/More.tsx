@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   BookOpenCheck, CalendarDays, ChevronRight, CircleUserRound,
   ExternalLink, Gauge, Library, LogOut, Medal,
-  Moon, ReceiptText, SlidersHorizontal, Sun, Swords, TrendingUp, Trophy,
+  Moon, ReceiptText, SlidersHorizontal, Sun, TrendingUp, Trophy,
   Type,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
@@ -17,14 +17,13 @@ const GROUPS = [
   { title:'Coach Tools', items:[
     { to:'/progress',   Icon:TrendingUp, label:'Student Progress',  desc:'Attendance charts, skill ratings and PDF reports' },
     { to:'/timetable',  Icon:CalendarDays,         label:'Timetable',          desc:'Class schedule, batches, coaches and rooms' },
-    { to:'/operations', Icon:SlidersHorizontal,              label:'Reports & Data',    desc:'Exports, data quality checks and audit log' },
+    { to:'/operations', Icon:SlidersHorizontal,              label:'Reports & Operations',    desc:'Exports, reminders, data health and audit log' },
   ]},
   { title:'Tournaments', items:[
-    { to:'/van',           Icon:Swords,    label:'Tournament Events',  desc:'Create events, rosters, payments and van' },
-    { to:'/tournaments',   Icon:Trophy,    label:'Results & Medals',   desc:'Past scores, ratings and prize records' },
-    { to:'/leaderboard',   Icon:Medal,     label:'Rankings',           desc:'Student rankings by medals and wins' },
+    { to:'/upcoming',      Icon:Trophy,    label:'Tournament Events',  desc:'Create events, rosters, payments and online imports' },
+    { to:'/tournaments',   Icon:Medal,     label:'Results & Leaderboard', desc:'Past scores, medals, auto-tracked results and rankings' },
   ]},
-  { title:'Learning', items:[
+  { title:'Learning & Study', items:[
     { to:'/resources',  Icon:Library,        label:'Study Materials',  desc:'PDFs, images and shared study links' },
     { to:'/curriculum', Icon:BookOpenCheck,  label:'Syllabus',          desc:'Chess curriculum from beginner to advanced' },
   ]},
