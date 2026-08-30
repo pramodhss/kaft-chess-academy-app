@@ -143,3 +143,58 @@ test('filters phone input and validates email and ratings', async ({ page, sheet
   await expect(dialog.getByRole('alert')).toContainText('Chess.com username must use only letters');
   expect(sheets.writes).toHaveLength(0);
 });
+
+test('imports students from spreadsheet, commits to Sheets, and retains on refresh and navigation', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+
+  // Upload the sample CSV import file
+  const csvContent = [
+    'Full Name,DOB,Grade / School,Batch,Parent Name,Parent Phone,TNSCA ID,Classical Rating',
+    'Rohan Verma,2015-08-12,5th,Beginner,Suresh Verma,9876500111,TN500,1200',
+    'Ananya Iyer,2014-03-25,6th,Intermediate,Meenakshi Iyer,9876500222,TN501,1350',
+  ].join('\n');
+
+  const fileInput = page.locator('input[type="file"]');
+  await fileInput.setInputFiles({
+    name: 'new_batch.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csvContent),
+  });
+
+  // Modal preview should appear
+  await expect(page.getByText(/Import Students \(2 found\)/i)).toBeVisible();
+  await expect(page.getByText('1. Rohan Verma')).toBeVisible();
+  await expect(page.getByText('2. Ananya Iyer')).toBeVisible();
+
+  // Click the save/import button
+  await page.getByRole('button', { name: /Import 2 Students to Academy/i }).click();
+
+  // Verify toast and presence in list
+  await expect(page.getByText(/Successfully saved 2 students/i)).toBeVisible();
+  await expect(page.getByText('Rohan Verma', { exact: true })).toBeVisible();
+  await expect(page.getByText('Ananya Iyer', { exact: true })).toBeVisible();
+
+  // Verify committed to mock Sheets workbook
+  expect(sheets.workbook['Students & Parents'].some(row => row[0] === 'Rohan Verma')).toBe(true);
+  expect(sheets.workbook['Students & Parents'].some(row => row[0] === 'Ananya Iyer')).toBe(true);
+  expect(sheets.workbook['Weekend Attendance'].some(row => row[0] === 'Rohan Verma')).toBe(true);
+  expect(sheets.workbook['Weekend Attendance'].some(row => row[0] === 'Ananya Iyer')).toBe(true);
+
+  // Navigate to Fees and verify students are retained
+  await page.getByRole('link', { name: 'Fees', exact: true }).click();
+  await expect(page.getByText('Rohan Verma')).toBeVisible();
+
+  // Refresh page and verify students remain permanently
+  await page.reload();
+  await expect(page.getByText('Rohan Verma')).toBeVisible();
+
+  // Navigate back to Students and edit one of the imported students
+  await openApp(page, '#/students');
+  await page.locator('.students-workspace').getByRole('button', { name: /Rohan Verma/ }).click();
+  await page.getByRole('button', { name: 'Edit student' }).click();
+
+  const coachInput = page.getByLabel('Assigned Coach');
+  await coachInput.fill('Coach Anand');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+  await expect(page.getByText(/changes were updated successfully/i)).toBeVisible();
+});

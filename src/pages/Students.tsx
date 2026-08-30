@@ -168,17 +168,17 @@ function formToStudent(form: FormData, rowIndex: number, existing?: Student): St
   };
 }
 
-function studentRowValues(form: FormData, row: number) {
+function studentRowValues(form: FormData) {
   return [
     form.name, form.dob,
-    `=IF(B${row}="","",DATEDIF(B${row},TODAY(),"Y"))`,
+    '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
     form.gender, form.grade, form.batch, form.level,
     form.joiningDate, form.status,
     form.parent1Name, phoneForSheet(form.parent1Phone), phoneForSheet(form.parent1WhatsApp), form.parent1Email,
     form.parent2Name, phoneForSheet(form.parent2Phone),
     form.emergencyContact, phoneForSheet(form.emergencyPhone),
     form.address, form.photoConsent,
-    `=SUMIFS('Monthly Attendance'!$C:$C,'Monthly Attendance'!$A:$A,A${row},'Monthly Attendance'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))`,
+    '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
     form.notes, form.school, form.standard,
     form.tnscaId, form.fideId, form.aicfId,
     form.ratingClassical, form.ratingRapid, form.ratingBlitz,
@@ -437,7 +437,7 @@ async function addStudent(deps: Readonly<{
     ]]);
     await confirmUniqueStudentAppend(token, form.name, rowIndex, () => { rowIndex = null; });
     const savedRow = rowIndex;
-    const values = studentRowValues(form, savedRow);
+    const values = studentRowValues(form);
     const attendanceSynced = await syncStudentProfile(
       token,
       SHEET_ID,
@@ -511,7 +511,7 @@ async function editStudent(deps: Readonly<{
       token,
       SHEET_ID,
       `'${tab}'!A${row}:AG${row}`,
-      studentRowValues(mergedForm, row),
+      studentRowValues(mergedForm),
       { name: currentStudent.name, batch: currentStudent.batch, level: currentStudent.level, parentName: currentStudent.parent1Name },
       { name: mergedForm.name, batch: mergedForm.batch, level: mergedForm.level, parentName: mergedForm.parent1Name },
     );
@@ -572,9 +572,10 @@ async function batchImportStudents(deps: Readonly<{
   toast: ToastApi;
   setSaving: (value: boolean) => void;
   setStudents: StudentsSetter;
+  setFiltered: StudentsSetter;
   setImportPreview: (value: FormData[] | null) => void;
 }>) {
-  const { token, importList, existingStudents, coachName, toast, setSaving, setStudents, setImportPreview } = deps;
+  const { token, importList, existingStudents, coachName, toast, setSaving, setStudents, setFiltered, setImportPreview } = deps;
   if (!token || importList.length === 0) return;
   setSaving(true);
   try {
@@ -591,13 +592,41 @@ async function batchImportStudents(deps: Readonly<{
     const liveNames = new Set(currentNames.slice(1).map(r => normalizedName(r[0] ?? '')));
     const filteredToAppend = newItems.filter(item => !liveNames.has(normalizedName(item.name)));
 
-    const startRow = currentNames.length + 1;
-    const rowsToAppend = filteredToAppend.map((item, i) => studentRowValues(item, startRow + i));
-    const firstAppendedRow = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, rowsToAppend);
-    const createdStudents = filteredToAppend.map((item, i) => formToStudent(item, firstAppendedRow + i));
-    setStudents(prev => [...prev, ...createdStudents]);
-    void recordAudit(token, 'CREATE', 'Students', `Imported ${createdStudents.length} students from Excel/CSV`, coachName).catch(() => undefined);
-    toast.success(`Successfully imported ${createdStudents.length} student${createdStudents.length === 1 ? '' : 's'}!`);
+    if (filteredToAppend.length === 0) {
+      toast.info('All students in this spreadsheet already exist in Google Sheets.');
+      setImportPreview(null);
+      return;
+    }
+
+    const rowsToAppend = filteredToAppend.map(item => studentRowValues(item));
+    await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, rowsToAppend);
+
+    // Immediately synchronize all newly imported students to Weekend Attendance sheet
+    try {
+      const attRows = await readSheetLive(token, SHEET_ID, `'${TABS.ATTENDANCE}'!A:B`);
+      const existingAttNames = new Set(attRows.slice(1).map(r => normalizedName(r[0] ?? '')));
+      const attToAppend = filteredToAppend.filter(item => !existingAttNames.has(normalizedName(item.name)));
+      if (attToAppend.length > 0) {
+        await appendRows(token, SHEET_ID, `'${TABS.ATTENDANCE}'!A:B`, attToAppend.map(item => [item.name, item.batch]));
+      }
+    } catch { /* best effort attendance sync */ }
+
+    // Clear session reconcile cache
+    try {
+      sessionStorage.removeItem(`att-reconciled-${SHEET_ID}`);
+    } catch { /* sessionStorage fallback */ }
+
+    // Clear Google Sheets read cache
+    clearSheetReadCache(SHEET_ID);
+
+    // Reload from live sheet so all indices, formulas, and data are 100% verified and retained
+    const freshRows = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
+    const freshData = freshRows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(s => s.name.trim());
+    setStudents(freshData);
+    setFiltered(freshData);
+
+    void recordAudit(token, 'CREATE', 'Students', `Imported ${filteredToAppend.length} students from Excel/CSV`, coachName).catch(() => undefined);
+    toast.success(`Successfully saved ${filteredToAppend.length} student${filteredToAppend.length === 1 ? '' : 's'} to Google Sheets!`);
     setImportPreview(null);
   } catch (e: any) {
     toast.error('Import failed: ' + e.message);
@@ -802,6 +831,7 @@ export function Students() {
       toast,
       setSaving,
       setStudents,
+      setFiltered,
       setImportPreview,
     });
   };
