@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, Pencil, Plus, RefreshCw, Share2, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, Pencil, Plus, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -15,6 +15,7 @@ import { monthLabel, rowToRegistration, type TournamentRegistration } from '../l
 import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { matchOnlineTournamentResults, ordinal } from '../lib/onlineTournamentMatch';
 import { calculateStudentBadges } from '../lib/studentBadges';
+import { parseExcelOrCsvFile } from '../lib/excelStudentImport';
 import {
   dateValidationError,
   digitsOnly,
@@ -55,7 +56,7 @@ function phoneForSheet(value: string): string {
   return trimmed ? `'${trimmed}` : '';
 }
 
-type FormData = {
+export type FormData = {
   name:string; dob:string; gender:string; grade:string; batch:string; level:string;
   joiningDate:string; status:string; parent1Name:string; parent1Phone:string;
   parent1WhatsApp:string; parent1Email:string; parent2Name:string; parent2Phone:string;
@@ -563,6 +564,48 @@ async function deleteStudent(deps: Readonly<{
   finally { setDeleting(false); }
 }
 
+async function batchImportStudents(deps: Readonly<{
+  token: string | null;
+  importList: FormData[];
+  existingStudents: Student[];
+  coachName: string;
+  toast: ToastApi;
+  setSaving: (value: boolean) => void;
+  setStudents: StudentsSetter;
+  setImportPreview: (value: FormData[] | null) => void;
+}>) {
+  const { token, importList, existingStudents, coachName, toast, setSaving, setStudents, setImportPreview } = deps;
+  if (!token || importList.length === 0) return;
+  setSaving(true);
+  try {
+    await ensureStudentSchema(token);
+    const existingNames = new Set(existingStudents.map(s => normalizedName(s.name)));
+    const newItems = importList.filter(item => item.name.trim() && !existingNames.has(normalizedName(item.name)));
+    if (newItems.length === 0) {
+      toast.info('All students in this spreadsheet already exist in the roster.');
+      setImportPreview(null);
+      return;
+    }
+
+    const currentNames = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:A`);
+    const liveNames = new Set(currentNames.slice(1).map(r => normalizedName(r[0] ?? '')));
+    const filteredToAppend = newItems.filter(item => !liveNames.has(normalizedName(item.name)));
+
+    const startRow = currentNames.length + 1;
+    const rowsToAppend = filteredToAppend.map((item, i) => studentRowValues(item, startRow + i));
+    const firstAppendedRow = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, rowsToAppend);
+    const createdStudents = filteredToAppend.map((item, i) => formToStudent(item, firstAppendedRow + i));
+    setStudents(prev => [...prev, ...createdStudents]);
+    void recordAudit(token, 'CREATE', 'Students', `Imported ${createdStudents.length} students from Excel/CSV`, coachName).catch(() => undefined);
+    toast.success(`Successfully imported ${createdStudents.length} student${createdStudents.length === 1 ? '' : 's'}!`);
+    setImportPreview(null);
+  } catch (e: any) {
+    toast.error('Import failed: ' + e.message);
+  } finally {
+    setSaving(false);
+  }
+}
+
 function StudentChessTab({ selected, registrations, weeklyResults }: Readonly<{
   selected: Student;
   registrations: TournamentRegistration[];
@@ -706,6 +749,9 @@ export function Students() {
   const [sortKey, setSortKey] = useState<'name'|'batch'|'status'|'attendance'>('name');
   const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('info');
   const [syncing, setSyncing] = useState(false);
+  const [importPreview, setImportPreview] = useState<FormData[] | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [importingFile, setImportingFile] = useState(false);
   const toast = useToast();
 
   const load = () => loadStudents({
@@ -728,6 +774,37 @@ export function Students() {
   const handleEdit = () => editStudent({ token, selected, form, toast, setSaving, setStudents, setForm, setSelected, setEditMode });
 
   const handleDelete = () => deleteStudent({ token, selected, toast, setDeleting, setStudents, setSelected });
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportingFile(true);
+    try {
+      const parsed = await parseExcelOrCsvFile(file, coachName);
+      setImportFileName(file.name);
+      setImportPreview(parsed);
+      toast.info(`Parsed ${parsed.length} students from ${file.name}. Review and confirm to import.`);
+    } catch (err: any) {
+      toast.error('File parse error: ' + (err.message || 'Could not parse Excel/CSV.'));
+    } finally {
+      setImportingFile(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleBatchImport = () => {
+    if (!importPreview) return;
+    void batchImportStudents({
+      token,
+      importList: importPreview,
+      existingStudents: students,
+      coachName,
+      toast,
+      setSaving,
+      setStudents,
+      setImportPreview,
+    });
+  };
 
   // Sheets reads are cached briefly for performance, so another coach's edits
   // may not appear immediately — this forces a fresh fetch on demand.
@@ -835,6 +912,10 @@ export function Students() {
   return (
     <Layout title="Students" action={
       <>
+        <label className="icon-button cursor-pointer" aria-label="Import students from Excel or CSV" title="Import from Excel / CSV">
+          <Upload size={16} className={importingFile ? 'animate-spin' : ''} aria-hidden="true" />
+          <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={handleFileUpload} />
+        </label>
         <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
           className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
         <button type="button" onClick={() => {
@@ -908,6 +989,38 @@ export function Students() {
             {saving && <span className="button-spinner" aria-hidden="true"/>}
             {saving?'Adding student…':'Add Student'}
           </button>
+        </Modal>
+      )}
+      {importPreview && (
+        <Modal title={`Import Students (${importPreview.length} found)`} onClose={() => setImportPreview(null)}>
+          <div className="space-y-3">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200">
+              <p className="font-bold flex items-center gap-1.5"><FileSpreadsheet size={15} /> Source: {importFileName}</p>
+              <p className="mt-1">Review the parsed records below. Existing students in the roster will be skipped automatically.</p>
+            </div>
+
+            <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 border dark:border-gray-800 rounded-xl">
+              {importPreview.map((item, idx) => (
+                <div key={`${item.name}-${idx}`} className="p-2.5 text-xs flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <strong className="block text-gray-900 dark:text-white truncate">{idx + 1}. {item.name}</strong>
+                    <span className="text-gray-500 block truncate">DOB: {item.dob} · {item.batch} · Parent: {item.parent1Name} ({item.parent1Phone})</span>
+                    {(item.tnscaId || item.fideId || item.ratingClassical) && (
+                      <span className="text-[10px] text-chess-blue block truncate">
+                        {[item.tnscaId ? `TNSCA: ${item.tnscaId}` : '', item.fideId ? `FIDE: ${item.fideId}` : '', item.ratingClassical ? `Rating: ${item.ratingClassical}` : ''].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </div>
+                  <span className="badge-green flex-shrink-0 text-[10px]">Ready</span>
+                </div>
+              ))}
+            </div>
+
+            <button type="button" onClick={handleBatchImport} disabled={saving} className="primary-action w-full">
+              {saving && <span className="button-spinner" aria-hidden="true"/>}
+              {saving ? 'Importing & Synchronizing…' : `Import ${importPreview.length} Students to Academy`}
+            </button>
+          </div>
         </Modal>
       )}
     </Layout>
