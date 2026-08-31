@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, Pencil, Plus, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
+import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, MessageCircle, Pencil, Plus, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -753,6 +753,68 @@ function StudentInfoTab({ selected }: Readonly<{ selected: Student }>) {
   );
 }
 
+function sendWhatsAppProgressCard(
+  student: Student,
+  badges: Array<{ id: string; title: string; icon: string }>,
+  toast: ToastApi,
+) {
+  const badgeList = badges.map(b => `${b.icon} ${b.title}`).join(', ');
+  const badgeText = badges.length > 0 ? `\n🏆 *Milestones:* ${badgeList}` : '';
+  const ratings = [
+    student.ratingClassical ? `Classical: ${student.ratingClassical}` : '',
+    student.ratingRapid ? `Rapid: ${student.ratingRapid}` : '',
+    student.ratingBlitz ? `Blitz: ${student.ratingBlitz}` : '',
+  ].filter(Boolean).join(' · ');
+  const ratingsText = ratings ? `\n♟ *Ratings:* ${ratings}` : '';
+  const coachText = student.coachName ? ` | Coach: ${student.coachName}` : '';
+  const attendanceText = student.thisMonthAttended ? `\n📅 *This Month Attendance:* ${student.thisMonthAttended} classes attended` : '';
+  const cleanWa = student.parent1WhatsApp ? student.parent1WhatsApp.replace(/\D/g, '').slice(-10) : '';
+
+  const message = [
+    `🏆 *KAFT Chess Academy – Student Monthly Progress*`,
+    `👤 *Student:* ${student.name}`,
+    `📚 *Batch:* ${student.batch}${coachText}`,
+    attendanceText,
+    ratingsText,
+    badgeText,
+    ``,
+    `🔗 *Parent Portal:* https://pramodhss.github.io/kaft-chess-academy-app/#/parent`,
+    ``,
+    `— KAFT Chess Academy`,
+  ].filter(Boolean).join('\n');
+
+  if (cleanWa?.length === 10) {
+    window.open(`https://wa.me/91${cleanWa}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    toast.success(`Opening WhatsApp for ${student.name}'s parent.`);
+  } else {
+    void navigator.clipboard.writeText(message).then(
+      () => toast.success(`Progress card for ${student.name} copied — ready to paste in WhatsApp.`),
+      () => toast.error('Could not copy to clipboard.'),
+    );
+  }
+}
+
+function matchesStudentQuery(s: Student, q: string, coachFilter: 'all' | 'mine', coach: string): boolean {
+  const matchesSearch = !q || s.name.toLowerCase().includes(q) || s.batch.toLowerCase().includes(q) ||
+    s.tnscaId.toLowerCase().includes(q) || s.fideId.toLowerCase().includes(q) ||
+    s.school.toLowerCase().includes(q) || s.coachName.toLowerCase().includes(q);
+  if (!matchesSearch) return false;
+  if (coachFilter === 'all' || !coach) return true;
+  const c = coach.toLowerCase();
+  const sc = s.coachName.trim().toLowerCase();
+  return sc.includes(c) || c.includes(sc);
+}
+
+function sortStudents(list: Student[], sortKey: 'name' | 'batch' | 'status' | 'attendance'): Student[] {
+  return [...list].sort((a, b) => {
+    if (sortKey === 'name') return a.name.localeCompare(b.name);
+    if (sortKey === 'batch') return a.batch.localeCompare(b.batch);
+    if (sortKey === 'status') return a.status === 'Active' ? -1 : 1;
+    if (sortKey === 'attendance') return Number.parseInt(b.thisMonthAttended || '0') - Number.parseInt(a.thisMonthAttended || '0');
+    return 0;
+  });
+}
+
 const DETAIL_TAB_LABELS: Record<'info' | 'contact' | 'chess', string> = {
   info: '👤 Info',
   contact: '📞 Contact',
@@ -771,6 +833,7 @@ export function Students() {
   const [error, setError] = useState('');
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
+  const [coachFilter, setCoachFilter] = useState<'all' | 'mine'>('all');
   const [selected, setSelected] = useState<Student | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -791,15 +854,17 @@ export function Students() {
     setBatches, setLevels: () => {}, setTournamentRegistrations, setWeeklyResults,
   });
 
+  const myStudentsCount = useMemo(() => {
+    if (!coachName.trim()) return 0;
+    const c = coachName.trim().toLowerCase();
+    return students.filter(s => s.coachName.trim().toLowerCase().includes(c) || c.includes(s.coachName.trim().toLowerCase())).length;
+  }, [students, coachName]);
+
   useEffect(() => { load(); }, [token]);
   useEffect(() => {
     const q = search.toLowerCase();
-    setFiltered(students.filter(s =>
-      s.name.toLowerCase().includes(q) || s.batch.toLowerCase().includes(q) ||
-      s.tnscaId.toLowerCase().includes(q) || s.fideId.toLowerCase().includes(q) ||
-      s.school.toLowerCase().includes(q)
-    ));
-  }, [search, students]);
+    setFiltered(students.filter(s => matchesStudentQuery(s, q, coachFilter, coachName.trim())));
+  }, [search, students, coachFilter, coachName]);
 
   const handleAdd = () => addStudent({ token, form, toast, setSaving, setStudents, setShowAdd, setForm });
 
@@ -927,6 +992,16 @@ export function Students() {
             {detailTab === 'info' && <StudentInfoTab selected={selected} />}
 
             {/* Actions */}
+            <button
+              type="button"
+              onClick={() => {
+                const badges = calculateStudentBadges(selected, [], tournamentRegistrations, weeklyResults);
+                sendWhatsAppProgressCard(selected, badges, toast);
+              }}
+              className="w-full bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
+            >
+              <MessageCircle size={16} /> Send WhatsApp Progress Card
+            </button>
             <button type="button" onClick={() => navigate(`/timeline?student=${encodeURIComponent(selected.name)}`)} className="w-full border border-chess-blue/30 text-chess-blue py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2">
               <FileChartColumn size={16} /> View Timeline &amp; Export PDF
             </button>
@@ -969,6 +1044,24 @@ export function Students() {
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, batch, FIDE ID, school…"
           className="input student-search"/>
+        {coachName.trim() && myStudentsCount > 0 && (
+          <div className="flex gap-1.5 pt-0.5">
+            <button
+              type="button"
+              onClick={() => setCoachFilter('all')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${coachFilter === 'all' ? 'bg-navy text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              All Students ({students.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCoachFilter('mine')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${coachFilter === 'mine' ? 'bg-navy text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              My Students ({myStudentsCount})
+            </button>
+          </div>
+        )}
         <div className="student-list-controls flex gap-2 items-center">
           <p className="text-xs text-gray-400 flex-1">{filtered.filter(student => student.status === 'Active').length} active · {filtered.length} total</p>
           <select value={sortKey} onChange={e=>setSortKey(e.target.value as typeof sortKey)}
@@ -979,13 +1072,7 @@ export function Students() {
             <option value="attendance">Attendance ↓</option>
           </select>
         </div>
-        {[...filtered].sort((a,b)=>{
-            if(sortKey==='name')       return a.name.localeCompare(b.name);
-            if(sortKey==='batch')      return a.batch.localeCompare(b.batch);
-            if(sortKey==='status')     return a.status==='Active'?-1:1;
-            if(sortKey==='attendance') return Number.parseInt(b.thisMonthAttended||'0')-Number.parseInt(a.thisMonthAttended||'0');
-            return 0;
-          }).map(s => {
+        {sortStudents(filtered, sortKey).map(s => {
           const cat = getCategory(s.age);
           const cm = currentMonthKey();
           const hasTournament = tournamentRegistrations.some(r => r.month === cm && normalizedName(r.studentName) === normalizedName(s.name));
@@ -1011,52 +1098,105 @@ export function Students() {
           );
         })}
       </div>
-      {showAdd && (
-        <Modal title="Add Student" onClose={() => setShowAdd(false)}>
-          <div className="max-h-[65vh] overflow-y-auto pr-1">
-            <StudentForm form={form} setForm={setForm} batches={batches} />
-          </div>
-          {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mt-3">{formValidationError(form)}</p>}
-          <button type="button" onClick={handleAdd} disabled={saving}
-            className="primary-action mt-4 w-full">
-            {saving && <span className="button-spinner" aria-hidden="true"/>}
-            {saving?'Adding student…':'Add Student'}
-          </button>
-        </Modal>
-      )}
+      <StudentAddModal
+        show={showAdd}
+        form={form}
+        setForm={setForm}
+        batches={batches}
+        saving={saving}
+        onClose={() => setShowAdd(false)}
+        onAdd={handleAdd}
+      />
       {importPreview && (
-        <Modal title={`Import Students (${importPreview.length} found)`} onClose={() => setImportPreview(null)}>
-          <div className="space-y-3">
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200">
-              <p className="font-bold flex items-center gap-1.5"><FileSpreadsheet size={15} /> Source: {importFileName}</p>
-              <p className="mt-1">Review the parsed records below. Existing students in the roster will be skipped automatically.</p>
-            </div>
-
-            <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 border dark:border-gray-800 rounded-xl">
-              {importPreview.map((item, idx) => (
-                <div key={`${item.name}-${idx}`} className="p-2.5 text-xs flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <strong className="block text-gray-900 dark:text-white truncate">{idx + 1}. {item.name}</strong>
-                    <span className="text-gray-500 block truncate">DOB: {item.dob} · {item.batch} · Parent: {item.parent1Name} ({item.parent1Phone})</span>
-                    {(item.tnscaId || item.fideId || item.ratingClassical) && (
-                      <span className="text-[10px] text-chess-blue block truncate">
-                        {[item.tnscaId ? `TNSCA: ${item.tnscaId}` : '', item.fideId ? `FIDE: ${item.fideId}` : '', item.ratingClassical ? `Rating: ${item.ratingClassical}` : ''].filter(Boolean).join(' · ')}
-                      </span>
-                    )}
-                  </div>
-                  <span className="badge-green flex-shrink-0 text-[10px]">Ready</span>
-                </div>
-              ))}
-            </div>
-
-            <button type="button" onClick={handleBatchImport} disabled={saving} className="primary-action w-full">
-              {saving && <span className="button-spinner" aria-hidden="true"/>}
-              {saving ? 'Importing & Synchronizing…' : `Import ${importPreview.length} Students to Academy`}
-            </button>
-          </div>
-        </Modal>
+        <ImportPreviewModal
+          importPreview={importPreview}
+          importFileName={importFileName}
+          saving={saving}
+          onClose={() => setImportPreview(null)}
+          onImport={handleBatchImport}
+        />
       )}
     </Layout>
+  );
+}
+
+function ImportPreviewModal({
+  importPreview,
+  importFileName,
+  saving,
+  onClose,
+  onImport,
+}: Readonly<{
+  importPreview: FormData[];
+  importFileName: string;
+  saving: boolean;
+  onClose: () => void;
+  onImport: () => void;
+}>) {
+  return (
+    <Modal title={`Import Students (${importPreview.length} found)`} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/40 text-xs text-amber-900 dark:text-amber-200">
+          <p className="font-bold flex items-center gap-1.5"><FileSpreadsheet size={15} /> Source: {importFileName}</p>
+          <p className="mt-1">Review the parsed records below. Existing students in the roster will be skipped automatically.</p>
+        </div>
+
+        <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 border dark:border-gray-800 rounded-xl">
+          {importPreview.map((item, idx) => (
+            <div key={`${item.name}-${idx}`} className="p-2.5 text-xs flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <strong className="block text-gray-900 dark:text-white truncate">{idx + 1}. {item.name}</strong>
+                <span className="text-gray-500 block truncate">DOB: {item.dob} · {item.batch} · Parent: {item.parent1Name} ({item.parent1Phone})</span>
+                {(item.tnscaId || item.fideId || item.ratingClassical) && (
+                  <span className="text-[10px] text-chess-blue block truncate">
+                    {[item.tnscaId ? `TNSCA: ${item.tnscaId}` : '', item.fideId ? `FIDE: ${item.fideId}` : '', item.ratingClassical ? `Rating: ${item.ratingClassical}` : ''].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+              </div>
+              <span className="badge-green flex-shrink-0 text-[10px]">Ready</span>
+            </div>
+          ))}
+        </div>
+
+        <button type="button" onClick={onImport} disabled={saving} className="primary-action w-full">
+          {saving && <span className="button-spinner" aria-hidden="true"/>}
+          {saving ? 'Importing & Synchronizing…' : `Import ${importPreview.length} Students to Academy`}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function StudentAddModal({
+  show,
+  form,
+  setForm,
+  batches,
+  saving,
+  onClose,
+  onAdd,
+}: Readonly<{
+  show: boolean;
+  form: FormData;
+  setForm: (form: FormData) => void;
+  batches: string[];
+  saving: boolean;
+  onClose: () => void;
+  onAdd: () => void;
+}>) {
+  if (!show) return null;
+  const error = formValidationError(form);
+  return (
+    <Modal title="Add Student" onClose={onClose}>
+      <div className="max-h-[65vh] overflow-y-auto pr-1">
+        <StudentForm form={form} setForm={setForm} batches={batches} />
+      </div>
+      {error && <p role="alert" className="text-xs text-red-600 mt-3">{error}</p>}
+      <button type="button" onClick={onAdd} disabled={saving} className="primary-action mt-4 w-full">
+        {saving && <span className="button-spinner" aria-hidden="true"/>}
+        {saving ? 'Adding student…' : 'Add Student'}
+      </button>
+    </Modal>
   );
 }
 

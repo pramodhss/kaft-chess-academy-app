@@ -63,8 +63,8 @@ test('migrates legacy timetable and manages weekly classes shown on Dashboard', 
   await expect(page.getByText('Room 2')).toBeVisible();
 
   await openApp(page, '#/');
-  await expect(page.getByRole('heading', { name: 'Beginner A' })).toBeVisible();
-  await expect(page.getByText('Room 2')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Beginner A' }).first()).toBeVisible();
+  await expect(page.getByText('Room 2').first()).toBeVisible();
 
   await openApp(page, '#/timetable');
   page.once('dialog', confirmation => confirmation.accept());

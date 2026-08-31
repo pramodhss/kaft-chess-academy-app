@@ -104,3 +104,16 @@ test('validates fee status against entered amounts before saving', async ({ page
   await expect(dialog).not.toBeVisible();
   await expect.poll(() => sheets.workbook['Fee Register'].some(row => row[1] === 'Aarav Kumar' && row[4] === 'Admission')).toBe(true);
 });
+
+test('marks all pending students as paid in one tap', async ({ page, sheets }) => {
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByLabel('Mark all pending students as paid').click();
+
+  await expect(page.getByText(/Successfully marked 1 student as Paid/i)).toBeVisible();
+  await expect.poll(() => sheets.workbook['Fee Register'][1][11]).toBe('Paid');
+  expect(sheets.workbook['Fee Register'][1][6]).toBe('1500');
+  expect(sheets.workbook['Fee Register'][1][7]).toBe('0');
+});

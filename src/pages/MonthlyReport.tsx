@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
-import { Download, Mail, Printer } from 'lucide-react';
+import { Download, Mail, MessageCircle, Printer } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
 import { useCoachName } from '../hooks/useCoachName';
@@ -81,12 +82,43 @@ export function MonthlyReport() {
   const [emailTo, setEmailTo] = useState('');
   const [emailCc, setEmailCc] = useState('');
   const [emailError, setEmailError] = useState('');
+  const toast = useToast();
   const coachName = savedCoachName || 'Admin';
   const attendanceReports = reports.filter(report => report.daysScheduled > 0);
   const avgAttendance = attendanceReports.length
     ? Math.round(attendanceReports.reduce((sum, report) => sum + report.attendancePct, 0) / attendanceReports.length * 100)
     : null;
   const avgAttendanceLabel = avgAttendance === null ? 'N/A' : `${avgAttendance}%`;
+
+  const shareStudentWhatsApp = (r: StudentReport) => {
+    const month = MONTHS[selectedMonth].label;
+    const skills = [
+      r.openingSkill ? `Opening: ${r.openingSkill}/5` : '',
+      r.middlegameSkill ? `Middlegame: ${r.middlegameSkill}/5` : '',
+      r.endgameSkill ? `Endgame: ${r.endgameSkill}/5` : '',
+      r.tacticsSkill ? `Tactics: ${r.tacticsSkill}/5` : '',
+    ].filter(Boolean).join(' · ');
+
+    const message = [
+      `🏆 *KAFT Chess Academy – Monthly Student Progress*`,
+      `👤 *Student:* ${r.name}`,
+      `📅 *Month:* ${month}`,
+      `📚 *Batch:* ${r.batch}`,
+      `📅 *Attendance:* ${r.daysAttended}/${r.daysScheduled} classes (${Math.round(r.attendancePct * 100)}%)`,
+      r.overallRating ? `⭐ *Overall Rating:* ${r.overallRating}/5` : '',
+      skills ? `♟ *Skills:* ${skills}` : '',
+      r.coachSummary ? `📝 *Coach Notes:* ${r.coachSummary}` : '',
+      ``,
+      `🔗 *Parent Portal:* https://pramodhss.github.io/kaft-chess-academy-app/#/parent`,
+      ``,
+      `— KAFT Chess Academy`,
+    ].filter(Boolean).join('\n');
+
+    void navigator.clipboard.writeText(message).then(
+      () => toast.success(`Monthly progress for ${r.name} copied — ready to paste in WhatsApp.`),
+      () => toast.error('Could not copy to clipboard.'),
+    );
+  };
 
   const generateReportText = () => {
     const month = MONTHS[selectedMonth].label;
@@ -406,6 +438,14 @@ export function MonthlyReport() {
                           </div>
                         </div>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => shareStudentWhatsApp(r)}
+                        className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-semibold"
+                        title="Copy student monthly card for WhatsApp"
+                      >
+                        <MessageCircle size={14} /> Share Monthly Card on WhatsApp
+                      </button>
                     </div>
                   )}
                 </div>

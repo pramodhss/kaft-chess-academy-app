@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -283,6 +283,8 @@ export function Fees() {
   const [selectedMonth, setSelectedMonth] = useState(localMonth);
   const [drafts, setDrafts] = useState<Map<string, FeeDraft>>(new Map());
   const [rosterSaving, setRosterSaving] = useState('');
+  const [rosterSavingAll, setRosterSavingAll] = useState(false);
+  const [batchFilter, setBatchFilter] = useState('All');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const toast = useToast();
@@ -491,9 +493,19 @@ export function Fees() {
     };
   }, [fees, selectedMonth, drafts, students]);
 
+  const batchOptions = useMemo(() => {
+    const list = Array.from(new Set(Array.from(batchMap.values()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    return ['All', ...list];
+  }, [batchMap]);
+
   const visibleStudents = useMemo(() =>
-    students.filter(s => !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase())),
-    [students, feeSearch]
+    students.filter(s => {
+      const matchesSearch = !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase());
+      const studentBatch = batchMap.get(s) ?? '';
+      const matchesBatch = batchFilter === 'All' || studentBatch === batchFilter;
+      return matchesSearch && matchesBatch;
+    }),
+    [students, feeSearch, batchFilter, batchMap]
   );
 
   const knownAmountDue = (student: string): number => {
@@ -574,6 +586,73 @@ export function Fees() {
     updateDraft(student, paidDraft);
     setExpandedStudent(student);
     await saveRosterFee(student, paidDraft);
+  };
+
+  const markAllPendingAsPaid = async () => {
+    if (!token || rosterSavingAll || rosterSaving) return;
+    const pendingStudents = visibleStudents.filter(s => {
+      const fee = monthlyByStudent.get(normalized(s));
+      const draft = feeDraft(s);
+      const draftDue = parseSheetNumber(draft.amountDue);
+      const payment = calculateRosterPayment(fee, draft, draftDue);
+      const status = draftDue > 0 ? payment.status : 'Pending';
+      return status !== 'Paid' && status !== 'Waived' && draftDue > 0;
+    });
+
+    if (pendingStudents.length === 0) {
+      toast.info('No pending fees to mark as paid for displayed students.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Mark all ${pendingStudents.length} student${pendingStudents.length === 1 ? '' : 's'} as Paid for ${monthDisplay}?`,
+    );
+    if (!confirmed) return;
+
+    setRosterSavingAll(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    try {
+      for (const student of pendingStudents) {
+        const existing = monthlyByStudent.get(normalized(student));
+        const draft = feeDraft(student);
+        const due = parseSheetNumber(draft.amountDue);
+        const paymentDetails = {
+          due,
+          amountPaid: due,
+          balance: 0,
+          status: 'Paid',
+          paymentDate: localIsoDate(),
+        };
+
+        try {
+          const confirmedFee = existing
+            ? await updateRosterPayment(token, existing, paymentDetails, coachName)
+            : await appendRosterPayment(token, student, selectedMonth, batchMap.get(student) ?? '', paymentDetails, coachName);
+
+          setFees(current => existing
+            ? current.map(fee => fee.rowIndex === existing.rowIndex ? confirmedFee : fee)
+            : [...current, confirmedFee]);
+          setDrafts(current => { const next = new Map(current); next.delete(student); return next; });
+          successCount += 1;
+        } catch (err: any) {
+          errors.push(`${student}: ${err.message}`);
+        }
+      }
+
+      clearSheetReadCache(SHEET_ID);
+      void recordAudit(token, 'UPDATE', 'Fees', `Bulk marked ${successCount} as Paid for ${selectedMonth}`, `${successCount} students`).catch(() => undefined);
+
+      if (successCount > 0) {
+        toast.success(`Successfully marked ${successCount} student${successCount === 1 ? '' : 's'} as Paid!`);
+      }
+      if (errors.length > 0) {
+        toast.error(`Some updates failed: ${errors.join(', ')}`);
+      }
+    } finally {
+      setRosterSavingAll(false);
+    }
   };
 
   const [yearNum, monthNum] = selectedMonth.split('-').map(Number);
@@ -686,10 +765,37 @@ export function Fees() {
           placeholder="Search students" aria-label="Search students"
           className="input input-with-icon"/></label>
 
-        <div className="flex items-end justify-between gap-3 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <div>
             <h2 className="font-bold text-navy">Student fees</h2>
-            <p className="text-xs text-gray-500">{visibleStudents.length} students</p>
+            <p className="text-xs text-gray-500">{visibleStudents.length} students {batchFilter !== 'All' ? `(${batchFilter})` : ''}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {batchOptions.length > 1 && (
+              <select
+                value={batchFilter}
+                onChange={e => setBatchFilter(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white font-medium"
+                aria-label="Filter by batch"
+              >
+                {batchOptions.map(b => (
+                  <option key={b} value={b}>
+                    {b === 'All' ? 'All Batches' : b}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              onClick={markAllPendingAsPaid}
+              disabled={rosterSavingAll || !!rosterSaving || visibleStudents.length === 0}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 disabled:opacity-50"
+              title="Mark all pending students in this view as Paid"
+              aria-label="Mark all pending students as paid"
+            >
+              <Check size={14} />
+              {rosterSavingAll ? 'Marking Paid…' : '✓ Mark All Paid'}
+            </button>
           </div>
         </div>
 

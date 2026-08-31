@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarCheck, Download, FileChartColumn, History, Star } from 'lucide-react';
+import { CalendarCheck, Download, FileChartColumn, History, MessageCircle, Star } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { readSheet } from '../lib/sheets';
 import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
 import { SHEET_ID, TABS } from '../config';
@@ -92,6 +93,7 @@ export function StudentProgress() {
   const [loading, setLoading] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const toast = useToast();
 
   // Load student list
   useEffect(() => {
@@ -133,8 +135,60 @@ export function StudentProgress() {
     } finally { setDownloading(false); }
   };
 
+  const shareWhatsApp = () => {
+    if (!selected || data.length === 0) return;
+    const activeMonths = data.filter(d => d.attendance > 0 || d.overall > 0);
+    const latestMonth = activeMonths[activeMonths.length - 1] ?? data[data.length - 1];
+    const trendLines = data
+      .filter(d => d.attendance > 0 || d.overall > 0)
+      .map(d => {
+        const ratingSuffix = d.overall > 0 ? ` | Rating: ${d.overall}/5` : '';
+        return `• ${d.label}: ${d.attendance}% attendance${ratingSuffix}`;
+      })
+      .join('\n');
+    const message = [
+      `📊 *KAFT Chess Academy – Student Progress Report*`,
+      `👤 *Student:* ${selected}`,
+      `📅 *Latest Month (${latestMonth?.label || 'Recent'}):* ${latestMonth?.attendance || 0}% attendance`,
+      trendLines ? `\n*Monthly Breakdown:*\n${trendLines}` : '',
+      ``,
+      `🔗 *Parent Portal:* https://pramodhss.github.io/kaft-chess-academy-app/#/parent`,
+      ``,
+      `— KAFT Chess Academy`,
+    ].filter(Boolean).join('\n');
+
+    void navigator.clipboard.writeText(message).then(
+      () => toast.success(`Progress report for ${selected} copied — ready to paste in WhatsApp.`),
+      () => toast.error('Could not copy to clipboard.'),
+    );
+  };
+
   return (
-    <Layout title="Student Progress" showBack action={selected && data.length > 0 ? <button type="button" onClick={downloadReport} disabled={downloading} className="header-action"><Download size={15} />{downloading ? 'Preparing…' : 'PDF'}</button> : undefined}>
+    <Layout
+      title="Student Progress"
+      showBack
+      action={selected && data.length > 0 ? (
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={shareWhatsApp}
+            className="header-action"
+            title="Copy progress report for WhatsApp"
+            aria-label="Copy progress report for WhatsApp"
+          >
+            <MessageCircle size={15} /> WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={downloadReport}
+            disabled={downloading}
+            className="header-action"
+          >
+            <Download size={15} />{downloading ? 'Preparing…' : 'PDF'}
+          </button>
+        </div>
+      ) : undefined}
+    >
       <div className="p-4 space-y-4">
         <nav aria-label="Student insights" className="grid grid-cols-3 gap-1 rounded-lg border border-gray-200 bg-white p-1">
           <button type="button" className="flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-navy px-2 text-xs font-semibold text-white"><Star size={14} />Progress</button>

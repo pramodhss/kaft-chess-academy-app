@@ -284,16 +284,18 @@ export function Attendance() {
   const presentCount = rows.filter(r => dirty.get(r.sheetRow) ?? r.present).length;
   const selectedDate = attendanceDates[selectedIdx];
   const date = selectedDate?.date ?? new Date();
-  const batches = ['All', ...Array.from(new Set(rows.map(r => r.batch).filter(Boolean)))];
+  const batches = ['All', ...Array.from(new Set(rows.map(r => r.batch).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
   const [batchFilter, setBatchFilter] = useState('All');
   const visibleRows = rows.filter(r => r.name && (batchFilter === 'All' || r.batch === batchFilter));
+  const allVisiblePresent = visibleRows.length > 0 && visibleRows.every(r => dirty.get(r.sheetRow) ?? r.present);
 
-  const markAllPresent = () => {
+  const toggleAllVisible = () => {
     setDirty(prev => {
       const next = new Map(prev);
+      const targetState = !allVisiblePresent;
       visibleRows.forEach(row => {
-        if (row.present) next.delete(row.sheetRow);
-        else next.set(row.sheetRow, true);
+        if (row.present === targetState) next.delete(row.sheetRow);
+        else next.set(row.sheetRow, targetState);
       });
       return next;
     });
@@ -416,9 +418,11 @@ export function Attendance() {
               className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none bg-white max-w-[110px]">
               {batches.map(b => <option key={b}>{b}</option>)}
             </select>
-            <button type="button" onClick={markAllPresent}
-              className="attendance-mark-all flex-shrink-0 flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg">
-              <Check size={12} />✓ All
+            <button type="button" onClick={toggleAllVisible}
+              className="attendance-mark-all flex-shrink-0 flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg"
+              aria-label={allVisiblePresent ? 'Clear attendance for all visible students' : 'Mark all visible students present'}
+              title={allVisiblePresent ? 'Clear all visible' : 'Mark all visible present'}>
+              <Check size={12} />{allVisiblePresent ? 'Clear All' : '✓ All'}
             </button>
             <button type="button" onClick={copyAttendanceReport}
               className="icon-button" aria-label="Copy attendance for WhatsApp" title="Copy attendance report">
