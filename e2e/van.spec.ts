@@ -29,6 +29,7 @@ test('manages a tournament roster, payments, and automatic student history', asy
   await page.getByRole('button', { name: /State Junior Open/ }).first().click();
   await page.getByLabel('Aarav Kumar playing').check();
   await page.getByLabel('Aarav Kumar fee paid').check();
+  await page.getByLabel('Aarav Kumar van required').check();
   await page.getByLabel('Diya Shah playing').check();
   await page.getByRole('button', { name: 'Save roster' }).click();
   await expect(page.getByText('State Junior Open roster was saved.')).toBeVisible();
@@ -39,9 +40,11 @@ test('manages a tournament roster, payments, and automatic student history', asy
   expect(aarav?.slice(1, 8)).toEqual(['State Junior Open', '2026-09-14', '2026-09', 'Aarav Kumar', 'Yes', 'Yes', '750']);
   expect(diya?.[5]).toBe('Yes');
   expect(diya?.[6]).toBe('No');
-  // Van Required (index 10) and Student Notes (index 11) start as 'No' and '' for new rows
-  expect(aarav?.[10]).toBe('No');
-  expect(aarav?.[11]).toBe('');
+  // Van Required (index 10) is Yes for Aarav and No for Diya
+  expect(aarav?.[10]).toBe('Yes');
+  expect(diya?.[10]).toBe('No');
+
+  await page.getByRole('button', { name: 'Done' }).click();
 
   await openApp(page, '#/students');
   await page.getByRole('button', { name: /Aarav Kumar/ }).click();

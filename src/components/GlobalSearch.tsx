@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, UserRound, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useRoster } from '../context/RosterContext';
 import { readSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
 
@@ -20,6 +21,7 @@ function toSearchStudent(row: string[]): SearchStudent {
 
 export function GlobalSearch() {
   const { token } = useAuth();
+  const { students: rosterStudents } = useRoster();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -28,6 +30,17 @@ export function GlobalSearch() {
 
   const show = async () => {
     setOpen(true);
+    if (rosterStudents.length > 0) {
+      setStudents(rosterStudents.map(s => ({
+        name: s.name,
+        batch: s.batch,
+        level: s.level,
+        phone: s.parent1Phone,
+        school: s.school,
+        fideId: s.fideId,
+      })));
+      return;
+    }
     if (!token || students.length > 0) return;
     setLoading(true);
     try {

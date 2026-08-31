@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, LayoutGrid, MapPin, RefreshCw, Trophy, UserRound, Users, Wallet } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, MapPin, RefreshCw, SlidersHorizontal, Trophy, UserRound, Users, Wallet } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -59,7 +59,7 @@ const QUICK_LINKS = [
   { to: '/fees',       Icon: Wallet, label: 'Fees' },
   { to: '/upcoming',   Icon: Trophy, label: 'Tournaments' },
   { to: '/resources',  Icon: BookOpen, label: 'Resources' },
-  { to: '/more',       Icon: LayoutGrid, label: 'More' },
+  { to: '/more',       Icon: SlidersHorizontal, label: 'More' },
 ];
 
 const PRIMARY_ACTIONS = [

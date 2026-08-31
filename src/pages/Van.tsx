@@ -15,6 +15,7 @@ import {
   type ManagedTournament, type TournamentDraft, type TournamentRegistration,
 } from '../lib/tournamentManagement';
 import { SHEET_ID, TABS } from '../config';
+import { formatDateIndian } from '../lib/dates';
 
 interface RosterChoice { playing: boolean; feePaid: boolean; vanRequired: boolean; notes: string }
 
@@ -25,8 +26,7 @@ function saveWeeklyButtonLabel(saving: boolean, alreadySaved: boolean): string {
   return alreadySaved ? 'Saved' : 'Save result';
 }
 function formattedDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || 'Date not set';
-  return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
+  return formatDateIndian(value);
 }
 
 async function ensureTournamentSheets(token: string) {
@@ -368,7 +368,9 @@ export function Van() {
             const playing = registrations.filter(r => r.tournamentId === t.id && r.playing);
             return <TournamentCard key={t.id} tournament={t} playing={playing.length}
               paid={playing.filter(r => r.feePaid).length} van={playing.filter(r => r.vanRequired).length}
-              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)} notify={() => notifyTournament(t)} copy={() => copyTournamentRoster(t)} saving={saving} />;
+              open={() => openRoster(t)} edit={() => openEdit(t)} remove={() => removeTournament(t)}
+              notify={() => notifyTournament(t)} copy={() => copyTournamentRoster(t)}
+              saving={saving} />;
           })}
         </div>
       </div>

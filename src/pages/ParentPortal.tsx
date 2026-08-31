@@ -4,6 +4,7 @@ import { Award, CalendarCheck, Lock, MessageCircle, Trophy, Wallet } from 'lucid
 import { useAuth } from '../context/AuthContext';
 import { readSheet } from '../lib/sheets';
 import { SHEET_ID, TABS } from '../config';
+import { buildWhatsAppUrl } from '../lib/whatsapp';
 import { parseSheetNumber } from '../lib/values';
 import { calculateStudentBadges, type StudentMilestoneBadge } from '../lib/studentBadges';
 import { rowToRegistration } from '../lib/tournamentManagement';
@@ -273,7 +274,7 @@ export function ParentPortal() {
               <h4 className="text-xs font-bold text-gray-900 dark:text-white">Have questions?</h4>
               <p className="text-xs text-gray-500">Contact KAFT Academy coordinators</p>
             </div>
-            <a href="https://wa.me/919988776655?text=Hello%20Coach,%20I%20have%20a%20question%20regarding%20my%20child's%20classes."
+            <a href={buildWhatsAppUrl('9988776655', "Hello Coach, I have a question regarding my child's classes.")}
               target="_blank" rel="noopener noreferrer"
               className="primary-action text-xs px-3 py-2 flex items-center gap-1.5">
               <MessageCircle size={14} /> WhatsApp

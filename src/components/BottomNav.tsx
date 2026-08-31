@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { CalendarCheck, LayoutDashboard, LayoutGrid, Users, Wallet } from 'lucide-react';
+import { BarChart3, CalendarCheck, SlidersHorizontal, Users, Wallet } from 'lucide-react';
 
 const NAV = [
-  { to: '/',            Icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/students',    Icon: Users,           label: 'Students'  },
-  { to: '/attendance',  Icon: CalendarCheck,   label: 'Attendance' },
-  { to: '/fees',        Icon: Wallet,          label: 'Fees'       },
-  { to: '/more',        Icon: LayoutGrid,      label: 'More'       },
+  { to: '/',            Icon: BarChart3,         label: 'Dashboard' },
+  { to: '/students',    Icon: Users,             label: 'Students'  },
+  { to: '/attendance',  Icon: CalendarCheck,     label: 'Attendance' },
+  { to: '/fees',        Icon: Wallet,            label: 'Fees'       },
+  { to: '/more',        Icon: SlidersHorizontal, label: 'More'       },
 ];
 
 export function BottomNav() {
@@ -22,11 +22,15 @@ export function BottomNav() {
              ${isActive ? 'text-gold' : 'text-gray-400'}`
           }
         >
-          {({ isActive }) => <>
-            <span className={`bottom-nav-indicator absolute top-0 h-0.5 rounded-full ${isActive ? 'w-8 bg-gold' : 'w-0 bg-transparent'}`} />
-            <Icon size={20} strokeWidth={isActive ? 2.2 : 1.75} className="mb-0.5" aria-hidden="true" />
-            <span>{label}</span>
-          </>}
+          {({ isActive }) => (
+            <>
+              <span className={`bottom-nav-indicator absolute top-0 h-0.5 rounded-full ${isActive ? 'w-8 bg-gold' : 'w-0 bg-transparent'}`} />
+              <span className="flex items-center justify-center w-6 h-6 mb-0.5">
+                <Icon size={19} strokeWidth={isActive ? 2.2 : 1.8} aria-hidden="true" />
+              </span>
+              <span>{label}</span>
+            </>
+          )}
         </NavLink>
       ))}
     </nav>

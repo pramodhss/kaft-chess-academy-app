@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,9 @@ import { useCoachName } from '../hooks/useCoachName';
 import type { FeeEntry } from '../types';
 import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
+import { UpiPayModal, type UpiPaymentDetails } from '../components/UpiPayModal';
+import { useUpiSettings } from '../hooks/useUpiSettings';
+import { createHeaderMap, parseFeeRow } from '../lib/schemaMapper';
 
 type FeeForm = { studentName:string; feeMonth:string; feeType:string; amountDue:string;
   amountPaid:string; paymentMethod:string; paymentStatus:string; dueDate:string;
@@ -119,8 +122,9 @@ function sameFeeIdentity(fee: FeeEntry, studentName: string, feeMonth: string, f
 }
 
 function feeRowsToEntries(rows: string[][]): FeeEntry[] {
+  const headerMap = rows.length > 0 ? createHeaderMap(rows[0]) : undefined;
   return rows.slice(1)
-    .map((row, index) => rowToFee(row, index))
+    .map((row, index) => rowToFee(row, index, headerMap))
     .filter(fee => fee.studentName.trim());
 }
 
@@ -136,14 +140,8 @@ function dateInputValue(value: string): string {
   return `${parts[3]}-${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
 }
 
-function rowToFee(row: string[], idx: number): FeeEntry {
-  return {
-    receiptNo:row[0]??'', studentName:row[1]??'', batch:row[2]??'',
-    feeMonth:row[3]??'', feeType:row[4]??'', amountDue:row[5]??'',
-    amountPaid:row[6]??'', balance:row[7]??'', dueDate:row[8]??'',
-    paymentDate:row[9]??'', paymentMethod:row[10]??'', paymentStatus:row[11]??'',
-    reference:row[12]??'', notes:row[13]??'', rowIndex:idx+2,
-  };
+function rowToFee(row: string[], idx: number, headerMap?: Record<string, number>): FeeEntry {
+  return parseFeeRow(row, idx + 2, headerMap);
 }
 function feeToForm(f: FeeEntry): FeeForm {
   return { studentName:f.studentName, feeMonth:normalizeFeeMonth(f.feeMonth), feeType:f.feeType,
@@ -302,7 +300,9 @@ export function Fees() {
   const [rosterSavingAll, setRosterSavingAll] = useState(false);
   const [batchFilter, setBatchFilter] = useState('All');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [upiPaymentDetails, setUpiPaymentDetails] = useState<UpiPaymentDetails | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const { upiEnabled, upiVpa } = useUpiSettings();
   const toast = useToast();
   const coachName = savedCoachName || 'Coach';
 
@@ -899,6 +899,20 @@ export function Fees() {
                   className="primary-action h-9 flex-1 px-3 text-xs">
                   {rosterSaveButtonLabel(rosterSaving === student, Boolean(fee))}
                 </button>
+                {upiEnabled && draftDue > 0 && (
+                  <button type="button"
+                    onClick={() => setUpiPaymentDetails({
+                      studentName: student,
+                      amount: balance > 0 ? balance : draftDue,
+                      feeMonth: selectedMonth,
+                      receiptNo: fee?.receiptNo,
+                      vpa: upiVpa,
+                    })}
+                    aria-label={`Show UPI QR Code for ${student}`} title="Scan & Pay via UPI"
+                    className="icon-button text-green-700 bg-green-50 border border-green-200 hover:bg-green-100">
+                    <QrCode size={15}/>
+                  </button>
+                )}
                 {fee && <button type="button"
                   onClick={() => { setEditTarget(fee); setForm(feeToForm(fee)); }}
                   aria-label={`Edit all fields for ${student}`} title="Edit all fee details"
@@ -983,6 +997,7 @@ export function Fees() {
         students={students} onSave={handleAdd} saving={saving} coachName={coachName} />}
       {editTarget && <FeeModal title="Edit Payment" onClose={() => setEditTarget(null)} form={form} setForm={setForm}
         students={students} onSave={handleEdit} saving={saving} coachName={coachName} />}
+      {upiPaymentDetails && <UpiPayModal details={upiPaymentDetails} onClose={() => setUpiPaymentDetails(null)} />}
     </Layout>
   );
 }

@@ -5,8 +5,9 @@ import { openApp } from './fixtures/sheetsMock';
 async function selectAugust(page: import('@playwright/test').Page) {
   // Navigate to August 2026 using the month arrows
   const target = new Date(2026, 7, 1); // August 2026
+  const heading = page.getByTestId('fee-month-heading');
+  await expect(heading).toBeVisible();
   for (let attempts = 0; attempts < 24; attempts++) {
-    const heading = page.getByTestId('fee-month-heading');
     const text = await heading.textContent();
     if (!text) break;
     const [mon, yr] = text.trim().split(' ');
@@ -133,4 +134,49 @@ test('generates formatted sequential receipts in KAFT-YYYYMM-XXX format for spec
   const savedFeeRow = sheets.workbook['Fee Register'].find(row => row[1] === 'Diya Shah' && row[4] === 'Tournament');
   expect(savedFeeRow).toBeDefined();
   expect(savedFeeRow?.[0]).toMatch(/^KAFT-\d{6}-\d{3}$/);
+});
+
+test('opens UPI payment QR modal from expanded fee card', async ({ page, sheets }) => {
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+
+  const expandBtn = page.locator('[aria-controls="fee-details-Aarav Kumar"]');
+  if ((await expandBtn.getAttribute('aria-expanded')) !== 'true') await expandBtn.click();
+
+  await page.getByLabel('Show UPI QR Code for Aarav Kumar').click();
+  await expect(page.getByText('Scan & Pay via UPI')).toBeVisible();
+  await expect(page.getByText('Aarav Kumar · 2026-08')).toBeVisible();
+  await expect(page.getByText('Open in UPI App')).toBeVisible();
+
+  await page.getByLabel('Close UPI payment dialog').click();
+  await expect(page.getByText('Scan & Pay via UPI')).toHaveCount(0);
+});
+
+test('toggles UPI QR Pay feature on and off from Operations Center', async ({ page, sheets }) => {
+  await openApp(page, '#/operations');
+  const toggle = page.getByLabel('Toggle Dynamic UPI QR Code');
+  await expect(toggle).toBeChecked();
+
+  // Toggle OFF
+  await toggle.uncheck({ force: true });
+  await expect(toggle).not.toBeChecked();
+
+  // Navigate to Fees and verify QR button is hidden
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+  const expandBtn = page.locator('[aria-controls="fee-details-Aarav Kumar"]');
+  if ((await expandBtn.getAttribute('aria-expanded')) !== 'true') await expandBtn.click();
+  await expect(page.getByLabel('Show UPI QR Code for Aarav Kumar')).toHaveCount(0);
+
+  // Toggle back ON
+  await openApp(page, '#/operations');
+  const toggleOn = page.getByLabel('Toggle Dynamic UPI QR Code');
+  await toggleOn.check({ force: true });
+  await expect(toggleOn).toBeChecked();
+
+  // Verify button appears again in Fees
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+  if ((await expandBtn.getAttribute('aria-expanded')) !== 'true') await expandBtn.click();
+  await expect(page.getByLabel('Show UPI QR Code for Aarav Kumar')).toBeVisible();
 });

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import { Plus, QrCode, Save, Trash2 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { SHEET_ID } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
+import { useUpiSettings } from '../hooks/useUpiSettings';
 import {
   ensureStudentOptionsSheet,
   loadStudentOptions,
@@ -16,6 +17,7 @@ import type { StudentOptionKey, StudentOptions } from '../lib/studentOptions';
 export function AdminSettings() {
   const { token, logout } = useAuth();
   const { coachName } = useCoachName();
+  const { upiEnabled, upiVpa, setUpiEnabled, setUpiVpa } = useUpiSettings();
   const toast = useToast();
   const [options, setOptions] = useState<StudentOptions | null>(null);
   const [saving, setSaving] = useState<StudentOptionKey | null>(null);
@@ -85,13 +87,57 @@ export function AdminSettings() {
           </div>
         )}
         {options && (
-          <OptionEditor
-            title="Student Batches"
-            values={options.batches.values}
-            saving={saving === 'student_batches'}
-            onChange={updateValues}
-            onSave={save}
-          />
+          <>
+            <OptionEditor
+              title="Student Batches"
+              values={options.batches.values}
+              saving={saving === 'student_batches'}
+              onChange={updateValues}
+              onSave={save}
+            />
+
+            <section className="pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold text-navy flex items-center gap-1.5"><QrCode size={16} /> Dynamic UPI QR Pay</h2>
+              </div>
+              <div className="surface-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <strong className="block text-sm text-gray-900">Enable UPI QR Button in Fees</strong>
+                    <span className="text-xs text-gray-500">Allow coaches to generate instant UPI QR code on student fee cards</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={upiEnabled}
+                      onChange={e => {
+                        setUpiEnabled(e.target.checked);
+                        toast.info(`UPI QR Pay is now ${e.target.checked ? 'enabled' : 'disabled'}.`);
+                      }}
+                      className="sr-only peer"
+                      aria-label="Toggle Dynamic UPI QR Code in Settings"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                  </label>
+                </div>
+
+                {upiEnabled && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <label className="block">
+                      <span className="field-label">Academy UPI ID / VPA</span>
+                      <input
+                        type="text"
+                        value={upiVpa}
+                        onChange={e => setUpiVpa(e.target.value)}
+                        placeholder="e.g. kaftchess@upi"
+                        className="input"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </section>
+          </>
         )}
       </div>
     </Layout>

@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { BookOpen, CalendarCheck, LayoutDashboard, LayoutGrid, Library, SlidersHorizontal, TrendingUp, Trophy, Users, Wallet } from 'lucide-react';
+import { BarChart3, BookOpen, CalendarCheck, Library, MoreHorizontal, SlidersHorizontal, TrendingUp, Trophy, Users, Wallet } from 'lucide-react';
 
 const LINKS = [
-  { to: '/', Icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/', Icon: BarChart3, label: 'Dashboard' },
   { to: '/students', Icon: Users, label: 'Students' },
   { to: '/attendance', Icon: CalendarCheck, label: 'Attendance' },
   { to: '/fees', Icon: Wallet, label: 'Fees' },
@@ -11,7 +11,7 @@ const LINKS = [
   { to: '/progress', Icon: TrendingUp, label: 'Progress' },
   { to: '/resources', Icon: BookOpen, label: 'Resources' },
   { to: '/curriculum', Icon: Library, label: 'Curriculum' },
-  { to: '/more', Icon: LayoutGrid, label: 'More' },
+  { to: '/more', Icon: MoreHorizontal, label: 'More' },
 ];
 
 export function Sidebar() {

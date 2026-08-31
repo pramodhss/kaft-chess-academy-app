@@ -6,12 +6,12 @@ import { useToast } from '../context/ToastContext';
 import { readSheet, readSheetUnformatted, batchWrite, clearSheetReadCache, colLetter, deleteSheetColumn, insertSheetColumnHeader } from '../lib/sheets';
 import { reconcileAttendanceRoster } from '../lib/studentSync';
 import { useCoachName } from '../hooks/useCoachName';
-import type { SheetValue } from '../lib/sheets';
 import { SHEET_ID, TABS, ATT_DATE_START } from '../config';
 import { useOnline } from '../hooks/useOnline';
 import { flushAttendanceQueue, queueAttendance } from '../lib/offlineAttendance';
 import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
+import { parseSheetDate } from '../lib/dates';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -33,21 +33,6 @@ function buildWeekendDates(): Date[] {
 const WEEKEND_DATES = buildWeekendDates();
 
 interface AttendanceDate { date: Date; columnIndex: number }
-
-function parseSheetDate(value: SheetValue): Date | null {
-  if (typeof value === 'number') {
-    const utcDate = new Date(Date.UTC(1899, 11, 30) + value * 86400000);
-    return new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), 12);
-  }
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
-  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), 12);
-  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
-  if (slash) return new Date(Number(slash[3]), Number(slash[2]) - 1, Number(slash[1]), 12);
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
 
 function dateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');

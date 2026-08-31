@@ -4,6 +4,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { GOOGLE_CLIENT_ID } from './config';
 import { CoachNameProvider, useCoachName } from './hooks/useCoachName';
+import { RosterProvider } from './context/RosterContext';
 import { Login }                from './pages/Login';
 import { ErrorBoundary }         from './components/ErrorBoundary';
 import { PageSkeleton }          from './components/Skeleton';
@@ -110,9 +111,11 @@ export default function App() {
         <AuthProvider>
           <ToastProvider>
             <CoachNameProvider>
-              <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <AppRoutes />
-              </HashRouter>
+              <RosterProvider>
+                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                  <AppRoutes />
+                </HashRouter>
+              </RosterProvider>
             </CoachNameProvider>
           </ToastProvider>
         </AuthProvider>

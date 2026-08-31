@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, CalendarCheck, ClipboardCheck, Download, MessageCircle, MessageSquareShare, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet } from 'lucide-react';
+import { AlertCircle, CalendarCheck, ClipboardCheck, Download, MessageCircle, MessageSquareShare, QrCode, Send, Settings, ShieldCheck, TrendingUp, Users, Wallet } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -12,6 +12,8 @@ import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
 import { SHEET_ID, TABS } from '../config';
 import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
+import { cleanIndianPhoneNumber, openWhatsApp } from '../lib/whatsapp';
+import { useUpiSettings } from '../hooks/useUpiSettings';
 
 type Tab = 'actions' | 'broadcast' | 'analytics' | 'reminders' | 'quality' | 'audit' | 'backup';
 interface StudentSummary { name: string; batch: string; status: string; parent: string; phone: string; whatsapp: string; email: string; dob: string }
@@ -61,6 +63,7 @@ export function OperationsCenter() {
   const { token, logout } = useAuth();
   const { coachName: savedCoachName } = useCoachName();
   const coachName = savedCoachName || 'Coach';
+  const { upiEnabled, upiVpa, setUpiEnabled, setUpiVpa } = useUpiSettings();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('actions');
   const [students, setStudents] = useState<StudentSummary[]>([]);
@@ -158,13 +161,13 @@ export function OperationsCenter() {
   };
 
   const openIndividualWhatsApp = (phone: string, studentName: string) => {
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+    const cleanPhone = cleanIndianPhoneNumber(phone);
     if (!cleanPhone) {
       toast.error(`No phone number available for ${studentName}.`);
       return;
     }
     const personalized = customMessage.replace('{STUDENT_NAME}', studentName);
-    window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(personalized)}`, '_blank', 'noopener,noreferrer');
+    openWhatsApp(cleanPhone, personalized);
   };
 
   // Range Analytics Calculations
@@ -268,10 +271,10 @@ export function OperationsCenter() {
 
   const openReminder = (fee: FeeSummary) => {
     const student = students.find(item => item.name === fee.student);
-    const phone = (student?.whatsapp || student?.phone || '').replace(/\D/g, '').slice(-10);
+    const phone = cleanIndianPhoneNumber(student?.whatsapp || student?.phone || '');
     if (!phone) { toast.error(`No WhatsApp number is available for ${fee.student}.`); return; }
     const message = `Hello, this is a reminder from Kaft Chess Academy. ${fee.student} has a pending fee balance of ₹${fee.balance.toLocaleString('en-IN')}. Please contact the academy if you have any questions.`;
-    window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+    openWhatsApp(phone, message);
   };
 
   const exportFullBackup = async () => {
@@ -323,6 +326,47 @@ export function OperationsCenter() {
               <Metric icon={MessageCircle} label="Fee follow-ups" value={pendingFees.length} />
               <Metric icon={ShieldCheck} label="Data issues" value={quality.length} />
             </div>
+
+            <div className="surface-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="icon-tile text-green-600 bg-green-50 dark:bg-green-950/40"><QrCode size={18} /></span>
+                  <div>
+                    <strong className="block text-sm text-gray-900 dark:text-white">Dynamic UPI QR Pay</strong>
+                    <span className="text-xs text-gray-500">Show instant payment QR code on student fee cards</span>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={upiEnabled}
+                    onChange={e => {
+                      setUpiEnabled(e.target.checked);
+                      toast.info(`UPI QR Pay is now ${e.target.checked ? 'enabled' : 'disabled'}.`);
+                    }}
+                    className="sr-only peer"
+                    aria-label="Toggle Dynamic UPI QR Code"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+              </div>
+
+              {upiEnabled && (
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <label className="block">
+                    <span className="field-label">Academy UPI ID / VPA</span>
+                    <input
+                      type="text"
+                      value={upiVpa}
+                      onChange={e => setUpiVpa(e.target.value)}
+                      placeholder="e.g. kaftchess@upi"
+                      className="input"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
             <button type="button" onClick={() => navigate('/admin-settings')} className="surface-card flex w-full items-center gap-3 p-4 text-left">
               <span className="icon-tile"><Settings size={18} /></span>
               <span>

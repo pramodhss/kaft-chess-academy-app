@@ -25,6 +25,9 @@ import {
 } from '../lib/validation';
 import { SHEET_ID, TABS } from '../config';
 import type { Student } from '../types';
+import { cleanIndianPhoneNumber, openWhatsApp } from '../lib/whatsapp';
+import { normalizeDateInput } from '../lib/dates';
+import { createHeaderMap, parseStudentRow } from '../lib/schemaMapper';
 
 const STANDARDS  = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th','Graduate'];
 const CATEGORY_COLOR: Record<string,string> = {
@@ -84,20 +87,8 @@ const STUDENT_HEADERS = [
   'Blitz Rating', 'Coach Name', 'Chess.com Username', 'Lichess Username', 'Photo URL',
 ];
 
-function rowToStudent(row: string[], rowIndex: number): Student {
-  return {
-    name:row[0]??'', dob:normalizedDate(row[1]??''), age:row[2]??'', gender:row[3]??'', grade:row[4]??'',
-    batch:row[5]??'', level:row[6]??'', joiningDate:normalizedDate(row[7]??''), status:row[8]??'',
-    parent1Name:row[9]??'', parent1Phone:row[10]??'', parent1WhatsApp:row[11]??'',
-    parent1Email:row[12]??'', parent2Name:row[13]??'', parent2Phone:row[14]??'',
-    emergencyContact:row[15]??'', emergencyPhone:row[16]??'', address:row[17]??'',
-    photoConsent:row[18]??'', thisMonthAttended:row[19]??'', notes:row[20]??'',
-    school:row[21]??'', standard:row[22]??'', tnscaId:row[23]??'', fideId:row[24]??'',
-    aicfId:row[25]??'', ratingClassical:row[26]??'', ratingRapid:row[27]??'', ratingBlitz:row[28]??'',
-    coachName:row[29]??'', chessComUsername:row[30]??'', lichessUsername:row[31]??'',
-    photoUrl:row[32]??'',
-    rowIndex,
-  };
+function rowToStudent(row: string[], rowIndex: number, headerMap?: Record<string, number>): Student {
+  return parseStudentRow(row, rowIndex, headerMap);
 }
 
 function studentToForm(s: Student): FormData {
@@ -115,13 +106,7 @@ function studentToForm(s: Student): FormData {
 }
 
 function normalizedDate(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  const isoMatch = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
-  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
-  const localMatch = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(trimmed);
-  if (localMatch) return `${localMatch[3]}-${localMatch[2].padStart(2, '0')}-${localMatch[1].padStart(2, '0')}`;
-  return trimmed;
+  return normalizeDateInput(value);
 }
 
 function normalizedStudentForm(form: FormData) {
@@ -389,7 +374,8 @@ async function loadStudents(deps: Readonly<{
       readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
       readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`).catch(() => []),
     ]);
-    const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(student => student.name.trim());
+    const headerMap = rows.length > 0 ? createHeaderMap(rows[0]) : undefined;
+    const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2, headerMap)).filter(student => student.name.trim());
     setStudents(data); setFiltered(data);
     setBatches(options.batches.values);
     setLevels(options.levels.values);
@@ -623,7 +609,8 @@ async function batchImportStudents(deps: Readonly<{
     // A failure here must not undo the already-persisted import or the optimistic update above.
     try {
       const freshRows = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
-      const freshData = freshRows.slice(1).map((row, index) => rowToStudent(row, index + 2)).filter(s => s.name.trim());
+      const freshHeaderMap = freshRows.length > 0 ? createHeaderMap(freshRows[0]) : undefined;
+      const freshData = freshRows.slice(1).map((row, index) => rowToStudent(row, index + 2, freshHeaderMap)).filter(s => s.name.trim());
       setStudents(freshData);
       setFiltered(freshData);
     } catch { /* optimistic students already reflect what was saved; reconciliation will retry on next sync */ }
@@ -768,7 +755,7 @@ function sendWhatsAppProgressCard(
   const ratingsText = ratings ? `\n♟ *Ratings:* ${ratings}` : '';
   const coachText = student.coachName ? ` | Coach: ${student.coachName}` : '';
   const attendanceText = student.thisMonthAttended ? `\n📅 *This Month Attendance:* ${student.thisMonthAttended} classes attended` : '';
-  const cleanWa = student.parent1WhatsApp ? student.parent1WhatsApp.replace(/\D/g, '').slice(-10) : '';
+  const cleanWa = cleanIndianPhoneNumber(student.parent1WhatsApp);
 
   const message = [
     `🏆 *KAFT Chess Academy – Student Monthly Progress*`,
@@ -783,8 +770,8 @@ function sendWhatsAppProgressCard(
     `— KAFT Chess Academy`,
   ].filter(Boolean).join('\n');
 
-  if (cleanWa?.length === 10) {
-    window.open(`https://wa.me/91${cleanWa}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+  if (cleanWa.length === 10) {
+    openWhatsApp(cleanWa, message);
     toast.success(`Opening WhatsApp for ${student.name}'s parent.`);
   } else {
     void navigator.clipboard.writeText(message).then(
