@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, MessageCircle, Pencil, Plus, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
+import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, Filter, MessageCircle, Pencil, Plus, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -10,12 +10,13 @@ import { syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { recordAudit } from '../lib/audit';
-import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
+import { DEFAULT_BATCHES, DEFAULT_COACHES, loadStudentOptions } from '../lib/studentOptions';
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
 import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { matchOnlineTournamentResults, ordinal } from '../lib/onlineTournamentMatch';
 import { calculateStudentBadges } from '../lib/studentBadges';
 import { parseExcelOrCsvFile } from '../lib/excelStudentImport';
+import { FilterModal, type FilterSection } from '../components/FilterModal';
 import {
   dateValidationError,
   digitsOnly,
@@ -357,10 +358,11 @@ async function loadStudents(deps: Readonly<{
   setLoading: (value: boolean) => void; setError: (value: string) => void;
   setStudents: StudentsSetter; setFiltered: StudentsSetter;
   setBatches: (value: string[]) => void; setLevels: (value: string[]) => void;
+  setCoaches: (value: string[]) => void;
   setTournamentRegistrations: (value: TournamentRegistration[]) => void;
   setWeeklyResults: (value: SavedWeeklyOnlineTournament[]) => void;
 }>) {
-  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setTournamentRegistrations, setWeeklyResults } = deps;
+  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
   if (!token) return;
   setLoading(true); setError('');
   try {
@@ -377,8 +379,9 @@ async function loadStudents(deps: Readonly<{
     const headerMap = rows.length > 0 ? createHeaderMap(rows[0]) : undefined;
     const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2, headerMap)).filter(student => student.name.trim());
     setStudents(data); setFiltered(data);
-    setBatches(options.batches.values);
+    setBatches(options.batches.values.length > 0 ? options.batches.values : [...DEFAULT_BATCHES]);
     setLevels(options.levels.values);
+    setCoaches(options.coaches.values.length > 0 ? options.coaches.values : [...DEFAULT_COACHES]);
     setTournamentRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
     setWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
   } catch(e:any) {
@@ -772,15 +775,54 @@ function sendWhatsAppProgressCard(
   }
 }
 
-function matchesStudentQuery(s: Student, q: string, coachFilter: 'all' | 'mine', coach: string): boolean {
-  const matchesSearch = !q || s.name.toLowerCase().includes(q) || s.batch.toLowerCase().includes(q) ||
-    s.tnscaId.toLowerCase().includes(q) || s.fideId.toLowerCase().includes(q) ||
-    s.school.toLowerCase().includes(q) || s.coachName.toLowerCase().includes(q);
-  if (!matchesSearch) return false;
-  if (coachFilter === 'all' || !coach) return true;
-  const c = coach.toLowerCase();
-  const sc = s.coachName.trim().toLowerCase();
-  return sc.includes(c) || c.includes(sc);
+function matchesStudentFilters(
+  s: Student,
+  q: string,
+  batches: string[],
+  categories: string[],
+  coaches: string[],
+  schools: string[],
+  statuses: string[],
+): boolean {
+  if (q) {
+    const searchMatch = s.name.toLowerCase().includes(q) ||
+      s.batch.toLowerCase().includes(q) ||
+      s.tnscaId.toLowerCase().includes(q) ||
+      s.fideId.toLowerCase().includes(q) ||
+      s.school.toLowerCase().includes(q) ||
+      s.standard.toLowerCase().includes(q) ||
+      s.coachName.toLowerCase().includes(q);
+    if (!searchMatch) return false;
+  }
+  if (batches.length > 0) {
+    const sb = s.batch.trim().toLowerCase();
+    const matchesBatch = batches.some(b => {
+      const target = b.trim().toLowerCase();
+      return sb === target || sb.startsWith(target);
+    });
+    if (!matchesBatch) return false;
+  }
+  if (categories.length > 0) {
+    const sc = getCategory(s.age).toLowerCase();
+    if (!categories.some(c => c.toLowerCase() === sc)) return false;
+  }
+  if (coaches.length > 0) {
+    const sc = s.coachName.trim().toLowerCase();
+    const matchesCoach = coaches.some(c => {
+      const target = c.trim().toLowerCase();
+      return sc.includes(target) || target.includes(sc);
+    });
+    if (!matchesCoach) return false;
+  }
+  if (schools.length > 0) {
+    const sch = (s.school || s.grade).trim().toLowerCase();
+    if (!schools.some(sc => sch.includes(sc.trim().toLowerCase()))) return false;
+  }
+  if (statuses.length > 0) {
+    const st = (s.status || 'Active').trim().toLowerCase();
+    if (!statuses.some(item => item.trim().toLowerCase() === st)) return false;
+  }
+  return true;
 }
 
 function sortStudents(list: Student[], sortKey: 'name' | 'batch' | 'status' | 'attendance'): Student[] {
@@ -811,7 +853,6 @@ export function Students() {
   const [error, setError] = useState('');
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
-  const [coachFilter, setCoachFilter] = useState<'all' | 'mine'>('all');
   const [selected, setSelected] = useState<Student | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -819,6 +860,13 @@ export function Students() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
+  const [coaches, setCoaches] = useState([...DEFAULT_COACHES]);
+  const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
+  const [selectedSchools, setSelectedSchools] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [sortKey, setSortKey] = useState<'name'|'batch'|'status'|'attendance'>('name');
   const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('info');
   const [syncing, setSyncing] = useState(false);
@@ -829,30 +877,88 @@ export function Students() {
 
   const load = () => loadStudents({
     token, logout, setLoading, setError, setStudents, setFiltered,
-    setBatches, setLevels: () => {}, setTournamentRegistrations, setWeeklyResults,
+    setBatches, setLevels: () => {}, setCoaches, setTournamentRegistrations, setWeeklyResults,
   });
 
-  const myStudentsCount = useMemo(() => {
-    if (!coachName.trim()) return 0;
-    const c = coachName.trim().toLowerCase();
-    return students.filter(s => s.coachName.trim().toLowerCase().includes(c) || c.includes(s.coachName.trim().toLowerCase())).length;
-  }, [students, coachName]);
+  const availableSchools = useMemo(() => {
+    return Array.from(new Set(students.map(s => (s.school || s.grade).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [students]);
 
-  const coachOptions = useMemo(() => {
-    const set = new Set<string>();
-    if (coachName?.trim()) set.add(coachName.trim());
-    students.forEach(s => {
-      if (s.coachName?.trim()) set.add(s.coachName.trim());
-    });
-    ['Coach Anand', 'Coach Meera', 'Coach Rajesh', 'Coach Ramesh'].forEach(c => set.add(c));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [students, coachName]);
+  const activeFilterCount = selectedBatches.length + selectedCategories.length + selectedCoaches.length + selectedSchools.length + selectedStatuses.length;
+
+  const resetAllFilters = () => {
+    setSelectedBatches([]);
+    setSelectedCategories([]);
+    setSelectedCoaches([]);
+    setSelectedSchools([]);
+    setSelectedStatuses([]);
+  };
+
+  const filterSections: FilterSection[] = [
+    {
+      id: 'batches',
+      title: 'Batch',
+      multiSelect: true,
+      selectedValues: selectedBatches,
+      onChange: setSelectedBatches,
+      options: batches.map(b => ({
+        value: b,
+        count: students.filter(s => s.batch.toLowerCase().startsWith(b.toLowerCase())).length,
+      })),
+    },
+    {
+      id: 'categories',
+      title: 'Age Category',
+      multiSelect: true,
+      selectedValues: selectedCategories,
+      onChange: setSelectedCategories,
+      options: ['Under 7', 'Under 9', 'Under 11', 'Under 13', 'Under 15', 'Under 17', 'Under 19', 'Open'].map(cat => ({
+        value: cat,
+        count: students.filter(s => getCategory(s.age).toLowerCase() === cat.toLowerCase()).length,
+      })),
+    },
+    {
+      id: 'coaches',
+      title: 'Assigned Coach',
+      multiSelect: true,
+      selectedValues: selectedCoaches,
+      onChange: setSelectedCoaches,
+      options: coaches.map(c => ({
+        value: c,
+        count: students.filter(s => s.coachName.trim().toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(s.coachName.trim().toLowerCase())).length,
+      })),
+    },
+    {
+      id: 'statuses',
+      title: 'Status',
+      multiSelect: true,
+      selectedValues: selectedStatuses,
+      onChange: setSelectedStatuses,
+      options: ['Active', 'Inactive', 'On Hold'].map(st => ({
+        value: st,
+        count: students.filter(s => (s.status || 'Active').toLowerCase() === st.toLowerCase()).length,
+      })),
+    },
+    ...(availableSchools.length > 0 ? [{
+      id: 'schools',
+      title: 'School / Standard',
+      multiSelect: true,
+      selectedValues: selectedSchools,
+      onChange: setSelectedSchools,
+      options: availableSchools.map(sch => ({
+        value: sch,
+        count: students.filter(s => (s.school || s.grade).trim().toLowerCase() === sch.toLowerCase()).length,
+      })),
+    }] : []),
+  ];
 
   useEffect(() => { load(); }, [token]);
   useEffect(() => {
     const q = search.toLowerCase();
-    setFiltered(students.filter(s => matchesStudentQuery(s, q, coachFilter, coachName.trim())));
-  }, [search, students, coachFilter, coachName]);
+    setFiltered(students.filter(s => matchesStudentFilters(
+      s, q, selectedBatches, selectedCategories, selectedCoaches, selectedSchools, selectedStatuses
+    )));
+  }, [search, students, selectedBatches, selectedCategories, selectedCoaches, selectedSchools, selectedStatuses]);
 
   const handleAdd = () => addStudent({ token, form, toast, setSaving, setStudents, setShowAdd, setForm });
 
@@ -909,7 +1015,7 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coachOptions} />
+          <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coaches} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
@@ -1019,7 +1125,7 @@ export function Students() {
             ...EMPTY,
             batch: batches[0] ?? 'Beginner',
             level: batches[0] ?? 'Beginner',
-            coachName: coachName || coachOptions[0] || 'Coach Anand',
+            coachName: coachName || coaches[0] || 'Coach Anand',
           });
           setShowAdd(true);
         }}
@@ -1030,30 +1136,76 @@ export function Students() {
       <div className="students-workspace p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name, batch, FIDE ID, school…"
+          placeholder="Search by name, batch, FIDE ID, school, coach…"
           className="input student-search"/>
-        {coachName.trim() && myStudentsCount > 0 && (
-          <div className="flex gap-1.5 pt-0.5">
+
+        {/* Active Filter Chips */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {selectedBatches.map(b => (
+              <span key={b} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                {b}
+                <button type="button" onClick={() => setSelectedBatches(prev => prev.filter(v => v !== b))} aria-label={`Remove ${b} batch filter`}><X size={12} /></button>
+              </span>
+            ))}
+            {selectedCategories.map(c => (
+              <span key={c} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                {c}
+                <button type="button" onClick={() => setSelectedCategories(prev => prev.filter(v => v !== c))} aria-label={`Remove ${c} category filter`}><X size={12} /></button>
+              </span>
+            ))}
+            {selectedCoaches.map(coach => (
+              <span key={coach} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                {coach}
+                <button type="button" onClick={() => setSelectedCoaches(prev => prev.filter(v => v !== coach))} aria-label={`Remove ${coach} filter`}><X size={12} /></button>
+              </span>
+            ))}
+            {selectedSchools.map(sch => (
+              <span key={sch} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                {sch}
+                <button type="button" onClick={() => setSelectedSchools(prev => prev.filter(v => v !== sch))} aria-label={`Remove ${sch} filter`}><X size={12} /></button>
+              </span>
+            ))}
+            {selectedStatuses.map(st => (
+              <span key={st} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                {st}
+                <button type="button" onClick={() => setSelectedStatuses(prev => prev.filter(v => v !== st))} aria-label={`Remove ${st} status filter`}><X size={12} /></button>
+              </span>
+            ))}
             <button
               type="button"
-              onClick={() => setCoachFilter('all')}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${coachFilter === 'all' ? 'bg-navy text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              onClick={resetAllFilters}
+              className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline px-1.5 py-0.5"
             >
-              All Students ({students.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setCoachFilter('mine')}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${coachFilter === 'mine' ? 'bg-navy text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            >
-              My Students ({myStudentsCount})
+              Clear all
             </button>
           </div>
         )}
+
         <div className="student-list-controls flex gap-2 items-center">
-          <p className="text-xs text-gray-400 flex-1">{filtered.filter(student => student.status === 'Active').length} active · {filtered.length} total</p>
+          <p className="text-xs text-gray-400 flex-1 truncate">{filtered.filter(student => (student.status || 'Active').toLowerCase() === 'active').length} active · {filtered.length} total</p>
+          <button
+            type="button"
+            onClick={() => setShowFilterModal(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              activeFilterCount > 0
+                ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800'
+                : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-750'
+            }`}
+            aria-label="Filter students"
+            title="Filter by batch, category, coach, school and status"
+          >
+            <Filter size={14} />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-navy dark:bg-amber-500 text-white dark:text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
           <select value={sortKey} onChange={e=>setSortKey(e.target.value as typeof sortKey)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white">
+            className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none bg-white dark:bg-slate-800 font-medium"
+            aria-label="Sort students">
             <option value="name">A → Z</option>
             <option value="batch">By Batch</option>
             <option value="status">Active First</option>
@@ -1075,6 +1227,7 @@ export function Students() {
                 <p className="mt-0.5 text-xs text-gray-500 flex flex-wrap gap-x-2 items-center">
                   <span>{s.batch}</span>
                   {cat && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
+                  {s.coachName && <span className="text-purple-600 dark:text-purple-400 font-medium text-[10px]">{s.coachName}</span>}
                   {s.fideId && <span className="text-gray-400">FIDE: {s.fideId}</span>}
                 </p>
               </div>
@@ -1091,7 +1244,7 @@ export function Students() {
         form={form}
         setForm={setForm}
         batches={batches}
-        coachOptions={coachOptions}
+        coachOptions={coaches}
         saving={saving}
         onClose={() => setShowAdd(false)}
         onAdd={handleAdd}
@@ -1103,6 +1256,16 @@ export function Students() {
           saving={saving}
           onClose={() => setImportPreview(null)}
           onImport={handleBatchImport}
+        />
+      )}
+      {showFilterModal && (
+        <FilterModal
+          title="Filter Students"
+          sections={filterSections}
+          totalResults={filtered.length}
+          activeFilterCount={activeFilterCount}
+          onResetAll={resetAllFilters}
+          onClose={() => setShowFilterModal(false)}
         />
       )}
     </Layout>
@@ -1247,20 +1410,18 @@ function StudentForm({ form, setForm, batches, coachOptions = [] }: Readonly<{
           </select>
         </Field>
         <Field label="Assigned Coach">
-          <input
-            maxLength={100}
-            list="coach-suggestions-list"
+          <select
             value={form.coachName}
             onChange={f('coachName')}
             className="input"
-            placeholder="e.g. Coach Anand"
             aria-label="Assigned Coach"
-          />
-          <datalist id="coach-suggestions-list">
+          >
+            <option value="">Select coach…</option>
+            {!coachOptions.includes(form.coachName) && form.coachName && <option value={form.coachName}>{form.coachName}</option>}
             {coachOptions.map(coach => (
-              <option key={coach} value={coach} />
+              <option key={coach} value={coach}>{coach}</option>
             ))}
-          </datalist>
+          </select>
         </Field>
         <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
       </Section>

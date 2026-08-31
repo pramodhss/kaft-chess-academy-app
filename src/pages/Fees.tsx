@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -13,10 +13,11 @@ import type { FeeDraft } from '../lib/feeRules';
 import { useCoachName } from '../hooks/useCoachName';
 import type { FeeEntry } from '../types';
 import { recordAudit } from '../lib/audit';
-import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
+import { DEFAULT_BATCHES, DEFAULT_COACHES, loadStudentOptions } from '../lib/studentOptions';
 import { UpiPayModal, type UpiPaymentDetails } from '../components/UpiPayModal';
 import { useUpiSettings } from '../hooks/useUpiSettings';
-import { createHeaderMap, parseFeeRow } from '../lib/schemaMapper';
+import { createHeaderMap, parseFeeRow, parseStudentRow } from '../lib/schemaMapper';
+import { FilterModal, type FilterSection } from '../components/FilterModal';
 
 type FeeForm = { studentName:string; feeMonth:string; feeType:string; amountDue:string;
   amountPaid:string; paymentMethod:string; paymentStatus:string; dueDate:string;
@@ -279,13 +280,62 @@ function paymentReportAmount(paid: number, due: number): string {
   return ` (\u20b9${paid.toLocaleString('en-IN')}${dueSuffix})`;
 }
 
+interface FeeFilterCriteria {
+  search: string;
+  batchFilter: string;
+  selectedBatches: string[];
+  selectedCoaches: string[];
+  selectedStatuses: string[];
+  batchMap: Map<string, string>;
+  coachMap: Map<string, string>;
+}
+
+function matchesFeeStudent(
+  student: string,
+  status: string,
+  criteria: FeeFilterCriteria,
+): boolean {
+  const { search, batchFilter, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap } = criteria;
+  if (search && !student.toLowerCase().includes(search.toLowerCase())) return false;
+  const studentBatch = (batchMap.get(student) ?? '').trim().toLowerCase();
+  if (batchFilter !== 'All') {
+    const filterBatch = batchFilter.trim().toLowerCase();
+    if (studentBatch !== filterBatch && !studentBatch.startsWith(filterBatch)) return false;
+  }
+  if (selectedBatches.length > 0) {
+    const matches = selectedBatches.some(b => {
+      const target = b.trim().toLowerCase();
+      return studentBatch === target || studentBatch.startsWith(target);
+    });
+    if (!matches) return false;
+  }
+  if (selectedCoaches.length > 0) {
+    const studentCoach = (coachMap.get(student) ?? '').trim().toLowerCase();
+    const matchesCoach = selectedCoaches.some(c => {
+      const target = c.trim().toLowerCase();
+      return studentCoach.includes(target) || target.includes(studentCoach);
+    });
+    if (!matchesCoach) return false;
+  }
+  if (selectedStatuses.length > 0) {
+    if (!selectedStatuses.some(st => st.toLowerCase() === status.toLowerCase())) return false;
+  }
+  return true;
+}
+
 export function Fees() {
   const { token, logout } = useAuth();
   const { coachName: savedCoachName } = useCoachName();
   const [fees, setFees]           = useState<FeeEntry[]>([]);
   const [students, setStudents]   = useState<string[]>([]);
   const [batchMap, setBatchMap]   = useState<Map<string,string>>(new Map());
+  const [coachMap, setCoachMap]   = useState<Map<string,string>>(new Map());
   const [configuredBatches, setConfiguredBatches] = useState<string[]>([...DEFAULT_BATCHES]);
+  const [configuredCoaches, setConfiguredCoaches] = useState<string[]>([...DEFAULT_COACHES]);
+  const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
   const [showAdd, setShowAdd]     = useState(false);
@@ -316,7 +366,8 @@ export function Fees() {
         loadStudentOptions(token, SHEET_ID),
       ]);
       setFees(feeRowsToEntries(feeRows));
-      setConfiguredBatches(options.batches.values);
+      setConfiguredBatches(options.batches.values.length > 0 ? options.batches.values : [...DEFAULT_BATCHES]);
+      setConfiguredCoaches(options.coaches.values.length > 0 ? options.coaches.values : [...DEFAULT_COACHES]);
       const uniqueStudents = new Map<string, string>();
       studentRows.slice(1).forEach(row => {
         const name = row[0]?.trim();
@@ -328,8 +379,17 @@ export function Fees() {
       const names = Array.from(uniqueStudents.values());
       setStudents(names);
       const batches = new Map<string,string>();
-      studentRows.slice(1).forEach(r => { if(r[0]) batches.set(r[0], r[5]??''); });
+      const coaches = new Map<string,string>();
+      const studentHeaderMap = studentRows.length > 0 ? createHeaderMap(studentRows[0]) : undefined;
+      studentRows.slice(1).forEach((r, idx) => {
+        const student = parseStudentRow(r, idx + 2, studentHeaderMap);
+        if (student.name) {
+          batches.set(student.name, student.batch);
+          if (student.coachName) coaches.set(student.name, student.coachName);
+        }
+      });
       setBatchMap(batches);
+      setCoachMap(coaches);
     } catch(e:any) {
       if(e.message==='TOKEN_EXPIRED'){logout();return;}
       setError(e.message);
@@ -519,17 +579,14 @@ export function Fees() {
     return ['All', ...configuredBatches];
   }, [configuredBatches]);
 
-  const visibleStudents = useMemo(() =>
-    students.filter(s => {
-      const matchesSearch = !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase());
-      if (!matchesSearch) return false;
-      if (batchFilter === 'All') return true;
-      const studentBatch = (batchMap.get(s) ?? '').trim().toLowerCase();
-      const filterBatch = batchFilter.trim().toLowerCase();
-      return studentBatch === filterBatch || studentBatch.startsWith(filterBatch);
-    }),
-    [students, feeSearch, batchFilter, batchMap]
-  );
+  const activeFilterCount = (batchFilter !== 'All' ? 1 : 0) + selectedBatches.length + selectedStatuses.length + selectedCoaches.length;
+
+  const resetAllFilters = () => {
+    setBatchFilter('All');
+    setSelectedBatches([]);
+    setSelectedStatuses([]);
+    setSelectedCoaches([]);
+  };
 
   const knownAmountDue = (student: string): number => {
     const studentFee = fees
@@ -552,6 +609,70 @@ export function Fees() {
       amountPaid: fee ? String(parseSheetNumber(fee.amountPaid)) : '',
     };
   };
+
+  const filterSections: FilterSection[] = [
+    {
+      id: 'batches',
+      title: 'Batch',
+      multiSelect: true,
+      selectedValues: selectedBatches,
+      onChange: setSelectedBatches,
+      options: configuredBatches.map(b => ({
+        value: b,
+        count: students.filter(s => (batchMap.get(s) ?? '').toLowerCase().startsWith(b.toLowerCase())).length,
+      })),
+    },
+    {
+      id: 'statuses',
+      title: 'Payment Status',
+      multiSelect: true,
+      selectedValues: selectedStatuses,
+      onChange: setSelectedStatuses,
+      options: ['Paid', 'Pending', 'Partial', 'Overdue', 'Waived'].map(st => ({
+        value: st,
+        count: students.filter(s => {
+          const fee = monthlyByStudent.get(normalized(s));
+          const draft = feeDraft(s);
+          const due = parseSheetNumber(draft.amountDue);
+          const payment = calculateRosterPayment(fee, draft, due);
+          const currentStatus = due > 0 ? payment.status : 'Pending';
+          return currentStatus.toLowerCase() === st.toLowerCase();
+        }).length,
+      })),
+    },
+    {
+      id: 'coaches',
+      title: 'Assigned Coach',
+      multiSelect: true,
+      selectedValues: selectedCoaches,
+      onChange: setSelectedCoaches,
+      options: configuredCoaches.map(c => ({
+        value: c,
+        count: students.filter(s => (coachMap.get(s) ?? '').trim().toLowerCase().includes(c.toLowerCase())).length,
+      })),
+    },
+  ];
+
+  const visibleStudents = useMemo(() =>
+    students.filter(s => {
+      const fee = monthlyByStudent.get(normalized(s));
+      const draft = feeDraft(s);
+      const due = parseSheetNumber(draft.amountDue);
+      const payment = calculateRosterPayment(fee, draft, due);
+      const status = due > 0 ? payment.status : 'Pending';
+
+      return matchesFeeStudent(s, status, {
+        search: feeSearch,
+        batchFilter,
+        selectedBatches,
+        selectedCoaches,
+        selectedStatuses,
+        batchMap,
+        coachMap,
+      });
+    }),
+    [students, feeSearch, batchFilter, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap, monthlyByStudent, drafts]
+  );
 
   const updateDraft = (student: string, next: FeeDraft) => {
     setDrafts(current => new Map(current).set(student, next));
@@ -788,17 +909,73 @@ export function Fees() {
           placeholder="Search students" aria-label="Search students"
           className="input input-with-icon"/></label>
 
+        {/* Active Filter Chips */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            {batchFilter !== 'All' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                Batch: {batchFilter}
+                <button type="button" onClick={() => setBatchFilter('All')} aria-label="Clear batch dropdown filter"><X size={12} /></button>
+              </span>
+            )}
+            {selectedBatches.map(b => (
+              <span key={b} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                {b}
+                <button type="button" onClick={() => setSelectedBatches(prev => prev.filter(v => v !== b))} aria-label={`Remove ${b} filter`}><X size={12} /></button>
+              </span>
+            ))}
+            {selectedStatuses.map(st => (
+              <span key={st} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                {st}
+                <button type="button" onClick={() => setSelectedStatuses(prev => prev.filter(v => v !== st))} aria-label={`Remove ${st} status filter`}><X size={12} /></button>
+              </span>
+            ))}
+            {selectedCoaches.map(c => (
+              <span key={c} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                {c}
+                <button type="button" onClick={() => setSelectedCoaches(prev => prev.filter(v => v !== c))} aria-label={`Remove ${c} filter`}><X size={12} /></button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline px-1.5 py-0.5"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
           <div>
             <h2 className="font-bold text-navy">Student fees</h2>
             <p className="text-xs text-gray-500">{visibleStudents.length} students {batchFilter !== 'All' ? `(${batchFilter})` : ''}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFilterModal(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                activeFilterCount > 0
+                  ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+              }`}
+              aria-label="Filter fees"
+              title="Filter by batch, status, and coach"
+            >
+              <Filter size={14} />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-navy dark:bg-amber-500 text-white dark:text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
             {batchOptions.length > 1 && (
               <select
                 value={batchFilter}
                 onChange={e => setBatchFilter(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none bg-white font-medium"
+                className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none bg-white dark:bg-slate-800 font-medium"
                 aria-label="Filter by batch"
               >
                 {batchOptions.map(b => (
@@ -998,6 +1175,16 @@ export function Fees() {
       {editTarget && <FeeModal title="Edit Payment" onClose={() => setEditTarget(null)} form={form} setForm={setForm}
         students={students} onSave={handleEdit} saving={saving} coachName={coachName} />}
       {upiPaymentDetails && <UpiPayModal details={upiPaymentDetails} onClose={() => setUpiPaymentDetails(null)} />}
+      {showFilterModal && (
+        <FilterModal
+          title="Filter Fees"
+          sections={filterSections}
+          totalResults={visibleStudents.length}
+          activeFilterCount={activeFilterCount}
+          onResetAll={resetAllFilters}
+          onClose={() => setShowFilterModal(false)}
+        />
+      )}
     </Layout>
   );
 }

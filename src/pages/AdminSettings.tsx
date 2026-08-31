@@ -37,23 +37,32 @@ export function AdminSettings() {
 
   useEffect(() => { void load(); }, [token]);
 
-  const updateValues = (values: string[]) => {
+  const updateBatches = (values: string[]) => {
     setOptions(current => current ? {
       ...current,
       batches: { ...current.batches, values },
     } : current);
   };
 
-  const save = async () => {
+  const updateCoaches = (values: string[]) => {
+    setOptions(current => current ? {
+      ...current,
+      coaches: { ...current.coaches, values },
+    } : current);
+  };
+
+  const saveOption = async (key: 'student_batches' | 'student_coaches') => {
     if (!token || !options) return;
-    setSaving('student_batches');
+    setSaving(key);
+    const target = key === 'student_batches' ? options.batches : options.coaches;
+    const label = key === 'student_batches' ? 'Student batches' : 'Coaches list';
     try {
       const result = await saveStudentOptionList(
         token,
         SHEET_ID,
-        'student_batches',
-        options.batches.values,
-        options.batches.version,
+        key,
+        target.values,
+        target.version,
         coachName || 'Admin',
       );
       const latestOptions = await loadStudentOptions(token, SHEET_ID, true);
@@ -61,7 +70,7 @@ export function AdminSettings() {
       if (result.concurrentUpdate) {
         toast.error('Another admin updated this list at the same time. The latest Sheet values were reloaded; review them before saving again.');
       } else {
-        toast.success('Student batches updated successfully.');
+        toast.success(`${label} updated successfully.`);
       }
     } catch (saveError: any) {
       if (saveError.message === 'SETTINGS_CONFLICT') {
@@ -92,8 +101,16 @@ export function AdminSettings() {
               title="Student Batches"
               values={options.batches.values}
               saving={saving === 'student_batches'}
-              onChange={updateValues}
-              onSave={save}
+              onChange={updateBatches}
+              onSave={() => saveOption('student_batches')}
+            />
+
+            <OptionEditor
+              title="Assigned Coaches"
+              values={options.coaches.values}
+              saving={saving === 'student_coaches'}
+              onChange={updateCoaches}
+              onSave={() => saveOption('student_coaches')}
             />
 
             <section className="pt-2 border-t border-gray-100">

@@ -2,9 +2,10 @@ import { TABS } from '../config';
 import { appendRows, ensureSheet, readSheet, readSheetLive } from './sheets';
 
 export const DEFAULT_BATCHES = ['Beginner', 'Intermediate', 'Advanced'];
+export const DEFAULT_COACHES = ['Coach Anand', 'Coach Meera', 'Coach Rajesh', 'Coach Ramesh'];
 const DEFAULT_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
-export type StudentOptionKey = 'student_batches' | 'student_levels';
+export type StudentOptionKey = 'student_batches' | 'student_levels' | 'student_coaches';
 
 export interface VersionedOptions {
   values: string[];
@@ -14,6 +15,7 @@ export interface VersionedOptions {
 export interface StudentOptions {
   batches: VersionedOptions;
   levels: VersionedOptions;
+  coaches: VersionedOptions;
 }
 
 const HEADERS = ['Key', 'Values JSON', 'Version', 'Base Version', 'Updated By', 'Updated At'];
@@ -44,6 +46,7 @@ function parseOptions(rows: string[][]): StudentOptions {
   return {
     batches: latestFor(rows, 'student_batches', DEFAULT_BATCHES),
     levels: latestFor(rows, 'student_levels', DEFAULT_LEVELS),
+    coaches: latestFor(rows, 'student_coaches', DEFAULT_COACHES),
   };
 }
 
@@ -60,6 +63,12 @@ export async function loadStudentOptions(token: string, sheetId: string, live = 
   }
 }
 
+function defaultValuesFor(key: StudentOptionKey): string[] {
+  if (key === 'student_batches') return DEFAULT_BATCHES;
+  if (key === 'student_coaches') return DEFAULT_COACHES;
+  return DEFAULT_LEVELS;
+}
+
 export async function saveStudentOptionList(
   token: string,
   sheetId: string,
@@ -73,7 +82,7 @@ export async function saveStudentOptionList(
 
   await ensureStudentOptionsSheet(token, sheetId);
   const beforeRows = await readSheetLive(token, sheetId, `'${TABS.SETTINGS}'!A:F`);
-  const defaults = key === 'student_batches' ? DEFAULT_BATCHES : DEFAULT_LEVELS;
+  const defaults = defaultValuesFor(key);
   const current = latestFor(beforeRows, key, defaults);
   if (current.version !== expectedVersion) {
     throw new Error('SETTINGS_CONFLICT');

@@ -39,3 +39,16 @@ export function parseSheetDate(value: SheetValue): Date | null {
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
+
+export function getCategory(age: string | number): string {
+  const a = typeof age === 'number' ? age : Number.parseInt(age, 10);
+  if (!a || Number.isNaN(a)) return '';
+  if (a <= 6)  return 'Under 7';
+  if (a <= 8)  return 'Under 9';
+  if (a <= 10) return 'Under 11';
+  if (a <= 12) return 'Under 13';
+  if (a <= 14) return 'Under 15';
+  if (a <= 16) return 'Under 17';
+  if (a <= 18) return 'Under 19';
+  return 'Open';
+}

@@ -370,8 +370,8 @@ export function OperationsCenter() {
             <button type="button" onClick={() => navigate('/admin-settings')} className="surface-card flex w-full items-center gap-3 p-4 text-left">
               <span className="icon-tile"><Settings size={18} /></span>
               <span>
-                <strong className="block text-sm text-gray-900">Student batch settings</strong>
-                <span className="text-xs text-gray-500">Manage batches (Beginner, Intermediate, Advanced)</span>
+                <strong className="block text-sm text-gray-900 dark:text-white">Academy Batches &amp; Coaches Settings</strong>
+                <span className="text-xs text-gray-500">Manage batches (Beginner, Intermediate, Advanced) and assigned coaches</span>
               </span>
             </button>
           </div>

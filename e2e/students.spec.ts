@@ -19,7 +19,7 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   await dialog.getByLabel('Email').fill('anita.rao@example.com');
   await dialog.getByLabel('Parent 2 Name').fill('Vikram Rao');
   await dialog.getByLabel('Parent 2 Phone').fill('9966554433');
-  await dialog.getByLabel('Assigned Coach').fill('Coach Meera');
+  await dialog.getByLabel('Assigned Coach').selectOption('Coach Meera');
   await dialog.getByLabel('Joining Date').fill('2026-01-10');
   await dialog.getByLabel('Classical Rating').fill('1250');
   await dialog.getByLabel('Rapid Rating').fill('1200');
@@ -127,7 +127,7 @@ test('requires confirmation and removes a student only after Sheets succeeds', a
   await dialog.getByLabel('Date of Birth *').fill('2014-05-10');
   await dialog.getByLabel('Parent / Guardian Name *').fill('Priya Kumar');
   await dialog.getByLabel('Phone *', { exact: true }).fill('9876543210');
-  await dialog.getByLabel('Assigned Coach').fill('Coach Rajesh');
+  await dialog.getByLabel('Assigned Coach').selectOption('Coach Rajesh');
   await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
 
   await expect(page.getByText('Student added successfully. The new profile is ready.')).toBeVisible();
@@ -207,7 +207,7 @@ test('imports students from spreadsheet, commits to Sheets, and retains on refre
   await page.getByRole('button', { name: 'Edit student' }).click();
 
   const coachInput = page.getByLabel('Assigned Coach');
-  await coachInput.fill('Coach Anand');
+  await coachInput.selectOption('Coach Anand');
   await page.getByRole('button', { name: 'Save Changes' }).click();
   await expect(page.getByText(/changes were updated successfully/i)).toBeVisible();
 });
@@ -256,7 +256,6 @@ test('pre-fills logged-in coach name, provides coach suggestions, and manages in
   await page.getByRole('button', { name: 'Add student' }).click();
   const coachInput = page.getByLabel('Assigned Coach');
   await expect(coachInput).toHaveValue('Coach Meera');
-  await expect(coachInput).toHaveAttribute('list', 'coach-suggestions-list');
 
   // Fill in required fields to add a student
   const dialog = page.getByRole('dialog');
@@ -280,4 +279,40 @@ test('pre-fills logged-in coach name, provides coach suggestions, and manages in
 
   await openApp(page, '#/fees');
   await expect(page.getByText('Pranav Rao')).toHaveCount(0);
+});
+
+test('filters students list by age category like Under 11, Under 13 via filter modal', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+
+  // Initial roster has Aarav Kumar (11 -> Under 13) and Diya Shah (12 -> Under 13)
+  const filterBtn = page.getByRole('button', { name: 'Filter students' });
+  await expect(filterBtn).toBeVisible();
+
+  // Open filter modal
+  await filterBtn.click();
+  const modal = page.getByRole('dialog');
+  await expect(modal).toBeVisible();
+
+  // Filter by Under 13
+  await modal.getByRole('button', { name: /Under 13/ }).click();
+  await modal.getByRole('button', { name: /Apply/i }).click();
+  await expect(modal).toBeHidden();
+
+  await expect(page.getByText('Aarav Kumar', { exact: true })).toBeVisible();
+  await expect(page.getByText('Diya Shah', { exact: true })).toBeVisible();
+
+  // Open filter modal again, deselect Under 13, select Under 7 (none should match)
+  await filterBtn.click();
+  const modal2 = page.getByRole('dialog');
+  await modal2.getByRole('button', { name: /Under 13/ }).click();
+  await modal2.getByRole('button', { name: /Under 7/ }).click();
+  await modal2.getByRole('button', { name: /Apply/i }).click();
+
+  await expect(page.getByText('Aarav Kumar', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Diya Shah', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('0 active · 0 total')).toBeVisible();
+
+  // Reset filters via Clear all chip
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await expect(page.getByText('Aarav Kumar', { exact: true })).toBeVisible();
 });
