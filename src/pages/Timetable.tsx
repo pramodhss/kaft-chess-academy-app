@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { appendRows, clearSheetRange, clearSheetReadCache, ensureSheet, readSheet, readSheetLive, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
+import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
 import {
   EMPTY_TIMETABLE, normalizeTimetableRows, timetableRow, timetableValidationError, timetableValues,
   TIMETABLE_HEADERS, WEEKDAYS, type TimetableDraft, type TimetableEntry,
@@ -19,7 +20,7 @@ export function Timetable() {
   const { coachName } = useCoachName();
   const toast = useToast();
   const [rows, setRows] = useState<TimetableEntry[]>([]);
-  const [batches, setBatches] = useState<string[]>([]);
+  const [batches, setBatches] = useState<string[]>([...DEFAULT_BATCHES]);
   const [levels, setLevels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,14 +36,15 @@ export function Timetable() {
     setLoading(true); setError('');
     try {
       await ensureSheet(token, SHEET_ID, TABS.TIMETABLE, TIMETABLE_HEADERS);
-      const [timetableRows, studentRows] = await Promise.all([
+      const [timetableRows, studentRows, options] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
+        loadStudentOptions(token, SHEET_ID),
       ]);
       const normalized = normalizeTimetableRows(timetableRows);
       if (normalized.legacy) await writeRange(token, SHEET_ID, `'${TABS.TIMETABLE}'!A1:M${normalized.values.length + 1}`, [TIMETABLE_HEADERS, ...normalized.values]);
       setRows(normalized.entries);
-      setBatches([...new Set(studentRows.slice(1).map(row => row[5]).filter(Boolean))]);
+      setBatches(options.batches.values.length > 0 ? options.batches.values : [...new Set(studentRows.slice(1).map(row => row[5]).filter(Boolean))]);
       setLevels([...new Set(studentRows.slice(1).map(row => row[6]).filter(Boolean))]);
     } catch (loadError: any) {
       if (loadError.message === 'TOKEN_EXPIRED') { logout(); return; }

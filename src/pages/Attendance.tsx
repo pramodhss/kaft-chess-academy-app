@@ -11,6 +11,7 @@ import { SHEET_ID, TABS, ATT_DATE_START } from '../config';
 import { useOnline } from '../hooks/useOnline';
 import { flushAttendanceQueue, queueAttendance } from '../lib/offlineAttendance';
 import { recordAudit } from '../lib/audit';
+import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -74,6 +75,7 @@ export function Attendance() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [nextDateColumn, setNextDateColumn] = useState(ATT_DATE_START + WEEKEND_DATES.length);
   const [rows, setRows] = useState<AttRow[]>([]);
+  const [configuredBatches, setConfiguredBatches] = useState<string[]>([...DEFAULT_BATCHES]);
   const [dirty, setDirty] = useState<Map<number, boolean>>(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,7 +102,11 @@ export function Attendance() {
     (async () => {
       try {
         if (navigator.onLine) await reconcileAttendanceRoster(token, SHEET_ID);
-        const headerRows = await readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`);
+        const [headerRows, options] = await Promise.all([
+          readSheetUnformatted(token, SHEET_ID, `'${TABS.ATTENDANCE}'!C1:ZZ1`),
+          loadStudentOptions(token, SHEET_ID),
+        ]);
+        setConfiguredBatches(options.batches.values);
         const headerCells = headerRows[0] ?? [];
         const parsed = headerCells.flatMap((value, index) => {
           const date = parseSheetDate(value ?? '');
@@ -284,9 +290,15 @@ export function Attendance() {
   const presentCount = rows.filter(r => dirty.get(r.sheetRow) ?? r.present).length;
   const selectedDate = attendanceDates[selectedIdx];
   const date = selectedDate?.date ?? new Date();
-  const batches = ['All', ...Array.from(new Set(rows.map(r => r.batch).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
+  const batches = ['All', ...configuredBatches];
   const [batchFilter, setBatchFilter] = useState('All');
-  const visibleRows = rows.filter(r => r.name && (batchFilter === 'All' || r.batch === batchFilter));
+  const visibleRows = rows.filter(r => {
+    if (!r.name) return false;
+    if (batchFilter === 'All') return true;
+    const rb = r.batch.trim().toLowerCase();
+    const fb = batchFilter.trim().toLowerCase();
+    return rb === fb || rb.startsWith(fb);
+  });
   const allVisiblePresent = visibleRows.length > 0 && visibleRows.every(r => dirty.get(r.sheetRow) ?? r.present);
 
   const toggleAllVisible = () => {

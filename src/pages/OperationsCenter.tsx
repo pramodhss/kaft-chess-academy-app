@@ -11,6 +11,7 @@ import { readSheet } from '../lib/sheets';
 import { parseSheetNumber, parseSheetPercentage } from '../lib/values';
 import { SHEET_ID, TABS } from '../config';
 import { recordAudit } from '../lib/audit';
+import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
 
 type Tab = 'actions' | 'broadcast' | 'analytics' | 'reminders' | 'quality' | 'audit' | 'backup';
 interface StudentSummary { name: string; batch: string; status: string; parent: string; phone: string; whatsapp: string; email: string; dob: string }
@@ -83,6 +84,7 @@ export function OperationsCenter() {
     return d.toISOString().slice(0, 10);
   });
   const [endDate, setEndDate] = useState(() => now.toISOString().slice(0, 10));
+  const [configuredBatches, setConfiguredBatches] = useState<string[]>([...DEFAULT_BATCHES]);
 
   useEffect(() => {
     if (!token) return;
@@ -92,7 +94,9 @@ export function OperationsCenter() {
       readSheet(token, SHEET_ID, `'${TABS.MONTHLY_ATT}'!A:E`).catch(() => []),
       readSheet(token, SHEET_ID, `'${TABS.TOURNAMENTS}'!A:U`).catch(() => []),
       readSheet(token, SHEET_ID, `'${TABS.AUDIT}'!A:F`).catch(() => []),
-    ]).then(([studentRows, feeRows, attRows, tRows, audit]) => {
+      loadStudentOptions(token, SHEET_ID),
+    ]).then(([studentRows, feeRows, attRows, tRows, audit, options]) => {
+      setConfiguredBatches(options.batches.values);
       setRaw({ students: studentRows, fees: feeRows });
       setStudents(studentRows.slice(1).filter(row => row[0]?.trim()).map(row => ({
         name: row[0] ?? '',
@@ -135,13 +139,15 @@ export function OperationsCenter() {
     }).finally(() => setLoading(false));
   }, [token, logout]);
 
-  const batches = useMemo(() => ['All', ...new Set(students.map(s => s.batch).filter(Boolean))], [students]);
+  const batches = useMemo(() => ['All', ...configuredBatches], [configuredBatches]);
 
   const broadcastRecipients = useMemo(() => {
     return students.filter(s => {
       if (s.status.toLowerCase() !== 'active') return false;
-      if (broadcastBatch !== 'All' && s.batch !== broadcastBatch) return false;
-      return true;
+      if (broadcastBatch === 'All') return true;
+      const sb = s.batch.trim().toLowerCase();
+      const bb = broadcastBatch.trim().toLowerCase();
+      return sb === bb || sb.startsWith(bb);
     });
   }, [students, broadcastBatch]);
 
@@ -176,7 +182,8 @@ export function OperationsCenter() {
     let collected = 0;
     let balance = 0;
     fees.forEach(f => {
-      const d = f.paymentDate ? new Date(f.paymentDate) : (f.dueDate ? new Date(f.dueDate) : null);
+      const dateStr = f.paymentDate || f.dueDate;
+      const d = dateStr ? new Date(dateStr) : null;
       if (d && !Number.isNaN(d.getTime()) && d >= start && d <= end) {
         collected += f.amountPaid;
         balance += f.balance;

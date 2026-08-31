@@ -13,6 +13,7 @@ import type { FeeDraft } from '../lib/feeRules';
 import { useCoachName } from '../hooks/useCoachName';
 import type { FeeEntry } from '../types';
 import { recordAudit } from '../lib/audit';
+import { DEFAULT_BATCHES, loadStudentOptions } from '../lib/studentOptions';
 
 type FeeForm = { studentName:string; feeMonth:string; feeType:string; amountDue:string;
   amountPaid:string; paymentMethod:string; paymentStatus:string; dueDate:string;
@@ -272,6 +273,7 @@ export function Fees() {
   const [fees, setFees]           = useState<FeeEntry[]>([]);
   const [students, setStudents]   = useState<string[]>([]);
   const [batchMap, setBatchMap]   = useState<Map<string,string>>(new Map());
+  const [configuredBatches, setConfiguredBatches] = useState<string[]>([...DEFAULT_BATCHES]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
   const [showAdd, setShowAdd]     = useState(false);
@@ -294,11 +296,13 @@ export function Fees() {
     if (!token) return;
     setLoading(true); setError('');
     try {
-      const [feeRows, studentRows] = await Promise.all([
+      const [feeRows, studentRows, options] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
+        loadStudentOptions(token, SHEET_ID),
       ]);
       setFees(feeRowsToEntries(feeRows));
+      setConfiguredBatches(options.batches.values);
       const uniqueStudents = new Map<string, string>();
       studentRows.slice(1).forEach(row => {
         const name = row[0]?.trim();
@@ -494,16 +498,17 @@ export function Fees() {
   }, [fees, selectedMonth, drafts, students]);
 
   const batchOptions = useMemo(() => {
-    const list = Array.from(new Set(Array.from(batchMap.values()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-    return ['All', ...list];
-  }, [batchMap]);
+    return ['All', ...configuredBatches];
+  }, [configuredBatches]);
 
   const visibleStudents = useMemo(() =>
     students.filter(s => {
       const matchesSearch = !feeSearch || s.toLowerCase().includes(feeSearch.toLowerCase());
-      const studentBatch = batchMap.get(s) ?? '';
-      const matchesBatch = batchFilter === 'All' || studentBatch === batchFilter;
-      return matchesSearch && matchesBatch;
+      if (!matchesSearch) return false;
+      if (batchFilter === 'All') return true;
+      const studentBatch = (batchMap.get(s) ?? '').trim().toLowerCase();
+      const filterBatch = batchFilter.trim().toLowerCase();
+      return studentBatch === filterBatch || studentBatch.startsWith(filterBatch);
     }),
     [students, feeSearch, batchFilter, batchMap]
   );
