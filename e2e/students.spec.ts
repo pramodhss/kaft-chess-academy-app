@@ -316,3 +316,55 @@ test('filters students list by age category like Under 11, Under 13 via filter m
   await page.getByRole('button', { name: 'Clear all' }).click();
   await expect(page.getByText('Aarav Kumar', { exact: true })).toBeVisible();
 });
+
+test('auto-syncs phone to whatsapp when same-as-phone checkbox is checked', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+  await page.getByRole('button', { name: 'Add student' }).click();
+
+  const phoneInput = page.getByLabel('Phone *', { exact: true });
+  const whatsappInput = page.getByLabel('WhatsApp', { exact: true });
+  const sameAsPhoneCheckbox = page.getByLabel('Same as phone number');
+
+  await phoneInput.fill('9876543210');
+  await expect(sameAsPhoneCheckbox).not.toBeChecked();
+
+  // Check the box
+  await sameAsPhoneCheckbox.check();
+  await expect(whatsappInput).toHaveValue('9876543210');
+
+  // Changing phone while checked should update WhatsApp
+  await phoneInput.fill('9988776655');
+  await expect(whatsappInput).toHaveValue('9988776655');
+
+  // Typing a different WhatsApp number should uncheck the box
+  await whatsappInput.fill('9123456789');
+  await expect(sameAsPhoneCheckbox).not.toBeChecked();
+});
+
+test('assigns batch coach in settings, updates existing students, and pre-fills on student add', async ({ page, sheets }) => {
+  // 1. Go to Admin Settings
+  await openApp(page, '#/admin-settings');
+
+  // Verify "Assign Coaches to Batches" section exists
+  await expect(page.getByRole('heading', { name: /Assign Coaches to Batches/i })).toBeVisible();
+
+  // Assign "Coach Rajesh" to "Beginner" batch
+  const beginnerCoachSelect = page.getByLabel('Assigned coach for Beginner');
+  await beginnerCoachSelect.selectOption('Coach Rajesh');
+
+  // Save & Update Students
+  await page.getByRole('button', { name: /Save & Update Students/i }).click();
+  await expect(page.getByText(/Batch coaches saved!/i)).toBeVisible();
+
+  // Verify that existing Beginner student (Aarav Kumar) in mock Sheets was updated to Coach Rajesh
+  const aaravRow = sheets.workbook['Students & Parents'].find(r => r[0] === 'Aarav Kumar');
+  expect(aaravRow?.[29]).toBe('Coach Rajesh');
+
+  // 2. Go to Students page and open Add Student
+  await openApp(page, '#/students');
+  await page.getByRole('button', { name: 'Add student' }).click();
+
+  // Verify Beginner batch pre-fills Coach Rajesh
+  const coachSelect = page.getByLabel('Assigned Coach');
+  await expect(coachSelect).toHaveValue('Coach Rajesh');
+});

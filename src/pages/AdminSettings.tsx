@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, QrCode, Save, Trash2 } from 'lucide-react';
+import { Plus, QrCode, Save, Trash2, UserCheck } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { SHEET_ID } from '../config';
@@ -10,7 +10,9 @@ import { useUpiSettings } from '../hooks/useUpiSettings';
 import {
   ensureStudentOptionsSheet,
   loadStudentOptions,
+  saveBatchCoachAssignments,
   saveStudentOptionList,
+  syncBatchCoachesToStudents,
 } from '../lib/studentOptions';
 import type { StudentOptionKey, StudentOptions } from '../lib/studentOptions';
 
@@ -20,6 +22,7 @@ export function AdminSettings() {
   const { upiEnabled, upiVpa, setUpiEnabled, setUpiVpa } = useUpiSettings();
   const toast = useToast();
   const [options, setOptions] = useState<StudentOptions | null>(null);
+  const [batchCoaches, setBatchCoaches] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<StudentOptionKey | null>(null);
   const [error, setError] = useState('');
 
@@ -28,7 +31,9 @@ export function AdminSettings() {
     setError('');
     try {
       await ensureStudentOptionsSheet(token, SHEET_ID);
-      setOptions(await loadStudentOptions(token, SHEET_ID, true));
+      const loaded = await loadStudentOptions(token, SHEET_ID, true);
+      setOptions(loaded);
+      setBatchCoaches(loaded.batchCoaches.map);
     } catch (loadError: any) {
       if (loadError.message === 'TOKEN_EXPIRED') { logout(); return; }
       setError(loadError.message);
@@ -84,6 +89,44 @@ export function AdminSettings() {
     }
   };
 
+  const handleBatchCoachChange = (batch: string, coach: string) => {
+    setBatchCoaches(prev => ({ ...prev, [batch]: coach }));
+  };
+
+  const saveBatchCoaches = async () => {
+    if (!token || !options) return;
+    setSaving('student_batch_coaches');
+    try {
+      await saveBatchCoachAssignments(
+        token,
+        SHEET_ID,
+        batchCoaches,
+        options.batchCoaches.version,
+        coachName || 'Admin',
+      );
+      const { updatedCount } = await syncBatchCoachesToStudents(token, SHEET_ID, batchCoaches);
+      const latestOptions = await loadStudentOptions(token, SHEET_ID, true);
+      setOptions(latestOptions);
+      setBatchCoaches(latestOptions.batchCoaches.map);
+      if (updatedCount > 0) {
+        toast.success(`Batch coaches saved! Updated assigned coach for ${updatedCount} student(s).`);
+      } else {
+        toast.success('Batch coach assignments saved successfully.');
+      }
+    } catch (saveError: any) {
+      if (saveError.message === 'SETTINGS_CONFLICT') {
+        const latest = await loadStudentOptions(token, SHEET_ID, true);
+        setOptions(latest);
+        setBatchCoaches(latest.batchCoaches.map);
+        toast.error('Another admin changed settings. Latest values were reloaded; review and try again.');
+      } else {
+        toast.error(`Save failed: ${saveError.message}`);
+      }
+    } finally {
+      setSaving(null);
+    }
+  };
+
   if (!options && !error) return <Layout title="Admin Settings"><PageSkeleton /></Layout>;
 
   return (
@@ -112,6 +155,44 @@ export function AdminSettings() {
               onChange={updateCoaches}
               onSave={() => saveOption('student_coaches')}
             />
+
+            <section className="pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-bold text-navy flex items-center gap-1.5">
+                  <UserCheck size={16} /> Assign Coaches to Batches
+                </h2>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">
+                Assign a default coach to each batch (e.g. Beginner → Coach Anand). Saving updates all existing students in that batch automatically and pre-fills the coach when adding new students.
+              </p>
+              <div className="surface-card p-3 space-y-3">
+                {options.batches.values.filter(b => b.trim()).map(batch => (
+                  <div key={batch} className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 min-w-[100px]">{batch}</span>
+                    <select
+                      value={batchCoaches[batch] ?? ''}
+                      onChange={e => handleBatchCoachChange(batch, e.target.value)}
+                      className="input flex-1 py-1.5 text-sm"
+                      aria-label={`Assigned coach for ${batch}`}
+                    >
+                      <option value="">Unassigned (None)</option>
+                      {options.coaches.values.filter(c => c.trim()).map(coach => (
+                        <option key={coach} value={coach}>{coach}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={saveBatchCoaches}
+                  disabled={saving === 'student_batch_coaches'}
+                  className="primary-action mt-2 w-full"
+                >
+                  <Save size={17} aria-hidden="true" />
+                  {saving === 'student_batch_coaches' ? 'Saving & Updating Students…' : 'Save & Update Students'}
+                </button>
+              </div>
+            </section>
 
             <section className="pt-2 border-t border-gray-100">
               <div className="flex items-center justify-between mb-3">

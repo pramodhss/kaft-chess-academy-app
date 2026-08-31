@@ -359,10 +359,11 @@ async function loadStudents(deps: Readonly<{
   setStudents: StudentsSetter; setFiltered: StudentsSetter;
   setBatches: (value: string[]) => void; setLevels: (value: string[]) => void;
   setCoaches: (value: string[]) => void;
+  setBatchCoaches: (value: Record<string, string>) => void;
   setTournamentRegistrations: (value: TournamentRegistration[]) => void;
   setWeeklyResults: (value: SavedWeeklyOnlineTournament[]) => void;
 }>) {
-  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
+  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setCoaches, setBatchCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
   if (!token) return;
   setLoading(true); setError('');
   try {
@@ -382,6 +383,7 @@ async function loadStudents(deps: Readonly<{
     setBatches(options.batches.values.length > 0 ? options.batches.values : [...DEFAULT_BATCHES]);
     setLevels(options.levels.values);
     setCoaches(options.coaches.values.length > 0 ? options.coaches.values : [...DEFAULT_COACHES]);
+    setBatchCoaches(options.batchCoaches?.map ?? {});
     setTournamentRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
     setWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
   } catch(e:any) {
@@ -775,25 +777,18 @@ function sendWhatsAppProgressCard(
   }
 }
 
-function matchesStudentFilters(
-  s: Student,
-  q: string,
-  batches: string[],
-  categories: string[],
-  coaches: string[],
-  schools: string[],
-  statuses: string[],
-): boolean {
-  if (q) {
-    const searchMatch = s.name.toLowerCase().includes(q) ||
-      s.batch.toLowerCase().includes(q) ||
-      s.tnscaId.toLowerCase().includes(q) ||
-      s.fideId.toLowerCase().includes(q) ||
-      s.school.toLowerCase().includes(q) ||
-      s.standard.toLowerCase().includes(q) ||
-      s.coachName.toLowerCase().includes(q);
-    if (!searchMatch) return false;
-  }
+function matchesStudentSearch(s: Student, q: string): boolean {
+  if (!q) return true;
+  return s.name.toLowerCase().includes(q) ||
+    s.batch.toLowerCase().includes(q) ||
+    s.tnscaId.toLowerCase().includes(q) ||
+    s.fideId.toLowerCase().includes(q) ||
+    s.school.toLowerCase().includes(q) ||
+    s.standard.toLowerCase().includes(q) ||
+    s.coachName.toLowerCase().includes(q);
+}
+
+function matchesStudentBatchAndCat(s: Student, batches: string[], categories: string[]): boolean {
   if (batches.length > 0) {
     const sb = s.batch.trim().toLowerCase();
     const matchesBatch = batches.some(b => {
@@ -806,6 +801,10 @@ function matchesStudentFilters(
     const sc = getCategory(s.age).toLowerCase();
     if (!categories.some(c => c.toLowerCase() === sc)) return false;
   }
+  return true;
+}
+
+function matchesStudentCoachAndMeta(s: Student, coaches: string[], schools: string[], statuses: string[]): boolean {
   if (coaches.length > 0) {
     const sc = s.coachName.trim().toLowerCase();
     const matchesCoach = coaches.some(c => {
@@ -823,6 +822,20 @@ function matchesStudentFilters(
     if (!statuses.some(item => item.trim().toLowerCase() === st)) return false;
   }
   return true;
+}
+
+function matchesStudentFilters(
+  s: Student,
+  q: string,
+  batches: string[],
+  categories: string[],
+  coaches: string[],
+  schools: string[],
+  statuses: string[],
+): boolean {
+  if (!matchesStudentSearch(s, q)) return false;
+  if (!matchesStudentBatchAndCat(s, batches, categories)) return false;
+  return matchesStudentCoachAndMeta(s, coaches, schools, statuses);
 }
 
 function sortStudents(list: Student[], sortKey: 'name' | 'batch' | 'status' | 'attendance'): Student[] {
@@ -861,6 +874,7 @@ export function Students() {
   const [deleting, setDeleting] = useState(false);
   const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
   const [coaches, setCoaches] = useState([...DEFAULT_COACHES]);
+  const [batchCoaches, setBatchCoaches] = useState<Record<string, string>>({});
   const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
@@ -877,7 +891,7 @@ export function Students() {
 
   const load = () => loadStudents({
     token, logout, setLoading, setError, setStudents, setFiltered,
-    setBatches, setLevels: () => {}, setCoaches, setTournamentRegistrations, setWeeklyResults,
+    setBatches, setLevels: () => {}, setCoaches, setBatchCoaches, setTournamentRegistrations, setWeeklyResults,
   });
 
   const availableSchools = useMemo(() => {
@@ -1015,7 +1029,7 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coaches} />
+          <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coaches} batchCoaches={batchCoaches} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
@@ -1121,11 +1135,13 @@ export function Students() {
         <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
           className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
         <button type="button" onClick={() => {
+          const initialBatch = batches[0] ?? 'Beginner';
+          const defaultCoach = batchCoaches[initialBatch] || coachName || coaches[0] || 'Coach Anand';
           setForm({
             ...EMPTY,
-            batch: batches[0] ?? 'Beginner',
-            level: batches[0] ?? 'Beginner',
-            coachName: coachName || coaches[0] || 'Coach Anand',
+            batch: initialBatch,
+            level: initialBatch,
+            coachName: defaultCoach,
           });
           setShowAdd(true);
         }}
@@ -1245,6 +1261,7 @@ export function Students() {
         setForm={setForm}
         batches={batches}
         coachOptions={coaches}
+        batchCoaches={batchCoaches}
         saving={saving}
         onClose={() => setShowAdd(false)}
         onAdd={handleAdd}
@@ -1325,6 +1342,7 @@ function StudentAddModal({
   setForm,
   batches,
   coachOptions,
+  batchCoaches,
   saving,
   onClose,
   onAdd,
@@ -1334,6 +1352,7 @@ function StudentAddModal({
   setForm: (form: FormData) => void;
   batches: string[];
   coachOptions: string[];
+  batchCoaches?: Record<string, string>;
   saving: boolean;
   onClose: () => void;
   onAdd: () => void;
@@ -1343,7 +1362,7 @@ function StudentAddModal({
   return (
     <Modal title="Add Student" onClose={onClose}>
       <div className="max-h-[65vh] overflow-y-auto pr-1">
-        <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coachOptions} />
+        <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coachOptions} batchCoaches={batchCoaches} />
       </div>
       {error && <p role="alert" className="text-xs text-red-600 mt-3">{error}</p>}
       <button type="button" onClick={onAdd} disabled={saving} className="primary-action mt-4 w-full">
@@ -1354,15 +1373,57 @@ function StudentAddModal({
   );
 }
 
-function StudentForm({ form, setForm, batches, coachOptions = [] }: Readonly<{
+function StudentForm({ form, setForm, batches, coachOptions = [], batchCoaches = {} }: Readonly<{
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
   coachOptions?: string[];
+  batchCoaches?: Record<string, string>;
 }>) {
+  const [sameAsPhone, setSameAsPhone] = useState(
+    Boolean(form.parent1Phone && form.parent1WhatsApp && form.parent1Phone === form.parent1WhatsApp)
+  );
+
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
-  const phone = (key: 'parent1Phone' | 'parent1WhatsApp' | 'parent2Phone' | 'emergencyPhone') =>
+  
+  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const val = digitsOnly(event.target.value).slice(0, 15);
+    if (sameAsPhone) {
+      setForm({ ...form, parent1Phone: val, parent1WhatsApp: val });
+    } else {
+      setForm({ ...form, parent1Phone: val });
+    }
+  };
+
+  const handleWhatsAppChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const val = digitsOnly(event.target.value).slice(0, 15);
+    if (sameAsPhone && val !== form.parent1Phone) {
+      setSameAsPhone(false);
+    }
+    setForm({ ...form, parent1WhatsApp: val });
+  };
+
+  const handleToggleSameAsPhone = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setSameAsPhone(checked);
+    if (checked) {
+      setForm({ ...form, parent1WhatsApp: form.parent1Phone });
+    }
+  };
+
+  const handleBatchChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newBatch = e.target.value;
+    const assignedCoach = batchCoaches[newBatch];
+    setForm({
+      ...form,
+      batch: newBatch,
+      level: newBatch,
+      coachName: assignedCoach || form.coachName,
+    });
+  };
+
+  const phone = (key: 'parent2Phone' | 'emergencyPhone') =>
     (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: digitsOnly(event.target.value).slice(0, 15) });
   
   // Compute auto values from DOB/age
@@ -1404,7 +1465,7 @@ function StudentForm({ form, setForm, batches, coachOptions = [] }: Readonly<{
       {/* Chess */}
       <Section title="Chess Profile">
         <Field label="Batch">
-          <select value={form.batch} onChange={e => setForm({ ...form, batch: e.target.value, level: e.target.value })} className="input">
+          <select value={form.batch} onChange={handleBatchChange} className="input">
             {!batches.includes(form.batch) && form.batch && <option>{form.batch}</option>}
             {batches.map(option => <option key={option}>{option}</option>)}
           </select>
@@ -1429,8 +1490,33 @@ function StudentForm({ form, setForm, batches, coachOptions = [] }: Readonly<{
       {/* Parent — required */}
       <Section title="Parent / Guardian">
         <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
-        <Field label="Phone *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={phone('parent1Phone')} className="input"/></Field>
-        <Field label="WhatsApp"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1WhatsApp} onChange={phone('parent1WhatsApp')} className="input"/></Field>
+        <Field label="Phone *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={handlePhoneChange} className="input"/></Field>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="field-label mb-0">WhatsApp</span>
+            <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={sameAsPhone}
+                onChange={handleToggleSameAsPhone}
+                className="rounded border-gray-300 text-gold focus:ring-gold dark:bg-slate-800 dark:border-gray-700"
+                aria-label="Same as phone number"
+              />
+              <span>Same as phone number</span>
+            </label>
+          </div>
+          <input
+            type="tel"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={15}
+            value={form.parent1WhatsApp}
+            onChange={handleWhatsAppChange}
+            className="input"
+            placeholder="WhatsApp number"
+            aria-label="WhatsApp"
+          />
+        </div>
         <Field label="Email"><input type="email" maxLength={254} value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
         <Field label="Parent 2 Name"><input maxLength={100} value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
         <Field label="Parent 2 Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent2Phone} onChange={phone('parent2Phone')} className="input"/></Field>
