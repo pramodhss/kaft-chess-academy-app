@@ -235,3 +235,36 @@ test('shows imported students immediately even if the post-import reconciliation
   await expect(page.getByText('Kiran Das', { exact: true })).toBeVisible();
   expect(sheets.workbook['Students & Parents'].some(row => row[0] === 'Kiran Das')).toBe(true);
 });
+
+test('pre-fills logged-in coach name, provides coach suggestions, and manages inactive archiving', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+
+  // Open add student modal and verify default coach is pre-filled
+  await page.getByRole('button', { name: 'Add student' }).click();
+  const coachInput = page.getByLabel('Assigned Coach');
+  await expect(coachInput).toHaveValue('Coach Meera');
+  await expect(coachInput).toHaveAttribute('list', 'coach-suggestions-list');
+
+  // Fill in required fields to add a student
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Full Name *').fill('Pranav Rao');
+  await dialog.getByLabel('Date of Birth *').fill('2015-09-09');
+  await dialog.getByLabel('Parent / Guardian Name *').fill('Sanjay Rao');
+  await dialog.getByLabel('Phone *', { exact: true }).fill('9876599999');
+  await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
+  await expect(page.getByText('Pranav Rao', { exact: true })).toBeVisible();
+
+  // Mark student as Inactive
+  await page.locator('.students-workspace').getByRole('button', { name: /Pranav Rao/ }).click();
+  await page.getByRole('button', { name: 'Edit student' }).click();
+  await page.getByLabel('Status').selectOption('Inactive');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+  await expect(page.getByText(/changes were updated successfully/i)).toBeVisible();
+
+  // Verify attendance and fees exclude inactive student
+  await openApp(page, '#/attendance');
+  await expect(page.getByText('Pranav Rao')).toHaveCount(0);
+
+  await openApp(page, '#/fees');
+  await expect(page.getByText('Pranav Rao')).toHaveCount(0);
+});

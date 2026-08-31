@@ -78,8 +78,22 @@ function localMonth(date = new Date()): string {
   return localIsoDate(date).slice(0, 7);
 }
 
-function newReceiptNumber(): string {
-  return `RCT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+function newReceiptNumber(existingFees: FeeEntry[] = [], feeMonth?: string): string {
+  const d = new Date();
+  let yearMonth = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`;
+  if (feeMonth) {
+    const clean = normalizeFeeMonth(feeMonth);
+    const match = /^(\d{4})-(\d{2})$/.exec(clean);
+    if (match) yearMonth = `${match[1]}${match[2]}`;
+  }
+  const prefix = `KAFT-${yearMonth}-`;
+  const matchingNumbers = existingFees
+    .map(f => f.receiptNo?.trim() ?? '')
+    .filter(r => r.startsWith(prefix))
+    .map(r => Number.parseInt(r.slice(prefix.length), 10))
+    .filter(n => Number.isFinite(n) && n > 0);
+  const nextNum = (matchingNumbers.length > 0 ? Math.max(...matchingNumbers) : 0) + 1;
+  return `${prefix}${String(nextNum).padStart(3, '0')}`;
 }
 
 function paymentStatusBadge(status: string): string {
@@ -230,7 +244,7 @@ async function appendRosterPayment(
     throw new SheetConflictError('A monthly fee was already added for this student on another device. The latest values were loaded \u2014 review and save again.', existingFee);
   }
 
-  const receipt = newReceiptNumber();
+  const receipt = newReceiptNumber(liveFees, selectedMonth);
   const rowIndex = await appendRows(token, SHEET_ID, `'${tab}'!A:N`, [[
     receipt, student, batch, selectedMonth, 'Monthly Tuition', due,
     amountPaid, balance, '', paymentDate, 'UPI', status, '', `Roster added by ${coachName}`,
@@ -306,7 +320,10 @@ export function Fees() {
       const uniqueStudents = new Map<string, string>();
       studentRows.slice(1).forEach(row => {
         const name = row[0]?.trim();
-        if (name && !uniqueStudents.has(normalized(name))) uniqueStudents.set(normalized(name), name);
+        const status = (row[8] ?? 'Active').trim().toLowerCase();
+        if (name && status !== 'inactive' && !uniqueStudents.has(normalized(name))) {
+          uniqueStudents.set(normalized(name), name);
+        }
       });
       const names = Array.from(uniqueStudents.values());
       setStudents(names);
@@ -340,11 +357,12 @@ export function Fees() {
     setSaving(true);
     try {
       const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`);
-      if (feeRowsToEntries(liveRows).some(fee => sameFeeIdentity(fee, form.studentName, form.feeMonth, form.feeType))) {
+      const liveFeeEntries = feeRowsToEntries(liveRows);
+      if (liveFeeEntries.some(fee => sameFeeIdentity(fee, form.studentName, form.feeMonth, form.feeType))) {
         toast.info('This fee already exists for the selected student, month, and fee type. Edit the existing entry instead.');
         return;
       }
-      const receipt = newReceiptNumber();
+      const receipt = newReceiptNumber(liveFeeEntries, form.feeMonth);
       const balance = calculateFeeBalance(amountDue, amountPaid, form.paymentStatus);
       const paymentDate = form.paymentDate || localIsoDate();
       const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[

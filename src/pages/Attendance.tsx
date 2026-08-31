@@ -133,11 +133,17 @@ export function Attendance() {
     setLoading(true); setError('');
     try {
       const dateCol = colLetter(attendanceDate.columnIndex);
-      // Read name (A), batch (B) and just the one date column
-      const [nameRows, dateRows] = await Promise.all([
+      // Read name (A), batch (B), the date column, and student statuses to exclude inactive students
+      const [nameRows, dateRows, studentRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.ATTENDANCE}'!A2:B`),
         readSheet(token, SHEET_ID, `'${TABS.ATTENDANCE}'!${dateCol}2:${dateCol}`),
+        readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A2:I`).catch(() => []),
       ]);
+      const inactiveNames = new Set(
+        studentRows
+          .filter(row => (row[8] ?? 'Active').trim().toLowerCase() === 'inactive')
+          .map(row => (row[0] ?? '').trim().toLowerCase())
+      );
       const parsed: AttRow[] = nameRows
         .map((r, i) => ({
           name:     r[0] ?? '',
@@ -145,7 +151,7 @@ export function Attendance() {
           present:  (dateRows[i]?.[0] ?? '').toString().toUpperCase() === 'TRUE',
           sheetRow: i + 2,
         }))
-        .filter(r => r.name.trim());
+        .filter(r => r.name.trim() && !inactiveNames.has(r.name.trim().toLowerCase()));
       setRows(parsed);
       setDirty(new Map());
     } catch (e: any) {

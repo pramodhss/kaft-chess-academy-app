@@ -860,6 +860,16 @@ export function Students() {
     return students.filter(s => s.coachName.trim().toLowerCase().includes(c) || c.includes(s.coachName.trim().toLowerCase())).length;
   }, [students, coachName]);
 
+  const coachOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (coachName?.trim()) set.add(coachName.trim());
+    students.forEach(s => {
+      if (s.coachName?.trim()) set.add(s.coachName.trim());
+    });
+    ['Coach Anand', 'Coach Meera', 'Coach Rajesh', 'Coach Ramesh'].forEach(c => set.add(c));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [students, coachName]);
+
   useEffect(() => { load(); }, [token]);
   useEffect(() => {
     const q = search.toLowerCase();
@@ -921,7 +931,7 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} />
+          <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coachOptions} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
@@ -1031,7 +1041,7 @@ export function Students() {
             ...EMPTY,
             batch: batches[0] ?? 'Beginner',
             level: batches[0] ?? 'Beginner',
-            coachName,
+            coachName: coachName || coachOptions[0] || 'Coach Anand',
           });
           setShowAdd(true);
         }}
@@ -1103,6 +1113,7 @@ export function Students() {
         form={form}
         setForm={setForm}
         batches={batches}
+        coachOptions={coachOptions}
         saving={saving}
         onClose={() => setShowAdd(false)}
         onAdd={handleAdd}
@@ -1172,6 +1183,7 @@ function StudentAddModal({
   form,
   setForm,
   batches,
+  coachOptions,
   saving,
   onClose,
   onAdd,
@@ -1180,6 +1192,7 @@ function StudentAddModal({
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
+  coachOptions: string[];
   saving: boolean;
   onClose: () => void;
   onAdd: () => void;
@@ -1189,7 +1202,7 @@ function StudentAddModal({
   return (
     <Modal title="Add Student" onClose={onClose}>
       <div className="max-h-[65vh] overflow-y-auto pr-1">
-        <StudentForm form={form} setForm={setForm} batches={batches} />
+        <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coachOptions} />
       </div>
       {error && <p role="alert" className="text-xs text-red-600 mt-3">{error}</p>}
       <button type="button" onClick={onAdd} disabled={saving} className="primary-action mt-4 w-full">
@@ -1200,10 +1213,11 @@ function StudentAddModal({
   );
 }
 
-function StudentForm({ form, setForm, batches }: Readonly<{
+function StudentForm({ form, setForm, batches, coachOptions = [] }: Readonly<{
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
+  coachOptions?: string[];
 }>) {
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
@@ -1254,7 +1268,22 @@ function StudentForm({ form, setForm, batches }: Readonly<{
             {batches.map(option => <option key={option}>{option}</option>)}
           </select>
         </Field>
-        <Field label="Assigned Coach"><input maxLength={100} value={form.coachName} onChange={f('coachName')} className="input" placeholder="Coach name"/></Field>
+        <Field label="Assigned Coach">
+          <input
+            maxLength={100}
+            list="coach-suggestions-list"
+            value={form.coachName}
+            onChange={f('coachName')}
+            className="input"
+            placeholder="e.g. Coach Anand"
+            aria-label="Assigned Coach"
+          />
+          <datalist id="coach-suggestions-list">
+            {coachOptions.map(coach => (
+              <option key={coach} value={coach} />
+            ))}
+          </datalist>
+        </Field>
         <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
       </Section>
 

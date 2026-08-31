@@ -117,3 +117,20 @@ test('marks all pending students as paid in one tap', async ({ page, sheets }) =
   expect(sheets.workbook['Fee Register'][1][6]).toBe('1500');
   expect(sheets.workbook['Fee Register'][1][7]).toBe('0');
 });
+
+test('generates formatted sequential receipts in KAFT-YYYYMM-XXX format for special fees', async ({ page, sheets }) => {
+  await openApp(page, '#/fees');
+  await page.getByRole('button', { name: 'Add special fee' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Student *').selectOption('Diya Shah');
+  await dialog.getByLabel('Fee Type').selectOption('Tournament');
+  await dialog.getByLabel('Amount Due *').fill('800');
+  await dialog.getByLabel('Amount Paid').fill('800');
+  await dialog.getByLabel('Payment Status').selectOption('Paid');
+  await dialog.getByRole('button', { name: 'Save Payment' }).click();
+  await expect(dialog).not.toBeVisible();
+
+  const savedFeeRow = sheets.workbook['Fee Register'].find(row => row[1] === 'Diya Shah' && row[4] === 'Tournament');
+  expect(savedFeeRow).toBeDefined();
+  expect(savedFeeRow?.[0]).toMatch(/^KAFT-\d{6}-\d{3}$/);
+});
