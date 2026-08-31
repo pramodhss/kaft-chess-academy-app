@@ -119,6 +119,19 @@ test('requires confirmation and removes a student only after Sheets succeeds', a
   await expect(page.getByText('Aarav Kumar was removed from Students.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Aarav Kumar/ })).toHaveCount(0);
   expect(sheets.workbook['Students & Parents'][1].every(value => value === '')).toBe(true);
+
+  // Re-add the same deleted student name with updated details
+  await page.getByRole('button', { name: 'Add student' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Full Name *').fill('Aarav Kumar');
+  await dialog.getByLabel('Date of Birth *').fill('2014-05-10');
+  await dialog.getByLabel('Parent / Guardian Name *').fill('Priya Kumar');
+  await dialog.getByLabel('Phone *', { exact: true }).fill('9876543210');
+  await dialog.getByLabel('Assigned Coach').fill('Coach Rajesh');
+  await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
+
+  await expect(page.getByText('Student added successfully. The new profile is ready.')).toBeVisible();
+  await expect(page.getByText('Aarav Kumar', { exact: true })).toBeVisible();
 });
 
 test('filters phone input and validates email and ratings', async ({ page, sheets }) => {

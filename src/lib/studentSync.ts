@@ -86,13 +86,6 @@ export async function syncStudentProfile(
   }
 }
 
-export async function isStudentNameReserved(token: string, sheetId: string, name: string) {
-  const linkedRows = await Promise.all(TARGETS.map(target => readSheetLive(token, sheetId, target.range)));
-  const normalized = normalizedName(name);
-  return TARGETS.some((target, index) => linkedRows[index].slice(1)
-    .some(row => normalizedName(row[target.nameIndex] ?? '') === normalized));
-}
-
 const RECONCILE_INTERVAL_MS = 30 * 60 * 1000;
 
 export async function reconcileAttendanceRoster(token: string, sheetId: string) {

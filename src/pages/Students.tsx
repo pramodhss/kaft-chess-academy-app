@@ -6,7 +6,7 @@ import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { readSheet, readSheetLive, appendRows, clearSheetRange, clearSheetReadCache, ensureSheetColumns, writeRange } from '../lib/sheets';
-import { isStudentNameReserved, syncStudentProfile } from '../lib/studentSync';
+import { syncStudentProfile } from '../lib/studentSync';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
 import { recordAudit } from '../lib/audit';
@@ -404,10 +404,6 @@ async function addStudent(deps: Readonly<{
       toast.error('A student with this name already exists. Use a distinct name before saving.');
       return;
     }
-    if (await isStudentNameReserved(token, SHEET_ID, form.name)) {
-      toast.error('This name belongs to retained student history. Use a distinct name before saving.');
-      return;
-    }
     await ensureStudentSchema(token);
     rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, [[
       form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
@@ -486,11 +482,6 @@ async function editStudent(deps: Readonly<{
     if (currentNames.slice(1).some((nameRow, index) => index + 2 !== row
       && nameRow[0]?.trim().toLocaleLowerCase() === mergedForm.name.trim().toLocaleLowerCase())) {
       toast.error('A student with this name already exists. Use a distinct name before saving.');
-      return;
-    }
-    if (currentStudent.name.trim().toLocaleLowerCase() !== mergedForm.name.trim().toLocaleLowerCase()
-      && await isStudentNameReserved(token, SHEET_ID, mergedForm.name)) {
-      toast.error('This name belongs to retained student history. Use a distinct name before saving.');
       return;
     }
     await ensureStudentSchema(token);
