@@ -119,6 +119,20 @@ test('marks all pending students as paid in one tap', async ({ page, sheets }) =
   expect(sheets.workbook['Fee Register'][1][7]).toBe('0');
 });
 
+test('clears the selected month without leaving a balance', async ({ page, sheets }) => {
+  await openApp(page, '#/fees');
+  await selectAugust(page);
+
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Open fee settings' }).click();
+  await page.getByRole('button', { name: 'Remove fees for this month' }).click();
+
+  await expect.poll(() => sheets.workbook['Fee Register'].slice(1)
+    .filter(row => row[3] === 'August 2026' && row[4] === 'Monthly Tuition')).toHaveLength(0);
+  await expect(page.getByText('₹ 0', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('₹ 0', { exact: true }).nth(1)).toBeVisible();
+});
+
 test('generates formatted sequential receipts in KAFT-YYYYMM-XXX format for special fees', async ({ page, sheets }) => {
   await openApp(page, '#/fees');
   await page.getByRole('button', { name: 'Add special fee' }).click();

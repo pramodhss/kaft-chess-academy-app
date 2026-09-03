@@ -55,19 +55,14 @@ function nearestDateIdx(dates: AttendanceDate[]): number {
 interface AttRow { name: string; batch: string; present: boolean; sheetRow: number }
 
 interface AttendanceFilterCriteria {
-  batchFilter: string;
   selectedBatches: string[];
   selectedStatuses: string[];
   selectedCoaches: string[];
   selectedCategories: string[];
 }
 
-function matchesAttendanceBatch(batch: string, batchFilter: string, selectedBatches: string[]): boolean {
+function matchesAttendanceBatch(batch: string, selectedBatches: string[]): boolean {
   const rb = batch.trim().toLowerCase();
-  if (batchFilter !== 'All') {
-    const fb = batchFilter.trim().toLowerCase();
-    if (rb !== fb && !rb.startsWith(fb)) return false;
-  }
   if (selectedBatches.length > 0) {
     return selectedBatches.some(b => {
       const target = b.trim().toLowerCase();
@@ -93,7 +88,7 @@ function matchesAttendanceRow(
   meta: { coach: string; category: string } | undefined,
 ): boolean {
   if (!r.name) return false;
-  if (!matchesAttendanceBatch(r.batch, criteria.batchFilter, criteria.selectedBatches)) return false;
+  if (!matchesAttendanceBatch(r.batch, criteria.selectedBatches)) return false;
   if (!matchesAttendanceStatus(isPresent, criteria.selectedStatuses)) return false;
 
   if (criteria.selectedCoaches.length > 0) {
@@ -126,6 +121,7 @@ export function Attendance() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<'name' | 'batch' | 'status'>('name');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [dirty, setDirty] = useState<Map<number, boolean>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -362,27 +358,27 @@ export function Attendance() {
   const presentCount = rows.filter(r => dirty.get(r.sheetRow) ?? r.present).length;
   const selectedDate = attendanceDates[selectedIdx];
   const date = selectedDate?.date ?? new Date();
-  const batches = ['All', ...configuredBatches];
-  const [batchFilter, setBatchFilter] = useState('All');
 
   const visibleRows = rows.filter(r => {
     const isPresent = dirty.get(r.sheetRow) ?? r.present;
     const meta = studentMetaMap.get(r.name.toLowerCase());
     return matchesAttendanceRow(r, isPresent, {
-      batchFilter,
       selectedBatches,
       selectedStatuses,
       selectedCoaches,
       selectedCategories,
     }, meta);
+  }).sort((left, right) => {
+    if (sortKey === 'batch') return left.batch.localeCompare(right.batch) || left.name.localeCompare(right.name);
+    if (sortKey === 'status') return Number(right.present) - Number(left.present) || left.name.localeCompare(right.name);
+    return left.name.localeCompare(right.name);
   });
 
   const allVisiblePresent = visibleRows.length > 0 && visibleRows.every(r => dirty.get(r.sheetRow) ?? r.present);
 
-  const activeFilterCount = (batchFilter !== 'All' ? 1 : 0) + selectedBatches.length + selectedStatuses.length + selectedCoaches.length + selectedCategories.length;
+  const activeFilterCount = selectedBatches.length + selectedStatuses.length + selectedCoaches.length + selectedCategories.length;
 
   const resetAllFilters = () => {
-    setBatchFilter('All');
     setSelectedBatches([]);
     setSelectedStatuses([]);
     setSelectedCoaches([]);
@@ -547,58 +543,65 @@ export function Attendance() {
         {!loading && (
           <>
             <AttendanceActiveChips
-              batchFilter={batchFilter}
               selectedBatches={selectedBatches}
               selectedStatuses={selectedStatuses}
               selectedCoaches={selectedCoaches}
               selectedCategories={selectedCategories}
               activeFilterCount={activeFilterCount}
-              onClearBatchFilter={() => setBatchFilter('All')}
               onRemoveBatch={b => setSelectedBatches(prev => prev.filter(v => v !== b))}
               onRemoveStatus={st => setSelectedStatuses(prev => prev.filter(v => v !== st))}
               onRemoveCoach={c => setSelectedCoaches(prev => prev.filter(v => v !== c))}
               onRemoveCategory={cat => setSelectedCategories(prev => prev.filter(v => v !== cat))}
               onResetAll={resetAllFilters}
             />
-            <div className="attendance-summary flex items-center gap-2 px-3 py-2 bg-white border-b border-gray-100">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-xs font-bold text-green-700">{presentCount} present</span>
-                {absentCount > 0 && <span className="text-xs font-semibold text-red-600">{absentCount} absent</span>}
+            <div className="attendance-summary px-3 py-2 bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-xs font-bold text-green-700 dark:text-green-400 whitespace-nowrap">{presentCount} present</span>
+                  <span className="text-xs font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">{absentCount} absent</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">({totalStudents})</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button type="button" onClick={toggleAllVisible}
+                    className="attendance-mark-all flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg whitespace-nowrap"
+                    aria-label={allVisiblePresent ? 'Clear attendance for all visible students' : 'Mark all visible students present'}
+                    title={allVisiblePresent ? 'Clear all visible' : 'Mark all visible present'}>
+                    <Check size={12} />{allVisiblePresent ? 'Clear All' : '✓ All'}
+                  </button>
+                  <button type="button" onClick={copyAttendanceReport}
+                    className="icon-button" aria-label="Copy attendance for WhatsApp" title="Copy attendance report">
+                    <Copy size={16} />
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowFilterModal(true)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                  activeFilterCount > 0
-                    ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800'
-                    : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
-                }`}
-                aria-label="Filter attendance"
-                title="Filter attendance list"
-              >
-                <Filter size={13} />
-                <span>Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-navy dark:bg-amber-500 text-white dark:text-slate-950 text-[9px] font-bold flex items-center justify-center">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-              <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none bg-white max-w-[110px]"
-                aria-label="Filter attendance by batch">
-                {batches.map(b => <option key={b}>{b}</option>)}
-              </select>
-              <button type="button" onClick={toggleAllVisible}
-                className="attendance-mark-all flex-shrink-0 flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg"
-                aria-label={allVisiblePresent ? 'Clear attendance for all visible students' : 'Mark all visible students present'}
-                title={allVisiblePresent ? 'Clear all visible' : 'Mark all visible present'}>
-                <Check size={12} />{allVisiblePresent ? 'Clear All' : '✓ All'}
-              </button>
-              <button type="button" onClick={copyAttendanceReport}
-                className="icon-button" aria-label="Copy attendance for WhatsApp" title="Copy attendance report">
-                <Copy size={16} />
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFilterModal(true)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+                    activeFilterCount > 0
+                      ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800'
+                      : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                  }`}
+                  aria-label="Filter attendance"
+                  title="Filter attendance list"
+                >
+                  <Filter size={13} />
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-navy dark:bg-amber-500 text-white dark:text-slate-950 text-[9px] font-bold flex items-center justify-center">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+                <select value={sortKey} onChange={e => setSortKey(e.target.value as typeof sortKey)}
+                  className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 focus:outline-none bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 font-medium"
+                  aria-label="Sort attendance">
+                  <option value="name">A → Z</option>
+                  <option value="batch">By Batch</option>
+                  <option value="status">Present First</option>
+                </select>
+              </div>
             </div>
           </>
         )}
@@ -627,14 +630,14 @@ export function Attendance() {
               const changed = dirty.has(r.sheetRow);
               return (
                 <button type="button" key={r.sheetRow} onClick={() => toggle(r.sheetRow, isPresent)}
-                  className={`attendance-row w-full flex items-center justify-between px-4 py-3.5 border-b border-gray-100 transition-colors
-                    ${isPresent ? 'attendance-present-row' : 'bg-white'} ${changed ? 'ring-1 ring-inset ring-chess-blue/20' : ''}`}>
+                  className={`attendance-row w-full flex items-center justify-between px-4 py-3.5 border-b border-gray-100 dark:border-slate-800 transition-colors
+                    ${isPresent ? 'attendance-present-row' : 'bg-white dark:bg-slate-900'} ${changed ? 'ring-1 ring-inset ring-chess-blue/20' : ''}`}>
                   <div className="text-left">
-                    <p className={`font-medium ${changed ? 'text-chess-blue' : 'text-gray-900'}`}>{r.name}</p>
-                    {r.batch && <p className="text-xs text-gray-400 mt-0.5">{r.batch}</p>}
+                    <p className={`font-medium ${changed ? 'text-chess-blue dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>{r.name}</p>
+                    {r.batch && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{r.batch}</p>}
                   </div>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base font-bold transition-all
-                    ${isPresent ? 'attendance-present-dot text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    ${isPresent ? 'attendance-present-dot text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500'}`}>
                     {isPresent ? '✓' : '○'}
                   </div>
                 </button>
@@ -774,26 +777,22 @@ function AttendanceDateBar({
 }
 
 function AttendanceActiveChips({
-  batchFilter,
   selectedBatches,
   selectedStatuses,
   selectedCoaches,
   selectedCategories,
   activeFilterCount,
-  onClearBatchFilter,
   onRemoveBatch,
   onRemoveStatus,
   onRemoveCoach,
   onRemoveCategory,
   onResetAll,
 }: Readonly<{
-  batchFilter: string;
   selectedBatches: string[];
   selectedStatuses: string[];
   selectedCoaches: string[];
   selectedCategories: string[];
   activeFilterCount: number;
-  onClearBatchFilter: () => void;
   onRemoveBatch: (b: string) => void;
   onRemoveStatus: (st: string) => void;
   onRemoveCoach: (c: string) => void;
@@ -803,12 +802,6 @@ function AttendanceActiveChips({
   if (activeFilterCount === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-3 py-1.5 bg-white border-b border-gray-100">
-      {batchFilter !== 'All' && (
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-          Batch: {batchFilter}
-          <button type="button" onClick={onClearBatchFilter} aria-label="Clear batch dropdown filter"><X size={12} /></button>
-        </span>
-      )}
       {selectedBatches.map(b => (
         <span key={b} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
           {b}

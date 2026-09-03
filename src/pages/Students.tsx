@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, Filter, MessageCircle, Pencil, Plus, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
+import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, Filter, Pencil, Plus, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -14,7 +14,6 @@ import { DEFAULT_BATCHES, DEFAULT_COACHES, loadStudentOptions } from '../lib/stu
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
 import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { matchOnlineTournamentResults, ordinal } from '../lib/onlineTournamentMatch';
-import { calculateStudentBadges } from '../lib/studentBadges';
 import { parseExcelOrCsvFile } from '../lib/excelStudentImport';
 import { FilterModal, type FilterSection } from '../components/FilterModal';
 import {
@@ -26,7 +25,6 @@ import {
 } from '../lib/validation';
 import { SHEET_ID, TABS } from '../config';
 import type { Student } from '../types';
-import { cleanIndianPhoneNumber, openWhatsApp } from '../lib/whatsapp';
 import { normalizeDateInput } from '../lib/dates';
 import { createHeaderMap, parseStudentRow } from '../lib/schemaMapper';
 
@@ -211,9 +209,6 @@ function formValidationError(form: FormData) {
   const usernameError = onlineUsernameValidationError(form.chessComUsername, 'Chess.com', 25)
     || onlineUsernameValidationError(form.lichessUsername, 'Lichess', 20);
   if (usernameError) return usernameError;
-  const joiningDateError = dateValidationError(form.joiningDate, 'Joining date');
-  if (joiningDateError) return joiningDateError;
-  if (form.joiningDate && form.joiningDate < form.dob) return 'Joining date cannot be before the student’s date of birth.';
   return '';
 }
 
@@ -256,6 +251,14 @@ function studentDetailsText(student: Student): string {
   add('Address', student.address);
   add('Notes', student.notes);
   return lines.join('\n');
+}
+
+function studentRosterText(students: Student[]): string {
+  return [
+    '*KAFT Chess Academy - Student Roster*',
+    '',
+    ...students.map(student => [student.name, student.batch, student.fideId || 'No FIDE ID'].join(' | ')),
+  ].join('\n');
 }
 
 async function confirmUniqueStudentAppend(
@@ -337,7 +340,7 @@ async function loadStudentRows(token: string) {
   try {
     return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
   } catch (readError) {
-    if (navigator.onLine) throw readError;
+    if (navigator.onLine) return readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
     return readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AC`);
   }
 }
@@ -359,11 +362,12 @@ async function loadStudents(deps: Readonly<{
   setStudents: StudentsSetter; setFiltered: StudentsSetter;
   setBatches: (value: string[]) => void; setLevels: (value: string[]) => void;
   setCoaches: (value: string[]) => void;
+  setSchools: (value: string[]) => void;
   setBatchCoaches: (value: Record<string, string>) => void;
   setTournamentRegistrations: (value: TournamentRegistration[]) => void;
   setWeeklyResults: (value: SavedWeeklyOnlineTournament[]) => void;
 }>) {
-  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setCoaches, setBatchCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
+  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setCoaches, setSchools, setBatchCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
   if (!token) return;
   setLoading(true); setError('');
   try {
@@ -383,6 +387,7 @@ async function loadStudents(deps: Readonly<{
     setBatches(options.batches.values.length > 0 ? options.batches.values : [...DEFAULT_BATCHES]);
     setLevels(options.levels.values);
     setCoaches(options.coaches.values.length > 0 ? options.coaches.values : [...DEFAULT_COACHES]);
+    setSchools(options.schools.values);
     setBatchCoaches(options.batchCoaches?.map ?? {});
     setTournamentRegistrations(registrationRows.slice(1).map((row, index) => rowToRegistration(row, index + 2)).filter(item => item.playing));
     setWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
@@ -626,24 +631,8 @@ function StudentChessTab({ selected, registrations, weeklyResults }: Readonly<{
   registrations: TournamentRegistration[];
   weeklyResults: SavedWeeklyOnlineTournament[];
 }>) {
-  const badges = calculateStudentBadges(selected, [], registrations, weeklyResults);
   return (
     <>
-      {badges.length > 0 && (
-        <InfoSection title="🏆 Earned Milestones & Badges" copyText={badges.map(b => `${b.icon} ${b.title}: ${b.description}`).join('\n')}>
-          <div className="grid grid-cols-2 gap-2">
-            {badges.map(b => (
-              <div key={b.id} className="surface-card p-2.5 flex items-center gap-2 border border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20">
-                <span className="text-2xl flex-shrink-0">{b.icon}</span>
-                <div className="min-w-0">
-                  <strong className="block text-xs font-bold text-gray-900 dark:text-white truncate">{b.title}</strong>
-                  <span className="block text-[10px] text-gray-500 truncate">{b.description}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </InfoSection>
-      )}
       <InfoSection title="Chess Profile" copyText={sectionCopyText(selected.name, 'Chess Profile', [
         ['Classical', selected.ratingClassical], ['Rapid', selected.ratingRapid], ['Blitz', selected.ratingBlitz],
         ['Coach', selected.coachName], ['Joined', selected.joiningDate],
@@ -734,47 +723,6 @@ function StudentInfoTab({ selected }: Readonly<{ selected: Student }>) {
       {selected.notes   && <InfoSection title="Notes" copyText={`*${selected.name} – Notes*\n${selected.notes}`}><p className="text-sm text-gray-700">{selected.notes}</p></InfoSection>}
     </>
   );
-}
-
-function sendWhatsAppProgressCard(
-  student: Student,
-  badges: Array<{ id: string; title: string; icon: string }>,
-  toast: ToastApi,
-) {
-  const badgeList = badges.map(b => `${b.icon} ${b.title}`).join(', ');
-  const badgeText = badges.length > 0 ? `\n🏆 *Milestones:* ${badgeList}` : '';
-  const ratings = [
-    student.ratingClassical ? `Classical: ${student.ratingClassical}` : '',
-    student.ratingRapid ? `Rapid: ${student.ratingRapid}` : '',
-    student.ratingBlitz ? `Blitz: ${student.ratingBlitz}` : '',
-  ].filter(Boolean).join(' · ');
-  const ratingsText = ratings ? `\n♟ *Ratings:* ${ratings}` : '';
-  const coachText = student.coachName ? ` | Coach: ${student.coachName}` : '';
-  const attendanceText = student.thisMonthAttended ? `\n📅 *This Month Attendance:* ${student.thisMonthAttended} classes attended` : '';
-  const cleanWa = cleanIndianPhoneNumber(student.parent1WhatsApp);
-
-  const message = [
-    `🏆 *KAFT Chess Academy – Student Monthly Progress*`,
-    `👤 *Student:* ${student.name}`,
-    `📚 *Batch:* ${student.batch}${coachText}`,
-    attendanceText,
-    ratingsText,
-    badgeText,
-    ``,
-    `🔗 *Parent Portal:* https://pramodhss.github.io/kaft-chess-academy-app/#/parent`,
-    ``,
-    `— KAFT Chess Academy`,
-  ].filter(Boolean).join('\n');
-
-  if (cleanWa.length === 10) {
-    openWhatsApp(cleanWa, message);
-    toast.success(`Opening WhatsApp for ${student.name}'s parent.`);
-  } else {
-    void navigator.clipboard.writeText(message).then(
-      () => toast.success(`Progress card for ${student.name} copied — ready to paste in WhatsApp.`),
-      () => toast.error('Could not copy to clipboard.'),
-    );
-  }
 }
 
 function matchesStudentSearch(s: Student, q: string): boolean {
@@ -874,6 +822,7 @@ export function Students() {
   const [deleting, setDeleting] = useState(false);
   const [batches, setBatches] = useState([...DEFAULT_BATCHES]);
   const [coaches, setCoaches] = useState([...DEFAULT_COACHES]);
+  const [schools, setSchools] = useState<string[]>([]);
   const [batchCoaches, setBatchCoaches] = useState<Record<string, string>>({});
   const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -891,12 +840,12 @@ export function Students() {
 
   const load = () => loadStudents({
     token, logout, setLoading, setError, setStudents, setFiltered,
-    setBatches, setLevels: () => {}, setCoaches, setBatchCoaches, setTournamentRegistrations, setWeeklyResults,
+    setBatches, setLevels: () => {}, setCoaches, setSchools, setBatchCoaches, setTournamentRegistrations, setWeeklyResults,
   });
 
   const availableSchools = useMemo(() => {
-    return Array.from(new Set(students.map(s => (s.school || s.grade).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-  }, [students]);
+    return Array.from(new Set([...schools, ...students.map(s => (s.school || s.grade).trim())].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [schools, students]);
 
   const activeFilterCount = selectedBatches.length + selectedCategories.length + selectedCoaches.length + selectedSchools.length + selectedStatuses.length;
 
@@ -1029,9 +978,9 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coaches} batchCoaches={batchCoaches} />
+          <StudentForm form={form} setForm={setForm} batches={batches} schoolOptions={schools} coachOptions={coaches} batchCoaches={batchCoaches} />
         </div>
-        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-4 z-50 shadow-lg">
+        <div className="fixed bottom-16 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
           <button type="button" onClick={handleEdit} disabled={saving}
             className="primary-action w-full">
@@ -1054,19 +1003,19 @@ export function Students() {
       }>
         <div className="flex flex-col min-h-full">
           {/* Identity bar — photo + chips + quick-contact */}
-          <div className="bg-white border-b border-gray-100 px-4 py-3 space-y-2.5">
+          <div className="bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800 px-4 py-3 space-y-2.5">
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1 flex flex-wrap gap-1.5 items-center">
                 <span className={selected.status==='Active'?'badge-green':'badge-gray'}>{selected.status}</span>
                 {category && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[category]??'badge-blue'}`}>{category}</span>}
-                <span className="text-xs text-gray-500">{selected.batch}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{selected.batch}</span>
               </div>
             </div>
             {(selected.parent1Phone || (selected.parent1WhatsApp && parentWa)) && (
               <div className="flex flex-wrap gap-2 items-center">
                 {selected.parent1Phone && (
                   <a href={`tel:${selected.parent1Phone}`}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700">
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300">
                     📞 Call parent
                   </a>
                 )}
@@ -1074,7 +1023,7 @@ export function Students() {
                 {selected.parent1Phone && <span className="text-xs text-gray-400">{selected.parent1Phone}</span>}
                 {selected.parent1WhatsApp && parentWa && (
                   <a href={`https://wa.me/91${parentWa}`} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 text-green-700">
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
                     💬 WhatsApp
                   </a>
                 )}
@@ -1083,7 +1032,7 @@ export function Students() {
           </div>
 
           {/* Tab bar */}
-          <div className="flex bg-white border-b border-gray-100">
+          <div className="flex bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
             {(['info','contact','chess'] as const).map(tab => (
               <button key={tab} type="button" onClick={() => setDetailTab(tab)}
                 className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors
@@ -1100,16 +1049,6 @@ export function Students() {
             {detailTab === 'info' && <StudentInfoTab selected={selected} />}
 
             {/* Actions */}
-            <button
-              type="button"
-              onClick={() => {
-                const badges = calculateStudentBadges(selected, [], tournamentRegistrations, weeklyResults);
-                sendWhatsAppProgressCard(selected, badges, toast);
-              }}
-              className="w-full bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors"
-            >
-              <MessageCircle size={16} /> Send WhatsApp Progress Card
-            </button>
             <button type="button" onClick={() => navigate(`/timeline?student=${encodeURIComponent(selected.name)}`)} className="w-full border border-chess-blue/30 text-chess-blue py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2">
               <FileChartColumn size={16} /> View Timeline &amp; Export PDF
             </button>
@@ -1200,6 +1139,7 @@ export function Students() {
 
         <div className="student-list-controls flex gap-2 items-center">
           <p className="text-xs text-gray-400 flex-1 truncate">{filtered.filter(student => (student.status || 'Active').toLowerCase() === 'active').length} active · {filtered.length} total</p>
+          <CopyButton text={studentRosterText(sortStudents(filtered, sortKey))} label="Copy student names, batches and FIDE IDs" />
           <button
             type="button"
             onClick={() => setShowFilterModal(true)}
@@ -1234,13 +1174,13 @@ export function Students() {
           const hasTournament = tournamentRegistrations.some(r => r.month === cm && normalizedName(r.studentName) === normalizedName(s.name));
           return (
             <button type="button" key={s.name+s.rowIndex} onClick={() => { setSelected(s); setDetailTab('info'); }}
-              className="student-list-row card-btn w-full bg-white rounded-xl px-3 py-3 shadow-sm border border-gray-100 text-left flex items-center gap-3 active:bg-gray-50">
+              className="student-list-row card-btn w-full bg-white dark:bg-slate-900 rounded-xl px-3 py-3 shadow-sm border border-gray-100 dark:border-slate-800 text-left flex items-center gap-3 active:bg-gray-50 dark:active:bg-slate-800/60">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <p className="font-semibold text-gray-900">{s.name}</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</p>
                   {hasTournament && <span title="Playing tournament this month" className="text-sm leading-none">🏆</span>}
                 </div>
-                <p className="mt-0.5 text-xs text-gray-500 flex flex-wrap gap-x-2 items-center">
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 flex flex-wrap gap-x-2 items-center">
                   <span>{s.batch}</span>
                   {cat && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
                   {s.coachName && <span className="text-purple-600 dark:text-purple-400 font-medium text-[10px]">{s.coachName}</span>}
@@ -1260,6 +1200,7 @@ export function Students() {
         form={form}
         setForm={setForm}
         batches={batches}
+        schoolOptions={schools}
         coachOptions={coaches}
         batchCoaches={batchCoaches}
         saving={saving}
@@ -1341,6 +1282,7 @@ function StudentAddModal({
   form,
   setForm,
   batches,
+  schoolOptions,
   coachOptions,
   batchCoaches,
   saving,
@@ -1351,6 +1293,7 @@ function StudentAddModal({
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
+  schoolOptions?: string[];
   coachOptions: string[];
   batchCoaches?: Record<string, string>;
   saving: boolean;
@@ -1362,7 +1305,7 @@ function StudentAddModal({
   return (
     <Modal title="Add Student" onClose={onClose}>
       <div className="max-h-[65vh] overflow-y-auto pr-1">
-        <StudentForm form={form} setForm={setForm} batches={batches} coachOptions={coachOptions} batchCoaches={batchCoaches} />
+        <StudentForm form={form} setForm={setForm} batches={batches} schoolOptions={schoolOptions} coachOptions={coachOptions} batchCoaches={batchCoaches} />
       </div>
       {error && <p role="alert" className="text-xs text-red-600 mt-3">{error}</p>}
       <button type="button" onClick={onAdd} disabled={saving} className="primary-action mt-4 w-full">
@@ -1373,10 +1316,11 @@ function StudentAddModal({
   );
 }
 
-function StudentForm({ form, setForm, batches, coachOptions = [], batchCoaches = {} }: Readonly<{
+function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions = [], batchCoaches = {} }: Readonly<{
   form: FormData;
   setForm: (form: FormData) => void;
   batches: string[];
+  schoolOptions?: string[];
   coachOptions?: string[];
   batchCoaches?: Record<string, string>;
 }>) {
@@ -1484,7 +1428,6 @@ function StudentForm({ form, setForm, batches, coachOptions = [], batchCoaches =
             ))}
           </select>
         </Field>
-        <Field label="Joining Date"><input type="date" value={form.joiningDate} onChange={f('joiningDate')} className="input"/></Field>
       </Section>
 
       {/* Parent — required */}
@@ -1542,16 +1485,19 @@ function StudentForm({ form, setForm, batches, coachOptions = [], batchCoaches =
 
       {/* Academic */}
       <Section title="School &amp; Academic">
-        <Field label="School Name"><input value={form.school} onChange={f('school')} className="input" placeholder="e.g. ABC Matriculation School"/></Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Standard / Class">
-            <select value={form.standard} onChange={f('standard')} className="input">
-              <option value="">Select…</option>
-              {STANDARDS.map(o=><option key={o}>{o}</option>)}
-            </select>
-          </Field>
-          <Field label="Grade / School"><input value={form.grade} onChange={f('grade')} className="input" placeholder="e.g. 7th, ABC School"/></Field>
-        </div>
+        <Field label="School Name">
+          <select value={form.school} onChange={f('school')} className="input">
+            <option value="">Select school…</option>
+            {!schoolOptions.includes(form.school) && form.school && <option value={form.school}>{form.school}</option>}
+            {schoolOptions.filter(Boolean).map(school => <option key={school} value={school}>{school}</option>)}
+          </select>
+        </Field>
+        <Field label="Standard / Class">
+          <select value={form.standard} onChange={f('standard')} className="input">
+            <option value="">Select…</option>
+            {STANDARDS.map(o=><option key={o}>{o}</option>)}
+          </select>
+        </Field>
       </Section>
 
       {/* Emergency + Address + Other */}
@@ -1582,9 +1528,9 @@ function Field({ label, children }: Readonly<{ label: string; children: React.Re
 
 function InfoSection({ title, copyText, children }: Readonly<{ title: string; copyText?: string; children: React.ReactNode }>) {
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+    <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-slate-800">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-bold text-navy uppercase tracking-wider">{title}</h3>
+        <h3 className="text-xs font-bold text-navy dark:text-gray-100 uppercase tracking-wider">{title}</h3>
         {copyText && <CopyButton text={copyText} label={`Copy ${title}`} />}
       </div>
       <div className="space-y-2">{children}</div>
@@ -1671,10 +1617,10 @@ function Modal({ title, onClose, children }: Readonly<{ title: string; onClose: 
   return (
     <div className="fixed inset-0 flex items-end z-50">
       <button type="button" onClick={onClose} aria-label="Close student form" className="absolute inset-0 w-full h-full bg-black/50" />
-      <dialog open aria-labelledby="student-modal-title" className="relative m-0 border-0 bg-white w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
+      <dialog open aria-labelledby="student-modal-title" className="relative m-0 border-0 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 w-full rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 id="student-modal-title" className="font-bold text-lg text-navy">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 text-2xl leading-none">×</button>
+          <h2 id="student-modal-title" className="font-bold text-lg text-navy dark:text-gray-100">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-2xl leading-none">×</button>
         </div>
         {children}
       </dialog>

@@ -6,6 +6,7 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { clearSheetReadCache, readSheet } from '../lib/sheets';
 import { parseSheetNumber } from '../lib/values';
+import { normalizeFeeMonth } from '../lib/feeRules';
 import { normalizeTimetableRows, upcomingClasses } from '../lib/timetable';
 import { useCoachName } from '../hooks/useCoachName';
 import { SHEET_ID, TABS } from '../config';
@@ -94,8 +95,11 @@ export function Dashboard() {
       ]);
       const data = studentRows.slice(1).filter(r => r[0]?.trim());
       const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       let collected = 0, outstanding = 0;
       feeRows.slice(1).forEach(r => {
+        if (normalizeFeeMonth(r[3] ?? '') !== currentMonth) return;
         collected   += nonNegativeSheetNumber(r[6] ?? '');
         outstanding += nonNegativeSheetNumber(r[7] ?? '');
       });
@@ -104,6 +108,7 @@ export function Dashboard() {
       setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
       const overdueMap = new Map<string, number>();
       feeRows.slice(1).forEach(r => {
+        if (normalizeFeeMonth(r[3] ?? '') !== currentMonth) return;
         const name = (r[1] ?? '').trim();
         const balance = nonNegativeSheetNumber(r[7] ?? '');
         if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);

@@ -36,9 +36,16 @@ export function RosterProvider({ children }: Readonly<{ children: React.ReactNod
     setLoading(true);
     setError('');
     try {
-      const readFn = force ? readSheetLive : readSheet;
+      const readRoster = async () => {
+        if (force) return readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
+        try {
+          return await readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
+        } catch {
+          return readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`);
+        }
+      };
       const [rows, options] = await Promise.all([
-        readFn(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
+        readRoster(),
         loadStudentOptions(token, SHEET_ID, force),
       ]);
 

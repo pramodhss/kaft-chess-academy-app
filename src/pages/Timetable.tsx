@@ -30,6 +30,10 @@ export function Timetable() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [coachFilter, setCoachFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [sort, setSort] = useState<'time' | 'batch'>('time');
 
   const load = async () => {
     if (!token) return;
@@ -125,6 +129,15 @@ export function Timetable() {
   };
 
   if (loading) return <Layout title="Weekly Classes"><PageSkeleton /></Layout>;
+  const visibleRows = rows.filter(row => {
+    const query = search.trim().toLowerCase();
+    return (!query || `${row.batch} ${row.level} ${row.coach} ${row.room}`.toLowerCase().includes(query))
+      && (coachFilter === 'All' || row.coach === coachFilter)
+      && (statusFilter === 'All' || row.status === statusFilter);
+  });
+  const sortedRows = [...visibleRows].sort((left, right) => sort === 'batch'
+    ? left.batch.localeCompare(right.batch) || left.start.localeCompare(right.start)
+    : left.start.localeCompare(right.start));
   const availableDays = WEEKDAYS.filter(day => rows.some(row => row.day.toLowerCase() === day.toLowerCase()));
   let saveLabel = 'Add class';
   if (editing) saveLabel = 'Save changes';
@@ -139,10 +152,17 @@ export function Timetable() {
   }>
     <div className="timetable-screen page-stack">
       {error && <div role="alert" className="error-state"><p>{error}</p><button type="button" onClick={load}>Retry</button></div>}
+      {!error && rows.length > 0 && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search classes…" aria-label="Search classes" className="input col-span-2 text-xs sm:col-span-1" />
+        <select value={coachFilter} onChange={event => setCoachFilter(event.target.value)} className="input text-xs" aria-label="Filter classes by coach"><option>All</option>{[...new Set(rows.map(row => row.coach).filter(Boolean))].map(coach => <option key={coach}>{coach}</option>)}</select>
+        <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="input text-xs" aria-label="Filter classes by status"><option>All</option><option>Active</option><option>Paused</option></select>
+        <select value={sort} onChange={event => setSort(event.target.value as typeof sort)} className="input text-xs" aria-label="Sort classes"><option value="time">Sort by time</option><option value="batch">Sort by batch</option></select>
+      </div>}
       {!error && rows.length === 0 && <div className="empty-state"><CalendarDays size={24} /><p>No weekly classes scheduled yet.</p><button type="button" onClick={openCreate} className="primary-action"><Plus size={16} />Add first class</button></div>}
+      {!error && visibleRows.length === 0 && rows.length > 0 && <div className="empty-state"><CalendarDays size={24} /><p>No classes match the selected filters.</p></div>}
       {!error && availableDays.map(day => <section key={day} className="space-y-2">
         <h2 className="section-label px-1">{day}</h2>
-        {rows.filter(row => row.day.toLowerCase() === day.toLowerCase()).sort((left, right) => left.start.localeCompare(right.start)).map(entry => <article key={entry.rowIndex} className="timetable-row surface-card p-3">
+        {sortedRows.filter(row => row.day.toLowerCase() === day.toLowerCase()).map(entry => <article key={entry.rowIndex} className="timetable-row surface-card p-3">
           <div className="flex items-start gap-3"><span className="icon-tile"><CalendarDays size={18} /></span><div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-gray-900">{entry.batch}</h3><p className="text-xs text-gray-500">{entry.level || 'Level not set'}</p></div><span className={entry.status === 'Active' ? 'badge-green' : 'badge-gray'}>{entry.status || 'Scheduled'}</span></div>
             <div className="mt-2 grid gap-1.5 text-xs text-gray-600 sm:grid-cols-2">

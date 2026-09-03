@@ -213,6 +213,7 @@ function defaultWorkbook(): Workbook {
       ['Key', 'Values JSON', 'Version', 'Base Version', 'Updated By', 'Updated At'],
       ['student_batches', '["Beginner A","Intermediate"]', 'v1', '', 'Coach Meera', '2026-08-01T00:00:00.000Z'],
       ['student_levels', '["Beginner","Intermediate"]', 'v1', '', 'Coach Meera', '2026-08-01T00:00:00.000Z'],
+      ['student_schools', '["Lakeview School"]', 'v1', '', 'Coach Meera', '2026-08-01T00:00:00.000Z'],
     ],
     'Upcoming Tournaments': [['Tournament Name', 'Type', 'Date', 'Reg Deadline', 'Venue', 'Entry Fee', 'Eligibility', 'Link', 'Notes', 'Status', 'Added By', 'Added On', 'Tournament ID']],
     'Tournament Registrations': [['Tournament ID', 'Tournament Name', 'Tournament Date', 'Month', 'Student Name', 'Playing', 'Fee Paid', 'Entry Fee', 'Updated By', 'Updated At']],

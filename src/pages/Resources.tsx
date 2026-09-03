@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, Eye, FileImage, FileText, Library, Link2, Plus, RefreshCw, Share2, Trash2, X } from 'lucide-react';
+import { Download, Eye, FileImage, FileText, Library, Link2, Plus, RefreshCw, Search, Share2, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -48,6 +48,8 @@ export function Resources() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'name'>('newest');
   const [syncing, setSyncing] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [shareByLink, setShareByLink] = useState(false);
@@ -140,7 +142,15 @@ export function Resources() {
     }
   };
   const displayTypes = [...new Set(items.map(i => i.type))];
-  const visible = filter ? items.filter(i => i.type === filter) : items;
+  const visible = [...items]
+    .filter(item => !filter || item.type === filter)
+    .filter(item => {
+      const query = search.trim().toLowerCase();
+      return !query || `${item.name} ${item.description} ${item.addedBy}`.toLowerCase().includes(query);
+    })
+    .sort((left, right) => sort === 'name'
+      ? left.name.localeCompare(right.name)
+      : (sort === 'newest' ? -1 : 1) * left.rowIndex.toString().localeCompare(right.rowIndex.toString(), undefined, { numeric: true }));
 
   if (loading) return <Layout title="Resources"><PageSkeleton /></Layout>;
 
@@ -154,6 +164,17 @@ export function Resources() {
     }>
       <div className="p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+          <label className="relative block min-w-0">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+            <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search resources…" aria-label="Search resources" className="input input-with-icon" />
+          </label>
+          <select value={sort} onChange={event => setSort(event.target.value as typeof sort)} className="input w-auto text-xs" aria-label="Sort resources">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="name">Name A-Z</option>
+          </select>
+        </div>
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {['', ...displayTypes].map(t => (
             <button type="button" key={t} onClick={() => setFilter(t)}

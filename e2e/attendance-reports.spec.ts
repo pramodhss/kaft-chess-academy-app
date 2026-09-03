@@ -20,6 +20,7 @@ test('saves attendance to the exact selected date cell', async ({ page, sheets }
 
 test('dashboard totals parse formatted fee values correctly', async ({ page, sheets }) => {
   void sheets;
+  await page.clock.install({ time: new Date('2026-08-15T12:00:00') });
   await openApp(page);
   await expect(page.getByText('₹3,000', { exact: true })).toBeVisible();
   await expect(page.getByText('₹500', { exact: true })).toBeVisible();
@@ -46,6 +47,7 @@ test('monthly report loads the on-demand PDF generator and downloads a report', 
 });
 
 test('dashboard and progress clamp invalid Sheet metrics', async ({ page, sheets }) => {
+  await page.clock.install({ time: new Date('2026-08-15T12:00:00') });
   sheets.workbook['Fee Register'][1][6] = '-100';
   sheets.workbook['Fee Register'][1][7] = '-500';
   sheets.workbook['Monthly Attendance'][1][4] = '175%';

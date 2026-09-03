@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Settings2, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -282,7 +282,6 @@ function paymentReportAmount(paid: number, due: number): string {
 
 interface FeeFilterCriteria {
   search: string;
-  batchFilter: string;
   selectedBatches: string[];
   selectedCoaches: string[];
   selectedStatuses: string[];
@@ -295,13 +294,9 @@ function matchesFeeStudent(
   status: string,
   criteria: FeeFilterCriteria,
 ): boolean {
-  const { search, batchFilter, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap } = criteria;
+  const { search, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap } = criteria;
   if (search && !student.toLowerCase().includes(search.toLowerCase())) return false;
   const studentBatch = (batchMap.get(student) ?? '').trim().toLowerCase();
-  if (batchFilter !== 'All') {
-    const filterBatch = batchFilter.trim().toLowerCase();
-    if (studentBatch !== filterBatch && !studentBatch.startsWith(filterBatch)) return false;
-  }
   if (selectedBatches.length > 0) {
     const matches = selectedBatches.some(b => {
       const target = b.trim().toLowerCase();
@@ -335,7 +330,9 @@ export function Fees() {
   const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<'name' | 'batch' | 'status'>('name');
   const [showFilterModal, setShowFilterModal] = useState(false);
+    const [showFeeSettings, setShowFeeSettings] = useState(false);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
   const [showAdd, setShowAdd]     = useState(false);
@@ -348,8 +345,9 @@ export function Fees() {
   const [drafts, setDrafts] = useState<Map<string, FeeDraft>>(new Map());
   const [rosterSaving, setRosterSaving] = useState('');
   const [rosterSavingAll, setRosterSavingAll] = useState(false);
-  const [batchFilter, setBatchFilter] = useState('All');
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+    const [bulkAmountDue, setBulkAmountDue] = useState('');
+    const [bulkApplying, setBulkApplying] = useState(false);
   const [upiPaymentDetails, setUpiPaymentDetails] = useState<UpiPaymentDetails | null>(null);
   const [syncing, setSyncing] = useState(false);
   const { upiEnabled, upiVpa } = useUpiSettings();
@@ -575,14 +573,9 @@ export function Fees() {
     };
   }, [fees, selectedMonth, drafts, students]);
 
-  const batchOptions = useMemo(() => {
-    return ['All', ...configuredBatches];
-  }, [configuredBatches]);
-
-  const activeFilterCount = (batchFilter !== 'All' ? 1 : 0) + selectedBatches.length + selectedStatuses.length + selectedCoaches.length;
+  const activeFilterCount = selectedBatches.length + selectedStatuses.length + selectedCoaches.length;
 
   const resetAllFilters = () => {
-    setBatchFilter('All');
     setSelectedBatches([]);
     setSelectedStatuses([]);
     setSelectedCoaches([]);
@@ -663,15 +656,22 @@ export function Fees() {
 
       return matchesFeeStudent(s, status, {
         search: feeSearch,
-        batchFilter,
         selectedBatches,
         selectedCoaches,
         selectedStatuses,
         batchMap,
         coachMap,
       });
+    }).sort((left, right) => {
+      if (sortKey === 'batch') return (batchMap.get(left) ?? '').localeCompare(batchMap.get(right) ?? '') || left.localeCompare(right);
+      if (sortKey === 'status') {
+        const leftStatus = monthlyByStudent.get(normalized(left))?.paymentStatus ?? 'Pending';
+        const rightStatus = monthlyByStudent.get(normalized(right))?.paymentStatus ?? 'Pending';
+        return leftStatus.localeCompare(rightStatus) || left.localeCompare(right);
+      }
+      return left.localeCompare(right);
     }),
-    [students, feeSearch, batchFilter, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap, monthlyByStudent, drafts]
+    [students, feeSearch, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap, monthlyByStudent, drafts, sortKey]
   );
 
   const updateDraft = (student: string, next: FeeDraft) => {
@@ -833,6 +833,87 @@ export function Fees() {
     );
   };
 
+  const clearCollectedFees = async () => {
+    if (!token) return;
+    const visibleNames = new Set(visibleStudents.map(normalized));
+    const entries = fees.filter(fee => fee.feeType === 'Monthly Tuition'
+      && normalizeFeeMonth(fee.feeMonth) === selectedMonth
+      && visibleNames.has(normalized(fee.studentName)));
+    if (entries.length === 0) {
+      toast.info(`No fee records found for ${monthDisplay}.`);
+      return;
+    }
+    if (!window.confirm(`Clear all monthly fee records for ${monthDisplay}? This removes ${entries.length} student fee record${entries.length === 1 ? '' : 's'} and clears the collected and pending totals.`)) return;
+    setRosterSavingAll(true);
+    try {
+      const tab = TABS.FEES;
+      await Promise.all(entries.map(fee => clearSheetRange(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`)));
+      const clearedRows = new Set(entries.map(entry => entry.rowIndex));
+      setFees(previous => previous.filter(fee => !clearedRows.has(fee.rowIndex)));
+      clearSheetReadCache(SHEET_ID);
+      setDrafts(current => {
+        const next = new Map(current);
+        entries.forEach(entry => next.delete(entry.studentName));
+        return next;
+      });
+      void recordAudit(token, 'DELETE', 'Fees', `Cleared monthly fee records for ${monthDisplay}`, `${entries.length} records`).catch(() => undefined);
+      toast.success(`Cleared ${entries.length} monthly fee record${entries.length === 1 ? '' : 's'} for ${monthDisplay}.`);
+    } catch (error: any) {
+      toast.error(`Could not clear collected fees: ${error.message}`);
+    } finally {
+      setRosterSavingAll(false);
+    }
+  };
+
+  const applyBulkAmountDue = async () => {
+    if (!token) return;
+    const amountDue = parseSheetNumber(bulkAmountDue);
+    if (amountDue <= 0) { toast.error('Enter an amount due greater than zero.'); return; }
+    if (visibleStudents.length === 0) { toast.info('No students match the current filters.'); return; }
+    if (!window.confirm(`Set ${formatCurrency(amountDue)} due for ${visibleStudents.length} student${visibleStudents.length === 1 ? '' : 's'} in ${monthDisplay}? Existing payments will be preserved.`)) return;
+    setBulkApplying(true);
+    try {
+      const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`);
+      const liveFees = feeRowsToEntries(liveRows);
+      const liveMonthly = new Map<string, FeeEntry>();
+      liveFees.filter(fee => fee.feeType === 'Monthly Tuition' && normalizeFeeMonth(fee.feeMonth) === selectedMonth)
+        .sort((left, right) => left.rowIndex - right.rowIndex)
+        .forEach(fee => liveMonthly.set(normalized(fee.studentName), fee));
+      const updates: { range: string; value: string | number }[] = [];
+      const missingStudents: string[] = [];
+      visibleStudents.forEach(student => {
+        const existing = liveMonthly.get(normalized(student));
+        if (!existing) { missingStudents.push(student); return; }
+        const paid = parseSheetNumber(existing.amountPaid);
+        const status = paid >= amountDue ? 'Paid' : paid > 0 ? 'Partial' : 'Pending';
+        updates.push(
+          { range: `'${TABS.FEES}'!F${existing.rowIndex}`, value: amountDue },
+          { range: `'${TABS.FEES}'!H${existing.rowIndex}`, value: calculateFeeBalance(amountDue, paid, status) },
+          { range: `'${TABS.FEES}'!L${existing.rowIndex}`, value: status },
+        );
+      });
+      if (updates.length > 0) await batchWrite(token, SHEET_ID, updates);
+      let nextFees = [...liveFees];
+      for (const student of missingStudents) {
+        const receipt = newReceiptNumber(nextFees, selectedMonth);
+        const rowIndex = await appendRows(token, SHEET_ID, `'${TABS.FEES}'!A:N`, [[
+          receipt, student, batchMap.get(student) ?? '', selectedMonth, 'Monthly Tuition', amountDue, 0,
+          amountDue, '', '', 'UPI', 'Pending', '', '',
+        ]]);
+        nextFees = [...nextFees, { rowIndex, receiptNo: receipt, studentName: student, batch: batchMap.get(student) ?? '', feeMonth: selectedMonth,
+          feeType: 'Monthly Tuition', amountDue: String(amountDue), amountPaid: '0', balance: String(amountDue), dueDate: '', paymentDate: '',
+          paymentMethod: 'UPI', paymentStatus: 'Pending', reference: '', notes: '' }];
+      }
+      clearSheetReadCache(SHEET_ID);
+      setBulkAmountDue('');
+      setShowFeeSettings(false);
+      await sync();
+      toast.success(`Updated fees for ${visibleStudents.length} student${visibleStudents.length === 1 ? '' : 's'} in ${monthDisplay}.`);
+    } catch (error: any) {
+      toast.error(`Could not update monthly fees: ${error.message}`);
+    } finally { setBulkApplying(false); }
+  };
+
   const notifyPending = () => {
     const pending = visibleStudents.filter(s => {
       const st = monthlyByStudent.get(normalized(s))?.paymentStatus;
@@ -868,6 +949,9 @@ export function Fees() {
       <>
         <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
           className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
+        <button type="button" onClick={() => setShowFeeSettings(true)} aria-label="Open fee settings" title="Fee settings"
+          className="icon-button"><Settings2 size={16} aria-hidden="true" /></button>
+
         <button type="button" onClick={()=>{setForm({...EMPTY_F, feeMonth:selectedMonth});setShowAdd(true);}}
           aria-label="Add special fee" title="Add admission, tournament, van, or other fee"
           className="icon-button-add"><Plus size={18} /></button>
@@ -886,14 +970,14 @@ export function Fees() {
         </div>
 
         {/* Summary + copy report */}
-        <div className="fee-summary bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center">
-          <div className="flex-1 pr-3 border-r border-gray-200">
-            <p className="text-[11px] font-medium text-gray-500">Collected</p>
-            <p className="text-lg font-bold text-green-700">{formatCurrency(totalCollected)}</p>
+        <div className="fee-summary bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg px-3 py-2.5 flex items-center">
+          <div className="flex-1 pr-3 border-r border-gray-200 dark:border-slate-800">
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Collected</p>
+            <p className="text-lg font-bold text-green-700 dark:text-green-400">{formatCurrency(totalCollected)}</p>
           </div>
           <div className="flex-1 px-3">
-            <p className="text-[11px] font-medium text-gray-500">Balance</p>
-            <p className="text-lg font-bold text-amber-700">{formatCurrency(totalOutstanding)}</p>
+            <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Balance</p>
+            <p className="text-lg font-bold text-amber-700 dark:text-amber-400">{formatCurrency(totalOutstanding)}</p>
           </div>
           <button type="button" onClick={copyFeeReport}
             className="icon-button ml-2" aria-label="Copy fee report for WhatsApp" title="Copy monthly fee summary">
@@ -912,12 +996,6 @@ export function Fees() {
         {/* Active Filter Chips */}
         {activeFilterCount > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {batchFilter !== 'All' && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                Batch: {batchFilter}
-                <button type="button" onClick={() => setBatchFilter('All')} aria-label="Clear batch dropdown filter"><X size={12} /></button>
-              </span>
-            )}
             {selectedBatches.map(b => (
               <span key={b} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                 {b}
@@ -946,12 +1024,12 @@ export function Fees() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="fee-controls-toolbar pt-1">
           <div>
-            <h2 className="font-bold text-navy">Student fees</h2>
-            <p className="text-xs text-gray-500">{visibleStudents.length} students {batchFilter !== 'All' ? `(${batchFilter})` : ''}</p>
+            <h2 className="font-bold text-navy dark:text-gray-100">Student fees</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{visibleStudents.length} students</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="fee-controls-actions">
             <button
               type="button"
               onClick={() => setShowFilterModal(true)}
@@ -971,25 +1049,18 @@ export function Fees() {
                 </span>
               )}
             </button>
-            {batchOptions.length > 1 && (
-              <select
-                value={batchFilter}
-                onChange={e => setBatchFilter(e.target.value)}
-                className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none bg-white dark:bg-slate-800 font-medium"
-                aria-label="Filter by batch"
-              >
-                {batchOptions.map(b => (
-                  <option key={b} value={b}>
-                    {b === 'All' ? 'All Batches' : b}
-                  </option>
-                ))}
-              </select>
-            )}
+            <select value={sortKey} onChange={e => setSortKey(e.target.value as typeof sortKey)}
+              className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 font-medium"
+              aria-label="Sort fees">
+              <option value="name">A → Z</option>
+              <option value="batch">By Batch</option>
+              <option value="status">By Status</option>
+            </select>
             <button
               type="button"
               onClick={markAllPendingAsPaid}
               disabled={rosterSavingAll || !!rosterSaving || visibleStudents.length === 0}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/60 border border-green-200 dark:border-green-800 disabled:opacity-50 whitespace-nowrap flex-shrink-0"
               title="Mark all pending students in this view as Paid"
               aria-label="Mark all pending students as paid"
             >
@@ -1015,8 +1086,8 @@ export function Fees() {
           const balance = payment.balance;
           const expanded = expandedStudent === student;
           return (
-            <div key={student} className={`fee-row bg-white border rounded-lg overflow-hidden ${draft.paid?'border-green-300':'border-gray-200'}`}>
-              <div className={`flex items-center gap-2 p-3 ${draft.paid?'bg-green-50/60':''}`}>
+            <div key={student} className={`fee-row bg-white dark:bg-slate-900 border rounded-lg overflow-hidden ${draft.paid ? 'border-green-300 dark:border-green-800' : 'border-gray-200 dark:border-slate-800'}`}>
+              <div className={`flex items-center gap-2 p-3 ${draft.paid ? 'bg-green-50/60 dark:bg-green-950/20' : ''}`}>
                 <button type="button" onClick={()=>setExpandedStudent(expanded ? null : student)}
                   aria-expanded={expanded} aria-controls={`fee-details-${student}`}
                   className="min-w-0 flex-1 text-left flex items-center gap-2">
@@ -1175,6 +1246,33 @@ export function Fees() {
       {editTarget && <FeeModal title="Edit Payment" onClose={() => setEditTarget(null)} form={form} setForm={setForm}
         students={students} onSave={handleEdit} saving={saving} coachName={coachName} />}
       {upiPaymentDetails && <UpiPayModal details={upiPaymentDetails} onClose={() => setUpiPaymentDetails(null)} />}
+      {showFeeSettings && (
+        <div className="modal-backdrop items-end justify-center sm:items-center">
+          <button type="button" onClick={() => setShowFeeSettings(false)} aria-label="Close fee settings" className="absolute inset-0 h-full w-full" />
+          <dialog open aria-labelledby="fee-settings-title" className="modal-panel relative m-0 w-full max-w-md overflow-hidden p-0">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div className="flex items-center gap-2"><Settings2 size={17} className="text-amber-600" /><h2 id="fee-settings-title" className="text-base font-semibold text-navy">Fee settings</h2></div>
+              <button type="button" onClick={() => setShowFeeSettings(false)} className="icon-button" aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="rounded-xl border border-gray-200 p-3">
+                <p className="text-sm font-semibold text-gray-900">Set amount due</p>
+                <p className="mt-1 text-xs text-gray-500">Applies to {visibleStudents.length} students currently shown after filtering and sorting. Existing payments stay unchanged.</p>
+                <div className="mt-3 flex gap-2">
+                  <label className="sr-only" htmlFor="bulk-amount-due">Amount due for filtered students</label>
+                  <input id="bulk-amount-due" type="number" min="1" step="1" value={bulkAmountDue} onChange={event => setBulkAmountDue(event.target.value)} placeholder="Amount due" className="input flex-1" />
+                  <button type="button" onClick={() => void applyBulkAmountDue()} disabled={bulkApplying || visibleStudents.length === 0} className="primary-action whitespace-nowrap text-xs">{bulkApplying ? 'Saving…' : 'Apply'}</button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50/60 p-3 dark:border-red-900 dark:bg-red-950/30">
+                <p className="text-sm font-semibold text-red-700 dark:text-red-300">Remove monthly fees</p>
+                <p className="mt-1 text-xs text-red-600 dark:text-red-300">Removes this month’s fee records for the currently filtered students and resets their totals.</p>
+                <button type="button" onClick={() => void clearCollectedFees()} disabled={rosterSavingAll} className="danger-action mt-3">{rosterSavingAll ? 'Removing…' : 'Remove fees for this month'}</button>
+              </div>
+            </div>
+          </dialog>
+        </div>
+      )}
       {showFilterModal && (
         <FilterModal
           title="Filter Fees"

@@ -20,7 +20,6 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   await dialog.getByLabel('Parent 2 Name').fill('Vikram Rao');
   await dialog.getByLabel('Parent 2 Phone').fill('9966554433');
   await dialog.getByLabel('Assigned Coach').selectOption('Coach Meera');
-  await dialog.getByLabel('Joining Date').fill('2026-01-10');
   await dialog.getByLabel('Classical Rating').fill('1250');
   await dialog.getByLabel('Rapid Rating').fill('1200');
   await dialog.getByLabel('Blitz Rating').fill('1150');
@@ -29,9 +28,8 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   await dialog.getByLabel('AICF ID').fill('AICF200');
   await dialog.getByLabel('Chess.com Username').fill('ishaan_rook');
   await dialog.getByLabel('Lichess Username').fill('ishaan-knight');
-  await dialog.getByLabel('School Name').fill('Lakeview School');
+  await dialog.getByLabel('School Name').selectOption({ label: 'Lakeview School' });
   await dialog.getByLabel('Standard / Class').selectOption('5th');
-  await dialog.getByLabel('Grade / School').fill('5th, Lakeview School');
   await dialog.getByLabel('Emergency Contact Name').fill('Rohan Rao');
   await dialog.getByLabel('Emergency Phone').fill('9955443322');
   await dialog.getByLabel('Home Address').fill('12 Lake Road, Chennai');
@@ -45,8 +43,8 @@ test('adds a validated student and synchronizes the attendance roster', async ({
 
   const student = sheetRows(sheets.workbook, 'Students & Parents').find(row => row[0] === 'Ishaan Rao');
   expect(student?.[1]).toBe('2015-04-12');
-  expect(student?.[4]).toBe('5th, Lakeview School');
-  expect(student?.[7]).toBe('2026-01-10');
+  expect(student?.[4]).toBe('');
+  expect(student?.[7]).toBe('');
   expect(student?.[9]).toBe('Anita Rao');
   expect(student?.[10]).toBe('9988776655');
   expect(student?.[11]).toBe('9977665544');
@@ -367,4 +365,30 @@ test('assigns batch coach in settings, updates existing students, and pre-fills 
   // Verify Beginner batch pre-fills Coach Rajesh
   const coachSelect = page.getByLabel('Assigned Coach');
   await expect(coachSelect).toHaveValue('Coach Rajesh');
+});
+
+test('bulk assigns schools to multiple students in admin settings and persists to sheets', async ({ page, sheets }) => {
+  await openApp(page, '#/admin-settings');
+
+  await expect(page.getByRole('heading', { name: /Assign School to Students/i })).toBeVisible();
+
+  // Select target school
+  const targetSchoolSelect = page.getByLabel('Select target school');
+  await targetSchoolSelect.selectOption('Lakeview School');
+
+  // Select all visible students
+  await page.getByRole('button', { name: /Select all visible/i }).click();
+
+  // Click the assign button
+  const assignButton = page.getByRole('button', { name: /Assign "Lakeview School" to/i });
+  await expect(assignButton).toBeVisible();
+  await assignButton.click();
+
+  await expect(page.getByText(/Assigned "Lakeview School" to 2 student\(s\) successfully/i)).toBeVisible();
+
+  // Verify both students in mock Sheets were updated with the school
+  const aaravRow = sheets.workbook['Students & Parents'].find(r => r[0] === 'Aarav Kumar');
+  const diyaRow = sheets.workbook['Students & Parents'].find(r => r[0] === 'Diya Shah');
+  expect(aaravRow?.[21]).toBe('Lakeview School');
+  expect(diyaRow?.[21]).toBe('Lakeview School');
 });

@@ -199,6 +199,9 @@ export function Tournaments() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'results' | 'leaderboard'>(() => searchParams.get('tab') === 'leaderboard' ? 'leaderboard' : 'results');
   const [search, setSearch] = useState('');
+  const [resultSource, setResultSource] = useState<'all' | 'offline' | 'online'>('all');
+  const [resultSort, setResultSort] = useState<'newest' | 'oldest' | 'student'>('newest');
+  const [leaderboardSort, setLeaderboardSort] = useState<'points' | 'wins' | 'rating' | 'student'>('points');
   const [entries, setEntries] = useState<TournamentEntry[]>([]);
   const [students, setStudents] = useState<string[]>([]);
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayerDirectory[]>([]);
@@ -296,7 +299,15 @@ export function Tournaments() {
     finally { setDeleting(null); }
   };
 
-  const leaderboard = useMemo(() => computeLeaderboard(entries), [entries]);
+  const leaderboard = useMemo(() => {
+    const sorted = computeLeaderboard(entries);
+    return sorted.sort((left, right) => {
+      if (leaderboardSort === 'student') return left.name.localeCompare(right.name);
+      if (leaderboardSort === 'wins') return right.wins - left.wins || left.name.localeCompare(right.name);
+      if (leaderboardSort === 'rating') return right.ratingGain - left.ratingGain || left.name.localeCompare(right.name);
+      return right.total - left.total || right.gold - left.gold || left.name.localeCompare(right.name);
+    });
+  }, [entries, leaderboardSort]);
 
   if (loading) return <Layout title="Tournaments" showBack><PageSkeleton /></Layout>;
 
@@ -304,12 +315,17 @@ export function Tournaments() {
   const manualOnline = entries.filter(e => e.type === 'Online').map(entry => manualResultItem(entry, deleting, removeEntry));
   const autoOffline = registrations.map(autoOfflineItem);
   const autoOnline = matchOnlineTournamentResults(weeklyResults, onlinePlayers).map(autoOnlineItem);
-  const offlineItems = [...manualOffline, ...autoOffline].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
-  const onlineItems = [...manualOnline, ...autoOnline].sort((left, right) => right.sortKey.localeCompare(left.sortKey));
+  const sortResults = (items: ResultItem[]) => [...items].sort((left, right) => {
+    if (resultSort === 'student') return (left.entry?.studentName ?? left.copyText).localeCompare(right.entry?.studentName ?? right.copyText);
+    const direction = resultSort === 'newest' ? -1 : 1;
+    return direction * left.sortKey.localeCompare(right.sortKey);
+  });
+  const offlineItems = sortResults([...manualOffline, ...autoOffline]);
+  const onlineItems = sortResults([...manualOnline, ...autoOnline]);
 
   const q = search.trim().toLowerCase();
-  const visibleOffline = q ? offlineItems.filter(item => item.copyText.toLowerCase().includes(q)) : offlineItems;
-  const visibleOnline = q ? onlineItems.filter(item => item.copyText.toLowerCase().includes(q)) : onlineItems;
+  const visibleOffline = resultSource === 'online' ? [] : (q ? offlineItems.filter(item => item.copyText.toLowerCase().includes(q)) : offlineItems);
+  const visibleOnline = resultSource === 'offline' ? [] : (q ? onlineItems.filter(item => item.copyText.toLowerCase().includes(q)) : onlineItems);
 
   const handleTabChange = (tab: 'results' | 'leaderboard') => {
     setActiveTab(tab);
@@ -350,6 +366,18 @@ export function Tournaments() {
                 placeholder="Search tournament results…" aria-label="Search tournament results"
                 className="input input-with-icon" />
             </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <select value={resultSource} onChange={e => setResultSource(e.target.value as typeof resultSource)} className="input text-xs" aria-label="Filter tournament result source">
+                <option value="all">All result sources</option>
+                <option value="offline">Offline results</option>
+                <option value="online">Online results</option>
+              </select>
+              <select value={resultSort} onChange={e => setResultSort(e.target.value as typeof resultSort)} className="input text-xs" aria-label="Sort tournament results">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="student">Student A-Z</option>
+              </select>
+            </div>
 
             {visibleOffline.length === 0 && visibleOnline.length === 0 && (
               <div className="text-center py-12 text-gray-400">
@@ -381,6 +409,12 @@ export function Tournaments() {
               </div>
               {leaderboard.length > 0 && <CopyButton text={leaderboardCopyText(leaderboard)} label="Copy Leaderboard for WhatsApp" />}
             </div>
+            <select value={leaderboardSort} onChange={e => setLeaderboardSort(e.target.value as typeof leaderboardSort)} className="input text-xs" aria-label="Sort tournament leaderboard">
+              <option value="points">Sort by points</option>
+              <option value="wins">Sort by wins</option>
+              <option value="rating">Sort by rating gain</option>
+              <option value="student">Student A-Z</option>
+            </select>
 
             {leaderboard.length === 0 && (
               <div className="text-center py-12 text-gray-400">

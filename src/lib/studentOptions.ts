@@ -4,9 +4,10 @@ import { appendRows, batchWriteRanges, clearSheetReadCache, ensureSheet, readShe
 
 export const DEFAULT_BATCHES = ['Beginner', 'Intermediate', 'Advanced'];
 export const DEFAULT_COACHES = ['Coach Anand', 'Coach Meera', 'Coach Rajesh', 'Coach Ramesh'];
+const DEFAULT_SCHOOLS: string[] = [];
 const DEFAULT_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 
-export type StudentOptionKey = 'student_batches' | 'student_levels' | 'student_coaches' | 'student_batch_coaches';
+export type StudentOptionKey = 'student_batches' | 'student_levels' | 'student_coaches' | 'student_schools' | 'student_batch_coaches';
 
 export interface VersionedOptions {
   values: string[];
@@ -22,6 +23,7 @@ export interface StudentOptions {
   batches: VersionedOptions;
   levels: VersionedOptions;
   coaches: VersionedOptions;
+  schools: VersionedOptions;
   batchCoaches: BatchCoachMapping;
 }
 
@@ -67,6 +69,7 @@ function parseOptions(rows: string[][]): StudentOptions {
     batches: latestFor(rows, 'student_batches', DEFAULT_BATCHES),
     levels: latestFor(rows, 'student_levels', DEFAULT_LEVELS),
     coaches: latestFor(rows, 'student_coaches', DEFAULT_COACHES),
+    schools: latestFor(rows, 'student_schools', DEFAULT_SCHOOLS),
     batchCoaches: latestBatchCoaches(rows),
   };
 }
@@ -87,6 +90,7 @@ export async function loadStudentOptions(token: string, sheetId: string, live = 
 function defaultValuesFor(key: StudentOptionKey): string[] {
   if (key === 'student_batches') return DEFAULT_BATCHES;
   if (key === 'student_coaches') return DEFAULT_COACHES;
+  if (key === 'student_schools') return DEFAULT_SCHOOLS;
   return DEFAULT_LEVELS;
 }
 
@@ -99,7 +103,7 @@ export async function saveStudentOptionList(
   coachName: string,
 ) {
   const cleaned = cleanValues(values);
-  if (cleaned.length === 0) throw new Error('Keep at least one option.');
+  if (cleaned.length === 0 && key !== 'student_schools') throw new Error('Keep at least one option.');
 
   await ensureStudentOptionsSheet(token, sheetId);
   const beforeRows = await readSheetLive(token, sheetId, `'${TABS.SETTINGS}'!A:F`);
@@ -208,4 +212,43 @@ export async function syncBatchCoachesToStudents(
   }
 
   return { updatedCount: updates.length, batchCounts };
+}
+
+export async function bulkAssignSchoolToStudents(
+  token: string,
+  sheetId: string,
+  selectedRowIndices: number[],
+  schoolName: string,
+): Promise<{ updatedCount: number }> {
+  if (selectedRowIndices.length === 0) return { updatedCount: 0 };
+  const studentRows = await readSheetLive(token, sheetId, `'${TABS.STUDENTS}'!A:AG`);
+  if (studentRows.length <= 1) return { updatedCount: 0 };
+
+  const headerMap = createHeaderMap(studentRows[0]);
+  const schoolColIndex = headerMap['school'] ?? headerMap['school name'] ?? 21;
+  const schoolColLetter = getColumnLetter(schoolColIndex);
+
+  const updates: { range: string; values: string[][] }[] = [];
+  const targetSchool = schoolName.trim();
+  const rowSet = new Set(selectedRowIndices);
+
+  studentRows.slice(1).forEach((row, index) => {
+    const rowNumber = index + 2;
+    if (rowSet.has(rowNumber)) {
+      const currentSchool = (row[schoolColIndex] ?? '').trim();
+      if (currentSchool !== targetSchool) {
+        updates.push({
+          range: `'${TABS.STUDENTS}'!${schoolColLetter}${rowNumber}`,
+          values: [[targetSchool]],
+        });
+      }
+    }
+  });
+
+  if (updates.length > 0) {
+    await batchWriteRanges(token, sheetId, updates);
+    clearSheetReadCache(sheetId);
+  }
+
+  return { updatedCount: updates.length };
 }

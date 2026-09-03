@@ -7,8 +7,8 @@ interface Fixtures {
 }
 
 export const test = base.extend<Fixtures>({
-  sheets: async ({ context }, use) => {
+  sheets: [async ({ context }, use) => {
     const sheets = await installSheetsMock(context);
     await use(sheets);
-  },
+  }, { auto: true }],
 });
