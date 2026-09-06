@@ -917,6 +917,15 @@ export function Students() {
 
   useEffect(() => { load(); }, [token]);
   useEffect(() => {
+    const requestedStudent = searchParams.get('student')?.trim().toLowerCase();
+    if (!requestedStudent || selected || students.length === 0) return;
+    const match = students.find(student => student.name.trim().toLowerCase() === requestedStudent);
+    if (match) {
+      setSelected(match);
+      setDetailTab('info');
+    }
+  }, [searchParams, selected, students]);
+  useEffect(() => {
     const q = search.toLowerCase();
     setFiltered(students.filter(s => matchesStudentFilters(
       s, q, selectedBatches, selectedCategories, selectedCoaches, selectedSchools, selectedStatuses
@@ -997,7 +1006,7 @@ export function Students() {
     const category = getCategory(selected.age);
     const parentWa = selected.parent1WhatsApp.replace(/\D/g,'').slice(-10);
     return (
-      <Layout title={selected.name} onBack={() => setSelected(null)} action={
+      <Layout title={selected.name} onBack={() => searchParams.get('student') ? navigate('/online-chess') : setSelected(null)} action={
         <StudentDetailActions student={selected}
           onEdit={() => { setForm(studentToForm(selected)); setEditMode(true); }} />
       }>
@@ -1069,7 +1078,7 @@ export function Students() {
       <>
         <label className="icon-button cursor-pointer" aria-label="Import students from Excel or CSV" title="Import from Excel / CSV">
           <Upload size={16} className={importingFile ? 'animate-spin' : ''} aria-hidden="true" />
-          <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={handleFileUpload} />
+          <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" aria-label="Import students from Excel or CSV" onChange={handleFileUpload} />
         </label>
         <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
           className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
@@ -1092,6 +1101,7 @@ export function Students() {
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, batch, FIDE ID, school, coach…"
+          aria-label="Search students"
           className="input student-search"/>
 
         {/* Active Filter Chips */}

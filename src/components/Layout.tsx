@@ -38,19 +38,19 @@ export function Layout({ title, children, action, showBack, onBack, hideMobileHe
   return (
     <div className="app-shell flex h-full flex-col md:pl-64">
       <Sidebar />
-      <header className={`app-header flex-shrink-0 ${hideMobileHeader ? 'app-header-hide-mobile' : ''}`}>
+      <header className={`app-header flex-shrink-0 sticky top-0 z-40 backdrop-blur-xl ${hideMobileHeader ? 'app-header-hide-mobile' : ''}`}>
         <div className="app-header-inner flex items-center gap-3">
           {displayBack && (
             <button type="button" onClick={handleBack} aria-label="Go back" title="Go back"
-              className="app-back-button flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg">
-              <ArrowLeft size={19} aria-hidden="true" />
+              className="app-back-button flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150 active:scale-90">
+              <ArrowLeft size={18} aria-hidden="true" />
             </button>
           )}
-          <img src="logo.jpg" alt="" className={`app-logo h-9 w-9 flex-shrink-0 rounded-lg object-cover md:hidden ${displayBack ? 'hidden sm:block' : ''}`} />
+          <img src="logo.jpg" alt="" className={`app-logo h-9 w-9 flex-shrink-0 rounded-xl object-cover ring-1 ring-black/10 dark:ring-white/10 shadow-sm md:hidden ${displayBack ? 'hidden sm:block' : ''}`} />
           <div className="min-w-0 flex-1">
             <p className="app-header-kicker hidden md:block">Academy operations</p>
-            <h1 className="truncate text-[15px] font-semibold leading-tight">{title}</h1>
-            {coach && <p className="app-header-coach mt-0.5 truncate text-[11px] font-medium md:hidden">{coach}</p>}
+            <h1 className="truncate text-[15px] font-bold tracking-tight leading-tight">{title}</h1>
+            {coach && <p className="app-header-coach mt-0.5 truncate text-[11px] font-semibold tracking-wide md:hidden">{coach}</p>}
           </div>
           <div className="flex flex-shrink-0 items-center gap-1.5">
             <GlobalSearch />

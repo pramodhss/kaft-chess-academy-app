@@ -187,11 +187,16 @@ export function Dashboard() {
       <div className="dashboard-screen space-y-5 p-3 sm:p-4 md:p-6">
         <section className="dashboard-intro">
           <div className="flex items-start justify-between gap-3">
-            <div><p className="section-label">{new Date().toLocaleDateString('en-IN', { weekday: 'long' })} · KAFT Chess Academy</p><h2 className="mt-1 text-xl font-bold text-gray-900 sm:text-2xl">Good morning{coachName ? `, ${coachName.split(' ')[0]}` : ''}</h2></div>
-            <button type="button" onClick={sync} disabled={syncing} className="dashboard-live-status"
+            <div>
+              <p className="section-label">{new Date().toLocaleDateString('en-IN', { weekday: 'long' })} · KAFT Chess Academy</p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-2xl">Good morning{coachName ? `, ${coachName.split(' ')[0]}` : ''}</h2>
+            </div>
+            <button type="button" onClick={sync} disabled={syncing} className="dashboard-live-status inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold text-xs active:scale-95 transition-all shadow-sm"
               aria-label="Sync latest changes from other coaches"
               title={lastSynced ? `Last synced ${lastSynced.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Sync now'}>
-              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} aria-hidden="true" />{syncing ? 'Syncing…' : 'Sync'}
+              <span className={`w-2 h-2 rounded-full ${syncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+              <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} aria-hidden="true" />
+              <span>{syncing ? 'Syncing…' : 'Sync'}</span>
             </button>
           </div>
         </section>
@@ -285,12 +290,22 @@ export function Dashboard() {
   );
 }
 
+const STAT_TONE_GRADIENTS: Record<'blue' | 'gold' | 'green' | 'red', string> = {
+  blue: 'stat-card-blue bg-gradient-to-br from-blue-500/[0.08] via-indigo-500/[0.03] to-transparent border-blue-500/20 text-blue-900 dark:text-blue-100',
+  green: 'stat-card-green bg-gradient-to-br from-emerald-500/[0.08] via-teal-500/[0.03] to-transparent border-emerald-500/20 text-emerald-900 dark:text-emerald-100',
+  gold: 'stat-card-gold bg-gradient-to-br from-amber-500/[0.12] via-yellow-500/[0.04] to-transparent border-amber-500/25 text-amber-900 dark:text-amber-100',
+  red: 'stat-card-red bg-gradient-to-br from-rose-500/[0.08] via-pink-500/[0.03] to-transparent border-rose-500/20 text-rose-900 dark:text-rose-100',
+};
+
 function StatCard({ label, value, sub, tone, icon }: Readonly<{ label: string; value: string | number; sub?: string; tone: 'blue' | 'gold' | 'green' | 'red'; icon?: React.ReactNode }>) {
   return (
-    <div className={`stat-card stat-card-${tone} rounded-xl p-4`}>
-      <div className="flex items-start justify-between gap-2"><p className="section-label">{label}</p>{icon && <span className="stat-card-icon">{icon}</span>}</div>
-      <p className="mt-3 text-xl font-bold leading-tight text-gray-900 sm:text-2xl">{value}</p>
-      {sub && <p className="mt-1 text-xs text-gray-500">{sub}</p>}
+    <div className={`stat-card ${STAT_TONE_GRADIENTS[tone]} rounded-2xl p-3.5 sm:p-4 transition-all duration-200 active:scale-[0.98]`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="section-label">{label}</p>
+        {icon && <span className="stat-card-icon shadow-xs">{icon}</span>}
+      </div>
+      <p className="mt-2 text-xl font-extrabold tracking-tight leading-tight text-gray-900 dark:text-white sm:text-2xl">{value}</p>
+      {sub && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-medium">{sub}</p>}
     </div>
   );
 }

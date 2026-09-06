@@ -1,0 +1,96 @@
+import { TABS } from '../config';
+import { appendRows, batchWriteRanges, clearSheetReadCache, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, writeRange } from './sheets';
+import type { BoardPairing, PairingParticipant } from './pairingEngine';
+
+export interface MiniTournamentSession {
+  sessionId: string;
+  name: string;
+  date: string;
+  status: 'active' | 'completed';
+  mode: 'individual' | 'team';
+  teamSize: number;
+  ratingMode: 'rated' | 'casual';
+  participants: PairingParticipant[];
+  rounds: BoardPairing[][];
+  rowIndex: number;
+}
+
+const HEADERS = ['Session ID', 'Name', 'Date', 'Status', 'Participants JSON', 'Rounds JSON', 'Created By', 'Updated At', 'Mode', 'Team Size', 'Rating Mode'];
+
+function safeParseArray<T>(value: string | undefined): T[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed as T[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function rowToSession(row: string[], rowIndex: number): MiniTournamentSession {
+  return {
+    sessionId: row[0] ?? '',
+    name: row[1] ?? '',
+    date: row[2] ?? '',
+    status: row[3] === 'completed' ? 'completed' : 'active',
+    mode: row[8] === 'team' ? 'team' : 'individual',
+    teamSize: Number(row[9]) || 2,
+    ratingMode: row[10] === 'casual' ? 'casual' : 'rated',
+    participants: safeParseArray<PairingParticipant>(row[4]),
+    rounds: safeParseArray<BoardPairing[]>(row[5]),
+    rowIndex,
+  };
+}
+
+export async function ensureMiniTournamentSheet(token: string, sheetId: string): Promise<void> {
+  await ensureSheet(token, sheetId, TABS.MINI_TOURNAMENTS, HEADERS);
+  await ensureSheetColumns(token, sheetId, TABS.MINI_TOURNAMENTS, HEADERS.length);
+  const header = await readSheetLive(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!K1:K1`);
+  if (!header[0]?.[0]) {
+    await writeRange(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!K1`, [['Rating Mode']]);
+  }
+}
+
+export async function loadMiniTournamentSessions(token: string, sheetId: string, live = false): Promise<MiniTournamentSession[]> {
+  const read = live ? readSheetLive : readSheet;
+  const rows = await read(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:K`);
+  return rows.slice(1).map((row, index) => rowToSession(row, index + 2)).filter(session => session.sessionId);
+}
+
+export async function createMiniTournamentSession(
+  token: string,
+  sheetId: string,
+  session: Omit<MiniTournamentSession, 'rowIndex'>,
+  createdBy: string,
+): Promise<number> {
+  const rowIndex = await appendRows(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:K`, [[
+    session.sessionId, session.name, session.date, session.status,
+    JSON.stringify(session.participants), JSON.stringify(session.rounds),
+    createdBy, new Date().toISOString(), session.mode, session.teamSize, session.ratingMode,
+  ]]);
+  clearSheetReadCache(sheetId);
+  return rowIndex;
+}
+
+export async function updateMiniTournamentDetails(token: string, sheetId: string, session: MiniTournamentSession): Promise<void> {
+  await batchWriteRanges(token, sheetId, [
+    { range: `'${TABS.MINI_TOURNAMENTS}'!B${session.rowIndex}:C${session.rowIndex}`, values: [[session.name, session.date]] },
+    { range: `'${TABS.MINI_TOURNAMENTS}'!I${session.rowIndex}:K${session.rowIndex}`, values: [[session.mode, session.teamSize, session.ratingMode]] },
+  ]);
+  clearSheetReadCache(sheetId);
+}
+
+export async function deleteMiniTournamentSession(token: string, sheetId: string, rowIndex: number): Promise<void> {
+  await clearSheetRange(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A${rowIndex}:K${rowIndex}`);
+  clearSheetReadCache(sheetId);
+}
+
+export async function saveMiniTournamentSession(token: string, sheetId: string, session: MiniTournamentSession): Promise<void> {
+  await batchWriteRanges(token, sheetId, [
+    { range: `'${TABS.MINI_TOURNAMENTS}'!D${session.rowIndex}:F${session.rowIndex}`, values: [[
+      session.status, JSON.stringify(session.participants), JSON.stringify(session.rounds),
+    ]] },
+    { range: `'${TABS.MINI_TOURNAMENTS}'!H${session.rowIndex}`, values: [[new Date().toISOString()]] },
+  ]);
+  clearSheetReadCache(sheetId);
+}

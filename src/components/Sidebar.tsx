@@ -1,12 +1,14 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart3, BookOpen, CalendarCheck, Library, MoreHorizontal, SlidersHorizontal, TrendingUp, Trophy, Users, Wallet } from 'lucide-react';
+import { BarChart3, BookOpen, CalendarCheck, Library, MoreHorizontal, Radio, SlidersHorizontal, Swords, TrendingUp, Trophy, Users, Wallet } from 'lucide-react';
 
 const LINKS = [
   { to: '/', Icon: BarChart3, label: 'Dashboard' },
   { to: '/students', Icon: Users, label: 'Students' },
+  { to: '/online-chess', Icon: Radio, label: 'Online Chess' },
   { to: '/attendance', Icon: CalendarCheck, label: 'Attendance' },
   { to: '/fees', Icon: Wallet, label: 'Fees' },
   { to: '/upcoming', Icon: Trophy, label: 'Tournaments' },
+  { to: '/pairing', Icon: Swords, label: 'Mini Tournament' },
   { to: '/operations', Icon: SlidersHorizontal, label: 'Operations' },
   { to: '/progress', Icon: TrendingUp, label: 'Progress' },
   { to: '/resources', Icon: BookOpen, label: 'Resources' },

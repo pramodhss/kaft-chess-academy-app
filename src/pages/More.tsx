@@ -2,8 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   CalendarDays, ChevronRight, CircleUserRound,
   ExternalLink, Gauge, Library, LogOut, Medal,
-  Moon, ReceiptText, SlidersHorizontal, Sun, TrendingUp, Trophy,
-  Type,
+  Moon, ReceiptText, SlidersHorizontal, Sun, Swords, TrendingUp, Trophy,
+  Type, Radio,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +41,20 @@ const PRIMARY_TILES = [
     label: 'Tournament Events',
     desc: 'Rosters, fees & online imports',
     color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30',
+  },
+  {
+    to: '/pairing',
+    Icon: Swords,
+    label: 'Mini Tournament Pairing',
+    desc: 'Auto-pair by rating with no repeat opponents',
+    color: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30',
+  },
+  {
+    to: '/online-chess',
+    Icon: Radio,
+    label: 'Online Chess',
+    desc: 'Fetch player ratings and game reports on demand',
+    color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30',
   },
   {
     to: '/tournaments',
@@ -111,7 +125,7 @@ export function More() {
             {/* Theme Toggle */}
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{dark ? 'Dark mode' : 'Light mode'}</span>
-              <button type="button" onClick={toggle} aria-pressed={dark}
+              <button type="button" onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} aria-pressed={dark}
                 className="theme-toggle w-12 h-6 rounded-full transition-colors relative flex items-center px-0.5 flex-shrink-0">
                 <span className={`w-5 h-5 rounded-full bg-white shadow transition-transform flex items-center justify-center ${dark ? 'translate-x-6 text-navy' : 'translate-x-0 text-gray-500'}`}>
                   {dark ? <Moon size={11} /> : <Sun size={11} />}

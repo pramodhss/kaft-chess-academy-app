@@ -762,6 +762,7 @@ function AttendanceDateBar({
             type="date"
             className="sr-only"
             aria-hidden="true"
+            aria-label="Pick a date"
             tabIndex={-1}
             value={currentIso}
             onChange={e => onJump(e.target.value)}
