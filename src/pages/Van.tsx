@@ -16,6 +16,7 @@ import {
 } from '../lib/tournamentManagement';
 import { SHEET_ID, TABS } from '../config';
 import { formatDateIndian } from '../lib/dates';
+import { uniqueStudentNames } from '../lib/studentRoster';
 
 interface RosterChoice { playing: boolean; feePaid: boolean; vanRequired: boolean; notes: string }
 
@@ -98,7 +99,7 @@ export function Van() {
       ]);
       const parsed = tournamentRows.slice(1).map((row, i) => rowToManagedTournament(row, i + 2)).filter(t => t.name.trim());
       setTournaments(await addMissingIds(token, parsed));
-      setStudents(studentRows.slice(1).map(r => r[0]?.trim()).filter((n): n is string => Boolean(n)));
+      setStudents(uniqueStudentNames(studentRows, true));
       setRegistrations(registrationRows.slice(1).map((r, i) => rowToRegistration(r, i + 2)).filter(r => r.tournamentId && r.studentName));
       setSavedWeeklyResults(weeklyRows.slice(1).map((row, index) => rowToSavedWeeklyOnlineTournament(row, index + 2)).filter(item => item.name));
       setLegacyWarning(legacyVanRows.slice(1).map(r => phoneValidationError(r[9] ?? '', 'Driver phone')).find(Boolean) ?? '');
@@ -189,10 +190,12 @@ export function Van() {
       () => toast.error('Could not copy to clipboard.')
     );
   };
-  const importWeeklyTournament = async () => {
+  const importWeeklyTournament = async (sourceUrl = weeklyLink) => {
+    const trimmedUrl = sourceUrl.trim();
+    if (!trimmedUrl) return;
     setWeeklyLoading(true);
     try {
-      setWeeklyResult(await fetchWeeklyOnlineTournament(weeklyLink));
+      setWeeklyResult(await fetchWeeklyOnlineTournament(trimmedUrl));
       toast.success('Final standings loaded. Review them before sharing.');
     } catch (e: any) {
       setWeeklyResult(null);
@@ -344,11 +347,11 @@ export function Van() {
         </div>
         <section className="weekly-workspace" aria-labelledby="weekly-online-title">
           <div className="weekly-workspace-heading"><span className="icon-tile"><Link size={18} /></span><div><p className="section-label">Weekly results</p><h2 id="weekly-online-title">Online tournament</h2></div></div>
-          <label className="weekly-link-field"><span>Completed Lichess or Chess.com event link</span><div className="flex gap-2"><input type="url" value={weeklyLink} onChange={event => setWeeklyLink(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void importWeeklyTournament(); }} className="input min-w-0 flex-1" placeholder="https://lichess.org/swiss/abcdefgh or chess.com/tournament/..." aria-label="Completed Lichess or Chess.com tournament link" /><button type="button" onClick={() => void importWeeklyTournament()} disabled={weeklyLoading || !weeklyLink.trim()} className="primary-action shrink-0">{weeklyLoading ? <LoaderCircle size={15} className="animate-spin" /> : <Trophy size={15} />} Load results</button></div></label>
+          <label className="weekly-link-field"><span>Paste a completed Lichess or Chess.com event link</span><div className="flex gap-2"><input type="url" value={weeklyLink} onChange={event => setWeeklyLink(event.target.value)} onPaste={event => { const pasted = event.clipboardData.getData('text').trim(); if (pasted) { setWeeklyLink(pasted); void importWeeklyTournament(pasted); } }} onKeyDown={event => { if (event.key === 'Enter') void importWeeklyTournament(); }} className="input min-w-0 flex-1" placeholder="https://lichess.org/swiss/abcdefgh or chess.com/tournament/..." aria-label="Completed Lichess or Chess.com tournament link" /><button type="button" onClick={() => void importWeeklyTournament()} disabled={weeklyLoading || !weeklyLink.trim()} className="primary-action shrink-0">{weeklyLoading ? <LoaderCircle size={15} className="animate-spin" /> : <Trophy size={15} />} Load results</button></div></label>
           {weeklyResult && <div className="weekly-result-view">
             <div className="weekly-result-title"><div className="min-w-0"><p className="section-label">Results ready</p><h3>{weeklyResult.name}</h3><p>{[weeklyResult.format, weeklyResult.variant, weeklyResult.timeControl].filter(Boolean).join(' | ')}</p></div><span className="badge-green">Final</span></div>
             <dl className="weekly-stat-grid"><div><dt>Players</dt><dd>{weeklyResult.playerCount || '-'}</dd></div><div><dt>Rounds</dt><dd>{weeklyResult.rounds || '-'}</dd></div><div><dt>Organizer</dt><dd>{weeklyResult.organizer || '-'}</dd></div></dl>
-            <div className="weekly-standings"><div className="weekly-standings-heading"><h4>Top 5 standings</h4><span>Final points</span></div>{weeklyResult.standings.map(player => <div key={`${player.rank}-${player.playerName}`} className="weekly-standing-row"><span className="weekly-place">{({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[player.rank] ?? player.rank}</span><span className="truncate">{player.playerName}</span><strong>{player.score || '-'}{player.score ? ' pts' : ''}</strong></div>)}</div>
+            <div className="weekly-standings"><div className="weekly-standings-heading"><h4>Top 5 standings</h4><span>Final points</span></div>{weeklyResult.standings.slice(0, 5).map(player => <div key={`${player.rank}-${player.playerName}`} className="weekly-standing-row"><span className="weekly-place">{({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[player.rank] ?? player.rank}</span><span className="truncate">{player.playerName}</span><strong>{player.score || '-'}{player.score ? ' pts' : ''}</strong></div>)}</div>
             <div className="weekly-result-actions"><p>{weeklyResultAlreadySaved ? 'This result is saved and cannot be edited.' : 'Save this final result to the academy record.'}</p><div><button type="button" onClick={copyWeeklyMessage} className="secondary-action"><Copy size={15} /> Copy WhatsApp text</button><button type="button" onClick={() => void saveWeeklyTournament()} disabled={saving || weeklyResultAlreadySaved} className="primary-action"><Save size={15} />{saveWeeklyButtonLabel(saving, weeklyResultAlreadySaved)}</button></div></div>
           </div>}
         </section>
@@ -385,7 +388,7 @@ function WeeklyTournamentDetail({ tournament, close, copy }: Readonly<{ tourname
     <div className="flex items-start justify-between border-b border-gray-100 px-4 py-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-chess-blue">Saved weekly result</p><h2 id="weekly-result-detail-title" className="mt-0.5 truncate text-base font-semibold text-gray-900">{tournament.name}</h2><p className="mt-1 text-xs text-gray-500">{[tournament.format, tournament.variant, tournament.timeControl].filter(Boolean).join(' | ')}</p></div><button type="button" onClick={close} className="icon-button shrink-0" aria-label="Close saved weekly result"><X size={17} /></button></div>
     <dl className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 text-xs"><div className="px-4 py-2.5"><dt className="text-gray-400">Players</dt><dd className="mt-0.5 font-semibold text-gray-800">{tournament.playerCount || '-'}</dd></div><div className="px-4 py-2.5"><dt className="text-gray-400">Rounds</dt><dd className="mt-0.5 font-semibold text-gray-800">{tournament.rounds || '-'}</dd></div><div className="px-4 py-2.5"><dt className="text-gray-400">Organizer</dt><dd className="mt-0.5 truncate font-semibold text-gray-800">{tournament.organizer || '-'}</dd></div></dl>
     <div className="p-4"><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-800">Top 5 final standings</h3><span className="badge-blue">Read-only</span></div><div className="overflow-hidden rounded-md border border-gray-100"><div className="grid grid-cols-[42px_minmax(0,1fr)_64px] bg-gray-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-400"><span>Rank</span><span>Player</span><span className="text-right">Points</span></div>{tournament.standings.map(player => <div key={`${player.rank}-${player.playerName}`} className="grid grid-cols-[42px_minmax(0,1fr)_64px] border-t border-gray-100 px-3 py-2.5 text-sm"><span className="font-semibold text-chess-blue">{({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[player.rank] ?? player.rank}</span><span className="truncate font-medium text-gray-800">{player.playerName}</span><span className="text-right text-gray-500">{player.score || '-'}{player.score ? ' pts' : ''}</span></div>)}</div></div>
-    <div className="flex items-center justify-end border-t border-gray-100 bg-gray-50 px-4 py-3"><button type="button" onClick={copy} className="secondary-action"><Copy size={15} /> Copy for WhatsApp</button></div>
+    <div className="weekly-modal-actions"><button type="button" onClick={copy} className="secondary-action"><Copy size={15} /> Copy for WhatsApp</button></div>
   </dialog></div>;
 }
 
@@ -410,10 +413,10 @@ function TournamentCard({ tournament, playing, paid, van, open, edit, remove, no
           <ChevronRight size={16} className="mt-1 flex-shrink-0 text-gray-400" />
         </div>
       </button>
-      <div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
+      <div className="weekly-card-actions">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={notify} className="flex items-center gap-1.5 text-xs font-semibold text-green-700"><MessageCircle size={14} />Notify</button>
-          <button type="button" onClick={copy} className="flex items-center gap-1.5 text-xs font-semibold text-gray-500" aria-label="Copy roster" title="Copy roster for WhatsApp"><Copy size={14} />Copy</button>
+          <button type="button" onClick={notify} className="weekly-card-action text-green-700"><MessageCircle size={14} />Notify</button>
+          <button type="button" onClick={copy} className="weekly-card-action" aria-label="Copy roster" title="Copy roster for WhatsApp"><Copy size={14} />Copy</button>
         </div>
         <div className="flex gap-1.5">
           <button type="button" onClick={edit} className="icon-button" aria-label={`Edit ${tournament.name}`}><Pencil size={15} /></button>

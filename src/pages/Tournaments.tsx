@@ -11,6 +11,7 @@ import { matchOnlineTournamentResults, ordinal, type MatchedOnlineResult, type O
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
 import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { SHEET_ID, TABS } from '../config';
+import { uniqueStudentNames } from '../lib/studentRoster';
 import type { TournamentEntry } from '../types';
 
 const TYPES   = ['Internal','Zonal','District','State','National','Online','Rapid','Blitz','Classical'];
@@ -227,7 +228,7 @@ export function Tournaments() {
         readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`).catch(() => []),
       ]);
       setEntries(tRows.slice(1).map((row, index) => rowToEntry(row, index)).filter(entry => entry.studentName.trim()));
-      setStudents(sRows.slice(1).map(r => r[0]).filter(Boolean));
+      setStudents(uniqueStudentNames(sRows, true));
       setStudentDetails(new Map(sRows.slice(1).filter(row => row[0]).map(row => [
         row[0], { batch: row[5] ?? '', level: row[6] ?? '' },
       ])));

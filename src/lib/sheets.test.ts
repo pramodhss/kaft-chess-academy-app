@@ -63,6 +63,6 @@ describe('ensureSheet', () => {
     });
 
     await expect(ensureSheet('token', 'sheet-id', 'Restricted', ['Header']))
-      .rejects.toThrow('Sheets API 403: Permission denied');
+      .rejects.toThrow('You do not have edit access to this Google Sheet');
   });
 });

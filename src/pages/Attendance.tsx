@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { CalendarDays, CalendarSearch, Check, ChevronLeft, ChevronRight, Copy, Filter, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CalendarSearch, Check, ChevronLeft, ChevronRight, Copy, Filter, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -132,12 +132,14 @@ export function Attendance() {
   const [deletingDate, setDeletingDate] = useState(false);
   const [error, setError] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [offlineConflicts, setOfflineConflicts] = useState(0);
   const coachName = savedCoachName || 'Coach';
   const online = useOnline();
 
   useEffect(() => {
     if (!token || !online) return;
     void flushAttendanceQueue(token, SHEET_ID).then(result => {
+      setOfflineConflicts(result.conflicts);
       if (result.saved > 0) toast.success(`${result.saved} queued attendance change${result.saved === 1 ? '' : 's'} synced.`);
       if (result.conflicts > 0) toast.info(`${result.conflicts} offline change${result.conflicts === 1 ? '' : 's'} need review because Sheet data changed.`);
     }).catch(() => undefined);
@@ -189,23 +191,22 @@ export function Attendance() {
       ]);
       const studentHeaderMap = studentRows.length > 0 ? createHeaderMap(studentRows[0]) : undefined;
       const meta = new Map<string, { coach: string; category: string }>();
-      const inactiveNames = new Set<string>();
+      const activeNames = new Set<string>();
 
       studentRows.slice(1).forEach((r, idx) => {
         const student = parseStudentRow(r, idx + 2, studentHeaderMap);
         if (student.name) {
           const norm = student.name.toLowerCase();
-          if ((student.status || 'Active').trim().toLowerCase() === 'inactive') {
-            inactiveNames.add(norm);
+          const status = student.status.trim().toLowerCase();
+          if (!status || status === 'active') {
+            activeNames.add(norm);
+            meta.set(norm, { coach: student.coachName, category: getCategory(student.age) });
           }
-          meta.set(norm, {
-            coach: student.coachName,
-            category: getCategory(student.age),
-          });
         }
       });
       setStudentMetaMap(meta);
 
+      const seenNames = new Set<string>();
       const parsed: AttRow[] = nameRows
         .map((r, i) => ({
           name:     r[0] ?? '',
@@ -213,7 +214,12 @@ export function Attendance() {
           present:  (dateRows[i]?.[0] ?? '').toString().toUpperCase() === 'TRUE',
           sheetRow: i + 2,
         }))
-        .filter(r => r.name.trim() && !inactiveNames.has(r.name.trim().toLowerCase()));
+        .filter(r => {
+          const normalized = r.name.trim().toLowerCase();
+          if (!normalized || !activeNames.has(normalized) || seenNames.has(normalized)) return false;
+          seenNames.add(normalized);
+          return true;
+        });
       setRows(parsed);
       setDirty(new Map());
     } catch (e: any) {
@@ -612,6 +618,17 @@ export function Attendance() {
             <p className="text-sm font-semibold text-red-700 mb-1">{error}</p>
             <button type="button" onClick={() => { setError(''); if (selectedDate) void loadDate(selectedDate); }}
               className="text-xs font-bold text-red-600 underline">Retry</button>
+          </div>
+        )}
+
+        {offlineConflicts > 0 && !loading && (
+          <div role="status" className="mx-3 mt-3 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+            <AlertTriangle size={18} className="mt-0.5 flex-none text-amber-700 dark:text-amber-400" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{offlineConflicts} offline change{offlineConflicts === 1 ? '' : 's'} need review</p>
+              <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">The Sheet changed while this device was offline. Reload the selected date before saving a replacement value.</p>
+            </div>
+            <button type="button" onClick={() => { setOfflineConflicts(0); if (selectedDate) void loadDate(selectedDate); }} className="text-xs font-bold text-amber-800 underline dark:text-amber-300">Review</button>
           </div>
         )}
 

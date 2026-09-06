@@ -268,6 +268,24 @@ export function OperationsCenter() {
     !/^\d{7,15}$/.test(student.phone) ? `${student.name}: invalid parent phone` : '',
     student.email && !student.email.includes('@') ? `${student.name}: invalid email` : '',
   ].filter(Boolean));
+  const feeQuality = (() => {
+    const issues: string[] = [];
+    const seen = new Set<string>();
+    fees.forEach(fee => {
+      const key = `${fee.student.trim().toLowerCase()}|${fee.feeMonth.trim().toLowerCase()}|${fee.paymentStatus.trim().toLowerCase()}`;
+      if (seen.has(key)) issues.push(`${fee.student}: duplicate fee record for ${fee.feeMonth || 'unlabelled month'}`);
+      seen.add(key);
+      if (fee.amountPaid > fee.amountDue && fee.paymentStatus.toLowerCase() !== 'waived') {
+        issues.push(`${fee.student}: paid amount exceeds due amount for ${fee.feeMonth || 'unlabelled month'}`);
+      }
+      const expectedBalance = fee.paymentStatus.toLowerCase() === 'waived' ? 0 : Math.max(fee.amountDue - fee.amountPaid, 0);
+      if (Math.abs(expectedBalance - fee.balance) > 0.01) {
+        issues.push(`${fee.student}: balance does not match due and paid amounts for ${fee.feeMonth || 'unlabelled month'}`);
+      }
+    });
+    return issues;
+  })();
+  const allQualityIssues = [...quality, ...feeQuality];
 
   const openReminder = (fee: FeeSummary) => {
     const student = students.find(item => item.name === fee.student);
@@ -324,7 +342,7 @@ export function OperationsCenter() {
             <div className="grid gap-3 md:grid-cols-3">
               <Metric icon={ClipboardCheck} label="Active students" value={students.filter(student => student.status.toLowerCase() === 'active').length} />
               <Metric icon={MessageCircle} label="Fee follow-ups" value={pendingFees.length} />
-              <Metric icon={ShieldCheck} label="Data issues" value={quality.length} />
+              <Metric icon={ShieldCheck} label="Data issues" value={allQualityIssues.length} />
             </div>
 
             <div className="surface-card p-4 space-y-3">
@@ -532,7 +550,7 @@ export function OperationsCenter() {
         {/* 5. Data Quality */}
         {tab === 'quality' && (
           <List title="Records requiring attention" empty="No data-quality issues found.">
-            {quality.map(issue => (
+            {allQualityIssues.map(issue => (
               <div key={issue} className="surface-card flex items-start gap-3 p-4 text-sm text-gray-700">
                 <AlertCircle size={18} className="mt-0.5 flex-none text-amber-600" />
                 {issue}

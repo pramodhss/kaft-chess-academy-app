@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, BookOpen, CalendarCheck, ChevronRight, Clock3, MapPin, RefreshCw, SlidersHorizontal, Trophy, UserRound, Users, Wallet } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, CheckCircle2, ChevronRight, ClipboardCheck, Clock3, FileWarning, MapPin, MessageCircle, RefreshCw, SlidersHorizontal, Trophy, UserRound, Users, Wallet } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ import { clearSheetReadCache, readSheet } from '../lib/sheets';
 import { parseSheetNumber } from '../lib/values';
 import { normalizeFeeMonth } from '../lib/feeRules';
 import { normalizeTimetableRows, upcomingClasses } from '../lib/timetable';
+import { uniqueStudentNames } from '../lib/studentRoster';
 import { useCoachName } from '../hooks/useCoachName';
 import { SHEET_ID, TABS } from '../config';
 
@@ -36,6 +37,16 @@ function parseStudentDate(value: string): Date | null {
 function nonNegativeSheetNumber(value: string): number {
   const parsed = parseSheetNumber(value);
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+}
+
+interface DashboardAction {
+  id: string;
+  title: string;
+  detail: string;
+  count: number;
+  tone: 'amber' | 'red' | 'blue';
+  Icon: typeof AlertCircle;
+  to: string;
 }
 
 function upcomingBirthdays(studentRows: string[][]): { name: string; dob: string; daysLeft: number }[] {
@@ -77,6 +88,8 @@ export function Dashboard() {
   const [birthdays, setBirthdays] = useState<{ name: string; dob: string; daysLeft: number }[]>([]);
   const [classes, setClasses] = useState<ReturnType<typeof upcomingClasses>>([]);
   const [overdueCount, setOverdueCount] = useState(0);
+  const [attendanceRiskCount, setAttendanceRiskCount] = useState(0);
+  const [feeIssueCount, setFeeIssueCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
@@ -88,13 +101,15 @@ export function Dashboard() {
     if (isBackgroundSync) setSyncing(true); else setLoading(true);
     setError('');
     try {
-      const [studentRows, feeRows, timetableRows] = await Promise.all([
+      const [studentRows, feeRows, timetableRows, attendanceRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
         readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`).catch(() => []),
+        readSheet(token, SHEET_ID, `'${TABS.MONTHLY_ATT}'!A:E`).catch(() => []),
       ]);
-      const data = studentRows.slice(1).filter(r => r[0]?.trim());
-      const active = data.filter(r => (r[8] ?? '').toLowerCase() === 'active').length;
+      const allStudentNames = uniqueStudentNames(studentRows);
+      const activeStudentNames = uniqueStudentNames(studentRows, true);
+      const active = activeStudentNames.length;
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       let collected = 0, outstanding = 0;
@@ -103,7 +118,7 @@ export function Dashboard() {
         collected   += nonNegativeSheetNumber(r[6] ?? '');
         outstanding += nonNegativeSheetNumber(r[7] ?? '');
       });
-      setStats({ total: data.length, active, collected, outstanding });
+      setStats({ total: allStudentNames.length, active, collected, outstanding });
       setBirthdays(upcomingBirthdays(studentRows));
       setClasses(upcomingClasses(normalizeTimetableRows(timetableRows).entries).slice(0, 3));
       const overdueMap = new Map<string, number>();
@@ -114,6 +129,30 @@ export function Dashboard() {
         if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);
       });
       setOverdueCount(overdueMap.size);
+      const activeNames = new Set(activeStudentNames.map(name => name.toLowerCase()));
+      const attendanceRisk = new Set<string>();
+      attendanceRows.slice(1).forEach(row => {
+        const name = (row[0] ?? '').trim().toLowerCase();
+        const scheduled = Number.parseInt(row[3] ?? '0', 10) || 0;
+        const attended = Number.parseInt(row[2] ?? '0', 10) || 0;
+        if (name && activeNames.has(name) && scheduled >= 2 && attended === 0) attendanceRisk.add(name);
+      });
+      setAttendanceRiskCount(attendanceRisk.size);
+      const feeKeys = new Set<string>();
+      let feeIssues = 0;
+      feeRows.slice(1).forEach(row => {
+        const name = (row[1] ?? '').trim().toLowerCase();
+        const month = normalizeFeeMonth(row[3] ?? '');
+        if (!name || !month) return;
+        const key = `${name}|${month}|${(row[4] ?? 'tuition').trim().toLowerCase()}`;
+        if (feeKeys.has(key)) feeIssues += 1;
+        feeKeys.add(key);
+        const due = nonNegativeSheetNumber(row[5] ?? '');
+        const paid = nonNegativeSheetNumber(row[6] ?? '');
+        const status = (row[11] ?? '').trim().toLowerCase();
+        if (paid > due && status !== 'waived') feeIssues += 1;
+      });
+      setFeeIssueCount(feeIssues);
       setLastSynced(new Date());
     } catch (e: any) {
       if (e.message === 'TOKEN_EXPIRED') { logout(); return; }
@@ -139,6 +178,11 @@ export function Dashboard() {
       const d = new Date(date); d.setHours(0,0,0,0);
       return d.getTime() === today.getTime() && coachName && entry.coach.toLowerCase().includes(coachName.split(' ')[0]?.toLowerCase() ?? '');
     });
+    const actions: DashboardAction[] = [
+      ...(overdueCount > 0 ? [{ id: 'fees', title: 'Send fee reminders', detail: 'Accounts still have a balance this month', count: overdueCount, tone: 'amber' as const, Icon: MessageCircle, to: '/operations' }] : []),
+      ...(attendanceRiskCount > 0 ? [{ id: 'attendance', title: 'Review attendance risk', detail: 'Active students have missed every recorded class', count: attendanceRiskCount, tone: 'red' as const, Icon: ClipboardCheck, to: '/attendance' }] : []),
+      ...(feeIssueCount > 0 ? [{ id: 'quality', title: 'Resolve fee data issues', detail: 'Duplicate or inconsistent fee records need review', count: feeIssueCount, tone: 'blue' as const, Icon: FileWarning, to: '/operations' }] : []),
+    ];
     content = (
       <div className="dashboard-screen space-y-5 p-3 sm:p-4 md:p-6">
         <section className="dashboard-intro">
@@ -160,6 +204,14 @@ export function Dashboard() {
         </div>
 
         <section className="dashboard-primary-actions"><h2 className="section-label">Quick actions</h2><div className="mt-2 grid grid-cols-3 gap-2">{PRIMARY_ACTIONS.map(({ to, Icon, label, tone }) => <button key={to} type="button" onClick={() => navigate(to)} className={`dashboard-action dashboard-action-${tone}`}><span><Icon size={18} /></span><strong>{label}</strong></button>)}</div></section>
+
+        <section className="surface-card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-gray-100 p-4 dark:border-gray-800">
+            <div><h2 className="section-label">Coach focus</h2><p className="mt-1 text-xs text-gray-500">Daily follow-ups from the latest academy records</p></div>
+            {actions.length === 0 ? <CheckCircle2 size={20} className="text-green-600" aria-label="No follow-ups" /> : <span className="badge-amber">{actions.length} follow-up{actions.length === 1 ? '' : 's'}</span>}
+          </div>
+          {actions.length === 0 ? <div className="flex items-center gap-3 p-4"><span className="icon-tile bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"><CheckCircle2 size={18} /></span><p className="text-sm text-gray-600 dark:text-gray-300">No urgent follow-ups found. Keep the board moving.</p></div> : <div className="divide-y divide-gray-100 dark:divide-gray-800">{actions.map(action => <button key={action.id} type="button" onClick={() => navigate(action.to)} className="card-btn flex w-full items-center gap-3 p-4 text-left"><span className={`icon-tile ${action.tone === 'red' ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400' : action.tone === 'blue' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}><action.Icon size={17} /></span><span className="min-w-0 flex-1"><strong className="block text-sm text-gray-900 dark:text-white">{action.title}</strong><span className="mt-0.5 block text-xs text-gray-500">{action.detail}</span></span><span className="flex items-center gap-1.5"><span className="text-sm font-bold text-gray-900 dark:text-white">{action.count}</span><ChevronRight size={16} className="text-gray-400" /></span></button>)}</div>}
+        </section>
 
         {birthdays.length > 0 && (
           <div className="rounded-lg border border-pink-200 bg-pink-50 p-4">

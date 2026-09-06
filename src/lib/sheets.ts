@@ -2,6 +2,8 @@ const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 export const SHEETS_READ_CACHE = 'sheets-read-cache-v1';
 export type SheetValue = string | number | boolean;
 const READ_CACHE_TTL_MS = 15_000; // 15 seconds — prevents stale reads when switching tabs
+const MAX_RETRIES = 3;
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 type CachedRead = { data: any; expiresAt: number };
 const recentReads = new Map<string, CachedRead>();
 const pendingReads = new Map<string, Promise<any>>();
@@ -13,6 +15,44 @@ export class SheetConflictError<T> extends Error {
     super(message);
     this.name = 'SheetConflictError';
   }
+}
+
+export type SheetErrorKind = 'offline' | 'auth' | 'permission' | 'quota' | 'missing' | 'retryable' | 'unknown';
+
+export class SheetsApiError extends Error {
+  constructor(
+    message: string,
+    public readonly kind: SheetErrorKind,
+    public readonly status?: number,
+    public readonly retryable = false,
+    public readonly userMessage?: string,
+  ) {
+    super(message);
+    this.name = 'SheetsApiError';
+  }
+}
+
+function retryDelay(attempt: number): number {
+  return Math.min(1000 * 2 ** attempt, 8000) + Math.round(Math.random() * 250);
+}
+
+function classifySheetsError(status: number, text: string): SheetsApiError {
+  if (status === 401 || (status === 403 && text.includes('SCOPE_INSUFFICIENT'))) {
+    return new SheetsApiError('TOKEN_EXPIRED', 'auth', status, false, 'Your Google session has expired. Sign in again to continue.');
+  }
+  if (status === 403) {
+    return new SheetsApiError('You do not have edit access to this Google Sheet. Ask the owner to share it with your Google account as an Editor.', 'permission', status);
+  }
+  if (status === 404) {
+    return new SheetsApiError('The configured Google Sheet or tab was not found. Check the environment configuration.', 'missing', status);
+  }
+  if (status === 429) {
+    return new SheetsApiError('Google Sheets is temporarily rate-limiting requests. Please wait a moment and try again.', 'quota', status, true);
+  }
+  if (RETRYABLE_STATUS_CODES.has(status)) {
+    return new SheetsApiError(`Google Sheets is temporarily unavailable (${status}).`, 'retryable', status, true);
+  }
+  return new SheetsApiError(`Google Sheets request failed (${status}): ${text || 'Unknown error'}`, 'unknown', status);
 }
 
 function sheetUrlFragment(sheetId: string): string {
@@ -65,22 +105,33 @@ export function colLetter(index: number): string {
 async function apiCall(token: string, url: string, options?: RequestInit) {
   const method = (options?.method ?? 'GET').toUpperCase();
   if (method !== 'GET' && typeof navigator !== 'undefined' && !navigator.onLine) {
-    throw new Error('You are offline. Reconnect before saving changes.');
+    throw new SheetsApiError('You are offline. Reconnect before saving changes.', 'offline');
   }
-  const res = await fetch(url, {
-    ...options,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...options?.headers },
-  });
-  if (res.status === 401) throw new Error('TOKEN_EXPIRED');
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    if (res.status === 403 && text.includes('SCOPE_INSUFFICIENT')) throw new Error('TOKEN_EXPIRED');
-    if (res.status === 403) {
-      throw new Error(`You don't have edit access to this Google Sheet. Ask the sheet owner to share it with your Google account as an Editor, then try again. (Sheets API 403: ${text})`);
+  let data: any;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...options?.headers },
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        const error = classifySheetsError(res.status, text);
+        if (!error.retryable || attempt === MAX_RETRIES) throw error;
+        await new Promise(resolve => setTimeout(resolve, retryDelay(attempt)));
+        continue;
+      }
+      data = await res.json();
+      break;
+    } catch (error) {
+      if (error instanceof SheetsApiError) throw error;
+      if (attempt === MAX_RETRIES) {
+        if (error instanceof TypeError) throw error;
+        throw new SheetsApiError('Google Sheets could not be reached. Check your connection and try again.', 'offline', undefined, true);
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelay(attempt)));
     }
-    throw new Error(`Sheets API ${res.status}: ${text}`);
   }
-  const data = await res.json();
   if (method !== 'GET') {
     const sheetId = /\/spreadsheets\/([^/]+)/.exec(new URL(url).pathname)?.[1];
     if (sheetId) await invalidateSheetReadCache(decodeURIComponent(sheetId));
