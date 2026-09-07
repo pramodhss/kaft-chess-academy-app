@@ -9,6 +9,7 @@ import {
   Filter,
   Pencil,
   RefreshCw,
+  Save,
   Search,
   Trophy,
   UserRound,
@@ -107,6 +108,13 @@ export function OnlineChess() {
   const [chessComUsername, setChessComUsername] = useState("");
   const [lichessUsername, setLichessUsername] = useState("");
   const [savingIds, setSavingIds] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterBatch, setRosterBatch] = useState("all");
+  const [rosterSchool, setRosterSchool] = useState("all");
+  const [rosterCoach, setRosterCoach] = useState("all");
+  const [rosterLinkStatus, setRosterLinkStatus] = useState<"all" | "linked" | "unlinked">("all");
+  const [rosterDrafts, setRosterDrafts] = useState<Record<number, { chessComUsername: string; lichessUsername: string }>>({});
+  const [savingRosterRow, setSavingRosterRow] = useState<number | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -169,6 +177,48 @@ export function OnlineChess() {
       toast.error(`Save failed: ${error.message}`);
     } finally {
       setSavingIds(false);
+    }
+  };
+
+  const updateRosterDraft = (student: Student, field: "chessComUsername" | "lichessUsername", value: string) => {
+    setRosterDrafts((current) => ({
+      ...current,
+      [student.rowIndex]: {
+        chessComUsername: current[student.rowIndex]?.chessComUsername ?? student.chessComUsername,
+        lichessUsername: current[student.rowIndex]?.lichessUsername ?? student.lichessUsername,
+        [field]: value,
+      },
+    }));
+  };
+
+  const saveRosterRow = async (student: Student) => {
+    if (!token) return;
+    const draft = rosterDrafts[student.rowIndex] ?? {
+      chessComUsername: student.chessComUsername,
+      lichessUsername: student.lichessUsername,
+    };
+    if (draft.chessComUsername.length > 25 || draft.lichessUsername.length > 20) {
+      toast.error("Chess.com usernames are limited to 25 characters and Lichess usernames to 20 characters.");
+      return;
+    }
+    setSavingRosterRow(student.rowIndex);
+    try {
+      const chessComUsername = draft.chessComUsername.trim();
+      const lichessUsername = draft.lichessUsername.trim();
+      await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!AE${student.rowIndex}:AF${student.rowIndex}`, [[chessComUsername, lichessUsername]]);
+      clearSheetReadCache(SHEET_ID);
+      updateStudentInRoster({ ...student, chessComUsername, lichessUsername });
+      setRosterDrafts((current) => {
+        const next = { ...current };
+        delete next[student.rowIndex];
+        return next;
+      });
+      toast.success(`${student.name}'s online IDs saved.`);
+    } catch (error: any) {
+      if (error.message === "TOKEN_EXPIRED") return;
+      toast.error(`Save failed: ${error.message}`);
+    } finally {
+      setSavingRosterRow(null);
     }
   };
 
@@ -267,6 +317,24 @@ export function OnlineChess() {
         ? left.name.localeCompare(right.name)
         : ratingForOnline(right) - ratingForOnline(left),
     );
+  const rosterOptions = (field: "batch" | "school" | "coachName") => Array.from(
+    new Set(activeStudents.map((student) => student[field].trim()).filter(Boolean)),
+  ).sort((left, right) => left.localeCompare(right));
+  const rosterStudents = activeStudents.filter((student) => {
+    const draft = rosterDrafts[student.rowIndex];
+    const chessComUsername = draft?.chessComUsername ?? student.chessComUsername;
+    const lichessUsername = draft?.lichessUsername ?? student.lichessUsername;
+    const query = rosterSearch.trim().toLowerCase();
+    const linked = Boolean(chessComUsername || lichessUsername);
+    return (
+      (!query || [student.name, student.batch, student.school, student.coachName, chessComUsername, lichessUsername]
+        .some((value) => value.toLowerCase().includes(query))) &&
+      (rosterBatch === "all" || student.batch === rosterBatch) &&
+      (rosterSchool === "all" || student.school === rosterSchool) &&
+      (rosterCoach === "all" || student.coachName === rosterCoach) &&
+      (rosterLinkStatus === "all" || (rosterLinkStatus === "linked" ? linked : !linked))
+    );
+  });
   const matchedResults = selected
     ? matchOnlineTournamentResults(weeklyResults, [selected])
     : [];
@@ -353,6 +421,134 @@ export function OnlineChess() {
               {visibleStudents.length} players
             </span>
           </div>
+        </section>
+
+        <section className="surface-card p-4 md:p-5">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
+            <div>
+              <p className="online-directory-eyebrow text-xs uppercase tracking-wide font-bold">
+                Academy roster
+              </p>
+              <h2 className="text-xl font-bold text-navy dark:text-gray-100">
+                Add online chess IDs
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Add or update platform IDs directly for every active student.
+              </p>
+            </div>
+            <label className="relative w-full lg:w-80">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+              <input
+                className="input pl-9"
+                value={rosterSearch}
+                onChange={(event) => setRosterSearch(event.target.value)}
+                placeholder="Search roster"
+                aria-label="Search online ID roster"
+              />
+            </label>
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
+            {[
+              ["Batch", rosterBatch, setRosterBatch, rosterOptions("batch")],
+              ["School", rosterSchool, setRosterSchool, rosterOptions("school")],
+              ["Coach", rosterCoach, setRosterCoach, rosterOptions("coachName")],
+            ].map(([label, value, setter, options]) => (
+              <label key={label as string} className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                {label as string}
+                <select
+                  className="input mt-1"
+                  value={value as string}
+                  onChange={(event) => (setter as (next: string) => void)(event.target.value)}
+                  aria-label={`Filter online IDs by ${String(label).toLowerCase()}`}
+                >
+                  <option value="all">All {String(label).toLowerCase()}s</option>
+                  {(options as string[]).map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+            ))}
+            <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+              ID status
+              <select
+                className="input mt-1"
+                value={rosterLinkStatus}
+                onChange={(event) => setRosterLinkStatus(event.target.value as "all" | "linked" | "unlinked")}
+                aria-label="Filter online IDs by link status"
+              >
+                <option value="all">All students</option>
+                <option value="linked">At least one ID</option>
+                <option value="unlinked">No IDs yet</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
+                <tr>
+                  <th className="px-3 py-3">Student</th>
+                  <th className="px-3 py-3">Batch</th>
+                  <th className="px-3 py-3">School</th>
+                  <th className="px-3 py-3">Chess.com ID</th>
+                  <th className="px-3 py-3">Lichess.com ID</th>
+                  <th className="px-3 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {rosterStudents.map((student) => {
+                  const draft = rosterDrafts[student.rowIndex] ?? {
+                    chessComUsername: student.chessComUsername,
+                    lichessUsername: student.lichessUsername,
+                  };
+                  const dirty = draft.chessComUsername !== student.chessComUsername || draft.lichessUsername !== student.lichessUsername;
+                  return (
+                    <tr key={student.rowIndex} className="align-middle">
+                      <td className="px-3 py-2">
+                        <button type="button" className="font-semibold text-left hover:text-gold" onClick={() => setSelected(student)}>
+                          {student.name}
+                        </button>
+                        {student.coachName && <span className="block text-xs text-gray-500">{student.coachName}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{student.batch || "—"}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{student.school || student.grade || "—"}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          className="input min-w-[150px] py-1.5 text-xs"
+                          maxLength={25}
+                          value={draft.chessComUsername}
+                          onChange={(event) => updateRosterDraft(student, "chessComUsername", event.target.value)}
+                          aria-label={`${student.name} Chess.com ID`}
+                          placeholder="Chess.com username"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          className="input min-w-[150px] py-1.5 text-xs"
+                          maxLength={20}
+                          value={draft.lichessUsername}
+                          onChange={(event) => updateRosterDraft(student, "lichessUsername", event.target.value)}
+                          aria-label={`${student.name} Lichess ID`}
+                          placeholder="Lichess username"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          className="primary-action py-1.5 px-2.5 text-xs"
+                          disabled={!dirty || savingRosterRow === student.rowIndex}
+                          onClick={() => void saveRosterRow(student)}
+                          aria-label={`Save online IDs for ${student.name}`}
+                        >
+                          <Save size={14} />
+                          {savingRosterRow === student.rowIndex ? "Saving…" : "Save"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {rosterStudents.length === 0 && <p className="p-6 text-center text-sm text-gray-500">No active students match these filters.</p>}
+          </div>
+          <p className="mt-2 text-xs text-gray-500">Showing {rosterStudents.length} of {activeStudents.length} active students.</p>
         </section>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

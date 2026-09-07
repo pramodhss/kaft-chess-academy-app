@@ -160,6 +160,20 @@ test.describe('screen-by-screen end-to-end coverage', () => {
     await expect(page.getByRole('dialog', { name: 'Aarav Kumar' })).toHaveCount(0);
   });
 
+  test('Online Chess: ID roster filters and inline fields are available', async ({ page, sheets }) => {
+    void sheets;
+    await assertHealthyScreen(page, '#/online-chess');
+    await expect(page.getByRole('heading', { name: 'Add online chess IDs' })).toBeVisible();
+    await expect(page.getByLabel('Filter online IDs by batch')).toBeVisible();
+    await expect(page.getByLabel('Filter online IDs by school')).toBeVisible();
+    await expect(page.getByLabel('Filter online IDs by coach')).toBeVisible();
+    await expect(page.getByLabel('Filter online IDs by link status')).toBeVisible();
+    await expect(page.getByLabel('Aarav Kumar Chess.com ID')).toBeVisible();
+    await expect(page.getByLabel('Aarav Kumar Lichess ID')).toBeVisible();
+    await page.getByLabel('Filter online IDs by link status').selectOption('unlinked');
+    await expect(page.getByText(/Showing \d+ of \d+ active students/)).toBeVisible();
+  });
+
   test('Mini Tournament: creation modal opens and cancel is reversible', async ({ page, sheets }) => {
     void sheets;
     await assertHealthyScreen(page, '#/pairing');
