@@ -25,6 +25,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,jpg,jpeg,png,svg,ico}'],
         globIgnores: ['**/pdf-vendor-*.js'],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
       },
     }),
   ],

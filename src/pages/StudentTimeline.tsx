@@ -53,7 +53,7 @@ export function StudentTimeline() {
           batch: r[5] ?? '', level: r[6] ?? '', joiningDate: r[7] ?? '', status: r[8] ?? '', parent1Name: r[9] ?? '',
           parent1Phone: r[10] ?? '', parent1WhatsApp: r[11] ?? '', parent1Email: r[12] ?? '', parent2Name: r[13] ?? '',
           parent2Phone: r[14] ?? '', emergencyContact: r[15] ?? '', emergencyPhone: r[16] ?? '', address: r[17] ?? '',
-          photoConsent: r[18] ?? '', thisMonthAttended: r[19] ?? '0', notes: r[20] ?? '', school: r[21] ?? '',
+          whatsappGroup: 'Yes', photoConsent: r[18] ?? '', thisMonthAttended: r[19] ?? '0', notes: r[20] ?? '', school: r[21] ?? '',
           standard: r[22] ?? '', tnscaId: r[23] ?? '', fideId: r[24] ?? '', aicfId: r[25] ?? '',
           ratingClassical: r[26] ?? '', ratingRapid: r[27] ?? '', ratingBlitz: r[28] ?? '', coachName: r[29] ?? '',
           chessComUsername: r[30] ?? '', lichessUsername: r[31] ?? '', photoUrl: r[32] ?? '', rowIndex: i + 2,

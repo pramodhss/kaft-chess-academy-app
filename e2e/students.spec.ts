@@ -13,12 +13,12 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Full Name *').fill('Ishaan Rao');
   await dialog.getByLabel('Date of Birth *').fill('2015-04-12');
-  await dialog.getByLabel('Parent / Guardian Name *').fill('Anita Rao');
-  await dialog.getByLabel('Phone *', { exact: true }).fill('9988776655');
-  await dialog.getByLabel('WhatsApp').fill('9977665544');
+  await dialog.getByLabel("Father's Name *").fill('Anita Rao');
+  await dialog.getByLabel("Father's Number *").fill('9988776655');
+  await dialog.getByRole('textbox', { name: 'WhatsApp' }).fill('9977665544');
   await dialog.getByLabel('Email').fill('anita.rao@example.com');
-  await dialog.getByLabel('Parent 2 Name').fill('Vikram Rao');
-  await dialog.getByLabel('Parent 2 Phone').fill('9966554433');
+  await dialog.getByLabel("Mother's Name").fill('Vikram Rao');
+  await dialog.getByLabel("Mother's Number").fill('9966554433');
   await dialog.getByLabel('Assigned Coach').selectOption('Coach Meera');
   await dialog.getByLabel('Classical Rating').fill('1250');
   await dialog.getByLabel('Rapid Rating').fill('1200');
@@ -28,12 +28,12 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   await dialog.getByLabel('AICF ID').fill('AICF200');
   await dialog.getByLabel('Chess.com Username').fill('ishaan_rook');
   await dialog.getByLabel('Lichess Username').fill('ishaan-knight');
-  await dialog.getByLabel('School Name').selectOption({ label: 'Lakeview School' });
+  await dialog.getByLabel('School Name').fill('Lakeview School');
   await dialog.getByLabel('Standard / Class').selectOption('5th');
   await dialog.getByLabel('Emergency Contact Name').fill('Rohan Rao');
   await dialog.getByLabel('Emergency Phone').fill('9955443322');
   await dialog.getByLabel('Home Address').fill('12 Lake Road, Chennai');
-  await dialog.getByLabel('Photo Consent').selectOption('No');
+  await dialog.getByLabel('WhatsApp group member').uncheck();
   await dialog.getByLabel('Notes').fill('Prefers weekday practice.');
   await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
 
@@ -78,18 +78,17 @@ test('adds a validated student and synchronizes the attendance roster', async ({
 
 test('blocks duplicate student names before writing', async ({ page, sheets }) => {
   await openApp(page, '#/students');
-  const writesBefore = sheets.writes.length;
   await page.getByRole('button', { name: 'Add student' }).click();
 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Full Name *').fill('Aarav Kumar');
   await dialog.getByLabel('Date of Birth *').fill('2014-05-10');
-  await dialog.getByLabel('Parent / Guardian Name *').fill('Priya Kumar');
-  await dialog.getByLabel('Phone *', { exact: true }).fill('9876543210');
+  await dialog.getByLabel("Father's Name *").fill('Priya Kumar');
+  await dialog.getByLabel("Father's Number *").fill('9876543210');
   await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
 
   await expect(page.getByText(/student with this name already exists/i)).toBeVisible();
-  expect(sheets.writes).toHaveLength(writesBefore);
+  expect(sheets.writes.filter(write => write.operation === 'append')).toHaveLength(0);
 });
 
 test('updates an existing student phone without a false conflict', async ({ page, sheets }) => {
@@ -97,7 +96,7 @@ test('updates an existing student phone without a false conflict', async ({ page
   await page.getByRole('button', { name: /Aarav Kumar/ }).click();
   await page.getByRole('button', { name: 'Edit student' }).click();
 
-  const phone = page.getByLabel('Phone *', { exact: true });
+  const phone = page.getByLabel("Father's Number *");
   await phone.fill('9988776655');
   await page.getByRole('button', { name: 'Save Changes' }).click();
 
@@ -123,8 +122,8 @@ test('requires confirmation and removes a student only after Sheets succeeds', a
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Full Name *').fill('Aarav Kumar');
   await dialog.getByLabel('Date of Birth *').fill('2014-05-10');
-  await dialog.getByLabel('Parent / Guardian Name *').fill('Priya Kumar');
-  await dialog.getByLabel('Phone *', { exact: true }).fill('9876543210');
+  await dialog.getByLabel("Father's Name *").fill('Priya Kumar');
+  await dialog.getByLabel("Father's Number *").fill('9876543210');
   await dialog.getByLabel('Assigned Coach').selectOption('Coach Rajesh');
   await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
 
@@ -139,8 +138,8 @@ test('filters phone input and validates email and ratings', async ({ page, sheet
 
   await dialog.getByLabel('Full Name *').fill('Validation Student');
   await dialog.getByLabel('Date of Birth *').fill('2015-04-12');
-  await dialog.getByLabel('Parent / Guardian Name *').fill('Validation Parent');
-  const phone = dialog.getByLabel('Phone *', { exact: true });
+  await dialog.getByLabel("Father's Name *").fill('Validation Parent');
+  const phone = dialog.getByLabel("Father's Number *");
   await phone.fill('98ab-76543210');
   await expect(phone).toHaveValue('9876543210');
 
@@ -150,9 +149,10 @@ test('filters phone input and validates email and ratings', async ({ page, sheet
   await dialog.getByLabel('Classical Rating').fill('1200.5');
   await expect(dialog.getByRole('alert')).toContainText('whole number');
   await dialog.getByLabel('Classical Rating').fill('1200');
-  await dialog.getByLabel('Chess.com Username').fill('https://chess.com/member/player');
-  await expect(dialog.getByRole('alert')).toContainText('Chess.com username must use only letters');
-  expect(sheets.writes).toHaveLength(0);
+  await dialog.getByLabel('Chess.com Username').fill('player/name+tag?é');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(dialog.getByLabel('Chess.com Username')).toHaveValue('player/name+tag?é');
+  expect(sheets.writes.filter(write => write.operation === 'append')).toHaveLength(0);
 });
 
 test('imports students from spreadsheet, commits to Sheets, and retains on refresh and navigation', async ({ page, sheets }) => {
@@ -259,8 +259,8 @@ test('pre-fills logged-in coach name, provides coach suggestions, and manages in
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Full Name *').fill('Pranav Rao');
   await dialog.getByLabel('Date of Birth *').fill('2015-09-09');
-  await dialog.getByLabel('Parent / Guardian Name *').fill('Sanjay Rao');
-  await dialog.getByLabel('Phone *', { exact: true }).fill('9876599999');
+  await dialog.getByLabel("Father's Name *").fill('Sanjay Rao');
+  await dialog.getByLabel("Father's Number *").fill('9876599999');
   await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
   await expect(page.getByText('Pranav Rao', { exact: true })).toBeVisible();
 
@@ -319,15 +319,12 @@ test('auto-syncs phone to whatsapp when same-as-phone checkbox is checked', asyn
   await openApp(page, '#/students');
   await page.getByRole('button', { name: 'Add student' }).click();
 
-  const phoneInput = page.getByLabel('Phone *', { exact: true });
+  const phoneInput = page.getByLabel("Father's Number *");
   const whatsappInput = page.getByLabel('WhatsApp', { exact: true });
   const sameAsPhoneCheckbox = page.getByLabel('Same as phone number');
 
+  await expect(sameAsPhoneCheckbox).toBeChecked();
   await phoneInput.fill('9876543210');
-  await expect(sameAsPhoneCheckbox).not.toBeChecked();
-
-  // Check the box
-  await sameAsPhoneCheckbox.check();
   await expect(whatsappInput).toHaveValue('9876543210');
 
   // Changing phone while checked should update WhatsApp
@@ -337,6 +334,26 @@ test('auto-syncs phone to whatsapp when same-as-phone checkbox is checked', asyn
   // Typing a different WhatsApp number should uncheck the box
   await whatsappInput.fill('9123456789');
   await expect(sameAsPhoneCheckbox).not.toBeChecked();
+});
+
+test('opens the WhatsApp group invite for a new non-member student', async ({ page, sheets }) => {
+  await openApp(page, '#/students');
+  const existingAaravRow = [...sheets.workbook['Students & Parents'][1]];
+  await page.getByRole('button', { name: 'Add student' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Full Name *').fill('WhatsApp Invite Test Student');
+  await dialog.getByLabel('Date of Birth *').fill('2016-06-06');
+  await dialog.getByLabel("Father's Name *").fill('Invite Test Parent');
+  await dialog.getByLabel("Father's Number *").fill('9876500000');
+  await dialog.getByLabel('WhatsApp group member').uncheck();
+  await dialog.getByRole('button', { name: 'Add Student', exact: true }).click();
+
+  await expect(page.getByText('WhatsApp Invite Test Student', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /WhatsApp Invite Test Student/ }).click();
+  const invite = page.getByRole('link', { name: 'Open WhatsApp group' });
+  await expect(invite).toHaveAttribute('href', 'https://chat.whatsapp.com/G0CMQKsQXj3KTvE0ycBNMF');
+  await expect(invite).toHaveAttribute('target', '_blank');
+  expect(sheets.workbook['Students & Parents'][1]).toEqual(existingAaravRow);
 });
 
 test('assigns batch coach in settings, updates existing students, and pre-fills on student add', async ({ page, sheets }) => {

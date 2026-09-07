@@ -65,6 +65,9 @@ export function parseStudentRow(
     emergencyContact: get(['Emergency Contact', 'Emergency Name'], 15),
     emergencyPhone: get(['Emergency Phone', 'Emergency Mobile'], 16),
     address: get(['Address', 'Home Address', 'Location'], 17),
+    whatsappGroup: headerMap?.['whatsapp group'] !== undefined || headerMap?.['whatsapp group membership'] !== undefined
+      ? (get(['WhatsApp Group', 'WhatsApp Group Membership'], 18) || 'Yes')
+      : 'Yes',
     photoConsent: get(['Photo Consent'], 18) || 'Yes',
     thisMonthAttended: get(['This Month Attended', 'Attended', 'Monthly Attendance'], 19),
     notes: get(['Notes', 'Remarks'], 20),

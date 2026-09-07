@@ -81,6 +81,7 @@ export function ParentPortal() {
         emergencyContact: foundRow[15] ?? '',
         emergencyPhone: foundRow[16] ?? '',
         address: foundRow[17] ?? '',
+        whatsappGroup: 'Yes',
         photoConsent: foundRow[18] ?? '',
         thisMonthAttended: foundRow[19] ?? '0',
         notes: foundRow[20] ?? '',
@@ -140,60 +141,64 @@ export function ParentPortal() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen bg-[#f8f7f4] text-[#18182a] dark:bg-[#0f0f1e] dark:text-[#eeeae0] p-4 sm:p-6 flex flex-col items-center">
-      {/* Header */}
-      <header className="w-full max-w-lg flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-3">
-          <img src="logo.jpg" alt="" className="w-10 h-10 rounded-xl object-cover shadow-sm" />
-          <div>
-            <h1 className="text-base font-bold text-gray-900 dark:text-white">KAFT Chess Academy</h1>
-            <p className="text-xs font-semibold text-chess-blue">Parent &amp; Student Portal</p>
-          </div>
-        </div>
-        <Link to="/" className="text-xs font-semibold text-gray-500 hover:text-chess-blue">Coach Login</Link>
+    <div className="parent-portal-shell">
+      <header className="parent-portal-header">
+        <Link to="/" className="parent-portal-brand" aria-label="Return to coach login">
+          <img src="logo.jpg" alt="" className="parent-portal-logo" />
+          <span className="min-w-0">
+            <strong>KAFT Chess Academy</strong>
+            <span>Parent &amp; Student Portal</span>
+          </span>
+        </Link>
+        <Link to="/" className="secondary-action parent-portal-login">Coach Login</Link>
       </header>
 
       {/* Verification Form */}
       {!verifiedStudent && (
-        <div className="surface-card w-full max-w-lg p-6 space-y-4">
-          <div className="flex items-center gap-2 text-chess-blue mb-1">
-            <Lock size={18} />
-            <h2 className="text-sm font-bold uppercase tracking-wider">Secure Student Access</h2>
+        <main className="parent-portal-content">
+          <div className="parent-portal-intro">
+            <span className="icon-tile"><Lock size={18} aria-hidden="true" /></span>
+            <div>
+              <p className="section-label">Private progress space</p>
+              <h1>Welcome back</h1>
+              <p>Use your child’s name and the 4-digit PIN shared by the academy.</p>
+            </div>
           </div>
-          <p className="text-xs text-gray-500">
-            Enter your child’s name and the 4-digit PIN (last 4 digits of your registered phone number).
-          </p>
-
-          {error && <div className="error-state">{error}</div>}
-
-          <div className="space-y-3">
-            <label className="block">
+          <div className="surface-card parent-portal-card">
+            <div className="parent-portal-card-heading">
+              <div><p className="section-label">Secure student access</p><h2>View progress card</h2></div>
+              <span className="parent-portal-step">01</span>
+            </div>
+            {error && <div className="error-state" role="alert">{error}</div>}
+            <div className="parent-portal-form">
+              <label>
               <span className="field-label">Student Name</span>
               <input value={studentNameInput} onChange={e => setStudentNameInput(e.target.value)}
-                placeholder="e.g. Ishaan Rao" className="input" />
-            </label>
-            <label className="block">
+                placeholder="e.g. Ishaan Rao" className="input" autoComplete="name" />
+              </label>
+              <label>
               <span className="field-label">4-Digit PIN</span>
               <input type="password" maxLength={4} inputMode="numeric" value={pinInput} onChange={e => setPinInput(e.target.value)}
-                placeholder="••••" className="input text-center tracking-widest text-lg" />
-            </label>
+                placeholder="••••" className="input parent-portal-pin" autoComplete="one-time-code" />
+              </label>
             <button type="button" onClick={() => void attemptVerify(studentNameInput, pinInput)} disabled={loading}
-              className="primary-action w-full mt-2">
+              className="primary-action parent-portal-submit">
               {loading ? 'Verifying…' : 'View Progress Card'}
             </button>
+            </div>
           </div>
-        </div>
+        </main>
       )}
 
       {/* Student Progress Card */}
       {verifiedStudent && (
-        <div className="w-full max-w-lg space-y-4 animate-route-enter">
+        <main className="parent-portal-content animate-route-enter">
           {/* Identity & Status */}
-          <div className="surface-card p-5 space-y-3">
+          <div className="surface-card parent-portal-card space-y-3">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-xl font-extrabold text-gray-900 dark:text-white">{verifiedStudent.name}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{verifiedStudent.batch} Batch {verifiedStudent.coachName ? `· Coach ${verifiedStudent.coachName}` : ''}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{verifiedStudent.batch} Batch {verifiedStudent.coachName ? `· Coach ${verifiedStudent.coachName.replace(/^coach\s+/i, '')}` : ''}</p>
               </div>
               <span className={verifiedStudent.status === 'Active' ? 'badge-green' : 'badge-gray'}>{verifiedStudent.status}</span>
             </div>
@@ -218,8 +223,8 @@ export function ParentPortal() {
           </div>
 
           {/* Attendance & Fees Overview */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="surface-card p-4 space-y-1">
+          <div className="parent-portal-stat-grid">
+            <div className="surface-card parent-portal-stat-card space-y-1">
               <div className="flex items-center justify-between text-chess-blue">
                 <CalendarCheck size={18} />
                 <span className="text-xs font-bold font-mono">This Month</span>
@@ -228,7 +233,7 @@ export function ParentPortal() {
               <p className="text-xs text-gray-500">Classes Attended</p>
             </div>
 
-            <div className="surface-card p-4 space-y-1">
+            <div className="surface-card parent-portal-stat-card space-y-1">
               <div className="flex items-center justify-between text-green-600">
                 <Wallet size={18} />
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${feeStatus?.status === 'Paid' ? 'badge-green' : 'badge-amber'}`}>
@@ -243,7 +248,7 @@ export function ParentPortal() {
           </div>
 
           {/* Tournament Record */}
-          <div className="surface-card p-4 space-y-3">
+          <div className="surface-card parent-portal-card space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-gold flex items-center gap-1.5">
                 <Trophy size={14} /> Tournament History
@@ -269,7 +274,7 @@ export function ParentPortal() {
           </div>
 
           {/* Academy Contact */}
-          <div className="surface-card p-4 flex items-center justify-between gap-3">
+          <div className="surface-card parent-portal-contact">
             <div className="min-w-0">
               <h4 className="text-xs font-bold text-gray-900 dark:text-white">Have questions?</h4>
               <p className="text-xs text-gray-500">Contact KAFT Academy coordinators</p>
@@ -281,10 +286,10 @@ export function ParentPortal() {
             </a>
           </div>
 
-          <button type="button" onClick={() => setVerifiedStudent(null)} className="text-xs text-gray-400 hover:underline block mx-auto py-2">
+          <button type="button" onClick={() => setVerifiedStudent(null)} className="secondary-action parent-portal-switch">
             Sign in as different student
           </button>
-        </div>
+        </main>
       )}
     </div>
   );

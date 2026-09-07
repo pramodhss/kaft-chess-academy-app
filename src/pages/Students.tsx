@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, FileChartColumn, FileSpreadsheet, Filter, Pencil, Plus, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
+import { Check, ChevronRight, Copy, ExternalLink, FileChartColumn, FileSpreadsheet, Filter, MessageCircle, Pencil, Phone, Plus, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -23,10 +23,11 @@ import {
   integerRangeValidationError,
   phoneValidationError,
 } from '../lib/validation';
-import { SHEET_ID, TABS } from '../config';
+import { SHEET_ID, TABS, WHATSAPP_GROUP_URL } from '../config';
 import type { Student } from '../types';
 import { normalizeDateInput } from '../lib/dates';
 import { createHeaderMap, parseStudentRow } from '../lib/schemaMapper';
+import { parseStudentDetailsImage } from '../lib/imageStudentImport';
 
 const STANDARDS  = ['LKG','UKG','1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th','11th','12th','Graduate'];
 const CATEGORY_COLOR: Record<string,string> = {
@@ -49,6 +50,16 @@ function getCategory(age: string): string {
   return 'Open';
 }
 
+function standardForDob(dob: string): string {
+  const birthYear = Number(dob.slice(0, 4));
+  if (!birthYear || dob.length < 4) return '';
+  const schoolAge = new Date().getFullYear() - birthYear;
+  if (schoolAge <= 3) return 'LKG';
+  if (schoolAge === 4) return 'UKG';
+  if (schoolAge >= 5 && schoolAge <= 16) return `${schoolAge - 4}${schoolAge - 4 === 1 ? 'st' : schoolAge - 4 === 2 ? 'nd' : schoolAge - 4 === 3 ? 'rd' : 'th'}`;
+  return schoolAge > 16 ? 'Graduate' : '';
+}
+
 function normalizedName(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
@@ -62,17 +73,17 @@ export type FormData = {
   name:string; dob:string; gender:string; grade:string; batch:string; level:string;
   joiningDate:string; status:string; parent1Name:string; parent1Phone:string;
   parent1WhatsApp:string; parent1Email:string; parent2Name:string; parent2Phone:string;
-  emergencyContact:string; emergencyPhone:string; address:string; photoConsent:string; notes:string;
+  emergencyContact:string; emergencyPhone:string; address:string; whatsappGroup:string; notes:string;
   school:string; standard:string; tnscaId:string; fideId:string; aicfId:string;
   ratingClassical:string; ratingRapid:string; ratingBlitz:string; coachName:string;
   chessComUsername:string; lichessUsername:string; photoUrl:string;
 };
 
 const EMPTY: FormData = {
-  name:'', dob:'', gender:'Female', grade:'', batch:'Beginner A', level:'Beginner',
+  name:'', dob:'', gender:'Male', grade:'', batch:'Beginner A', level:'Beginner',
   joiningDate:'', status:'Active', parent1Name:'', parent1Phone:'', parent1WhatsApp:'',
   parent1Email:'', parent2Name:'', parent2Phone:'', emergencyContact:'', emergencyPhone:'',
-  address:'', photoConsent:'Yes', notes:'',
+  address:'', whatsappGroup:'Yes', notes:'',
   school:'', standard:'', tnscaId:'', fideId:'', aicfId:'',
   ratingClassical:'', ratingRapid:'', ratingBlitz:'', coachName:'',
   chessComUsername:'', lichessUsername:'', photoUrl:'',
@@ -81,7 +92,7 @@ const EMPTY: FormData = {
 const STUDENT_HEADERS = [
   'Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status',
   'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone',
-  'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'This Month Attended', 'Notes',
+  'Emergency Contact', 'Emergency Phone', 'Address', 'WhatsApp Group', 'This Month Attended', 'Notes',
   'School', 'Standard', 'TNSCA ID', 'FIDE ID', 'AICF ID', 'Classical Rating', 'Rapid Rating',
   'Blitz Rating', 'Coach Name', 'Chess.com Username', 'Lichess Username', 'Photo URL',
 ];
@@ -96,7 +107,7 @@ function studentToForm(s: Student): FormData {
     joiningDate:s.joiningDate, status:s.status, parent1Name:s.parent1Name,
     parent1Phone:s.parent1Phone, parent1WhatsApp:s.parent1WhatsApp, parent1Email:s.parent1Email,
     parent2Name:s.parent2Name, parent2Phone:s.parent2Phone, emergencyContact:s.emergencyContact,
-    emergencyPhone:s.emergencyPhone, address:s.address, photoConsent:s.photoConsent, notes:s.notes,
+    emergencyPhone:s.emergencyPhone, address:s.address, whatsappGroup:s.whatsappGroup || 'Yes', notes:s.notes,
     school:s.school, standard:s.standard, tnscaId:s.tnscaId, fideId:s.fideId, aicfId:s.aicfId,
     ratingClassical:s.ratingClassical, ratingRapid:s.ratingRapid, ratingBlitz:s.ratingBlitz,
     coachName:s.coachName, chessComUsername:s.chessComUsername, lichessUsername:s.lichessUsername,
@@ -146,6 +157,7 @@ function formToStudent(form: FormData, rowIndex: number, existing?: Student): St
     : '';
   return {
     ...form,
+    photoConsent: 'Yes',
     age,
     thisMonthAttended: existing?.thisMonthAttended ?? '',
     rowIndex,
@@ -161,7 +173,7 @@ function studentRowValues(form: FormData) {
     form.parent1Name, phoneForSheet(form.parent1Phone), phoneForSheet(form.parent1WhatsApp), form.parent1Email,
     form.parent2Name, phoneForSheet(form.parent2Phone),
     form.emergencyContact, phoneForSheet(form.emergencyPhone),
-    form.address, form.photoConsent,
+    form.address, form.whatsappGroup,
     '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
     form.notes, form.school, form.standard,
     form.tnscaId, form.fideId, form.aicfId,
@@ -173,11 +185,9 @@ function studentRowValues(form: FormData) {
 
 function onlineUsernameValidationError(value: string, platform: string, maxLength: number) {
   const username = value.trim();
-  if (!username) return '';
-  if (username.length > maxLength || !/^[A-Za-z0-9_-]+$/.test(username)) {
-    return `${platform} username must use only letters, numbers, underscores, or hyphens and be ${maxLength} characters or fewer.`;
-  }
-  return '';
+  return username.length > maxLength
+    ? `${platform} username must be ${maxLength} characters or fewer.`
+    : '';
 }
 
 function formValidationError(form: FormData) {
@@ -187,10 +197,10 @@ function formValidationError(form: FormData) {
   const dobError = dateValidationError(form.dob, 'Date of birth');
   if (dobError) return dobError;
   if (new Date(form.dob).getTime() > Date.now()) return 'Date of birth cannot be in the future.';
-  if (!form.parent1Name.trim()) return 'At least one parent or guardian name is required.';
-  if (form.parent1Name.trim().length > 100) return 'Parent or guardian name must be 100 characters or fewer.';
+  if (!form.parent1Name.trim()) return "Father's name is required.";
+  if (form.parent1Name.trim().length > 100) return "Father's name must be 100 characters or fewer.";
   const phoneErrors = [
-    phoneValidationError(form.parent1Phone, 'Parent or guardian phone', true),
+    phoneValidationError(form.parent1Phone, "Father's number", true),
     phoneValidationError(form.parent1WhatsApp, 'WhatsApp number'),
     phoneValidationError(form.parent2Phone, 'Parent 2 phone'),
     phoneValidationError(form.emergencyPhone, 'Emergency phone'),
@@ -240,12 +250,12 @@ function studentDetailsText(student: Student): string {
   add('AICF ID', student.aicfId);
   add('Chess.com', student.chessComUsername);
   add('Lichess', student.lichessUsername);
-  add('Parent / Guardian', student.parent1Name);
-  add('Parent Phone', student.parent1Phone);
+  add('Father', student.parent1Name);
+  add("Father's Number", student.parent1Phone);
   add('Parent WhatsApp', student.parent1WhatsApp);
   add('Parent Email', student.parent1Email);
-  add('Parent 2', student.parent2Name);
-  add('Parent 2 Phone', student.parent2Phone);
+  add('Mother', student.parent2Name);
+  add("Mother's Number", student.parent2Phone);
   add('Emergency Contact', student.emergencyContact);
   add('Emergency Phone', student.emergencyPhone);
   add('Address', student.address);
@@ -312,6 +322,13 @@ function StudentDetailActions({ student, onEdit }: Readonly<{
 
   return (
     <div className="flex items-center gap-1.5">
+      {WHATSAPP_GROUP_URL && student.whatsappGroup !== 'Yes' && (
+        <a href={WHATSAPP_GROUP_URL} target="_blank" rel="noopener noreferrer" aria-label="Open WhatsApp group" title="Open WhatsApp group"
+          className="icon-button text-green-600">
+          <MessageCircle size={16} aria-hidden="true" />
+          <ExternalLink size={10} aria-hidden="true" />
+        </a>
+      )}
       <button type="button" onClick={shareParentLink} aria-label="Share parent portal link" title="Share parent progress link for WhatsApp"
         className="icon-button">
         <Share2 size={16} aria-hidden="true" />
@@ -333,6 +350,11 @@ async function ensureStudentSchema(token: string) {
   const header = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!A1:AG1`);
   if (STUDENT_HEADERS.some((value, index) => header[0]?.[index]?.trim() !== value)) {
     await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!A1:AG1`, [STUDENT_HEADERS]);
+    const existingMembershipRows = await readSheetLive(token, SHEET_ID, `'${TABS.STUDENTS}'!S2:S`);
+    if (existingMembershipRows.length > 0) {
+      await writeRange(token, SHEET_ID, `'${TABS.STUDENTS}'!S2:S${existingMembershipRows.length + 1}`,
+        existingMembershipRows.map(row => [row[0] ? 'Yes' : '']));
+    }
   }
 }
 
@@ -420,7 +442,7 @@ async function addStudent(deps: Readonly<{
       form.gender, form.grade, form.batch, form.level,
       form.joiningDate, form.status, form.parent1Name, phoneForSheet(form.parent1Phone),
       phoneForSheet(form.parent1WhatsApp), form.parent1Email, form.parent2Name, phoneForSheet(form.parent2Phone),
-      form.emergencyContact, phoneForSheet(form.emergencyPhone), form.address, form.photoConsent,
+      form.emergencyContact, phoneForSheet(form.emergencyPhone), form.address, form.whatsappGroup,
       '=SUMIFS(\'Monthly Attendance\'!$C:$C,\'Monthly Attendance\'!$A:$A,INDEX(A:A,ROW()),\'Monthly Attendance\'!$B:$B,DATE(YEAR(TODAY()),MONTH(TODAY()),1))',
       form.notes,
       form.school, form.standard, form.tnscaId, form.fideId, form.aicfId,
@@ -635,7 +657,7 @@ function StudentChessTab({ selected, registrations, weeklyResults }: Readonly<{
     <>
       <InfoSection title="Chess Profile" copyText={sectionCopyText(selected.name, 'Chess Profile', [
         ['Classical', selected.ratingClassical], ['Rapid', selected.ratingRapid], ['Blitz', selected.ratingBlitz],
-        ['Coach', selected.coachName], ['Joined', selected.joiningDate],
+        ['Coach', selected.coachName],
         ['TNSCA ID', selected.tnscaId], ['FIDE ID', selected.fideId], ['AICF ID', selected.aicfId],
         ['Chess.com', selected.chessComUsername], ['Lichess', selected.lichessUsername],
       ])}>
@@ -647,7 +669,6 @@ function StudentChessTab({ selected, registrations, weeklyResults }: Readonly<{
           </div>
         )}
         <Row label="Coach"       value={selected.coachName}/>
-        <Row label="Joined"      value={selected.joiningDate}/>
         <Row label="This month"  value={`${selected.thisMonthAttended||0} days attended`}/>
         <Row label="TNSCA ID"    value={selected.tnscaId}/>
         <Row label="FIDE ID">
@@ -669,8 +690,8 @@ function StudentChessTab({ selected, registrations, weeklyResults }: Readonly<{
 function StudentContactTab({ selected }: Readonly<{ selected: Student }>) {
   return (
     <>
-      <InfoSection title="Parent / Guardian" copyText={sectionCopyText(selected.name, 'Parent / Guardian', [
-        ['Name', selected.parent1Name], ['Phone', selected.parent1Phone],
+      <InfoSection title="Father" copyText={sectionCopyText(selected.name, 'Father', [
+        ["Father's Name", selected.parent1Name], ["Father's Number", selected.parent1Phone],
         ['WhatsApp', selected.parent1WhatsApp], ['Email', selected.parent1Email],
       ])}>
         <Row label="Name" value={selected.parent1Name}/>
@@ -683,7 +704,7 @@ function StudentContactTab({ selected }: Readonly<{ selected: Student }>) {
         <Row label="Email" value={selected.parent1Email}/>
       </InfoSection>
       {(selected.parent2Name||selected.parent2Phone) && (
-        <InfoSection title="Parent 2" copyText={sectionCopyText(selected.name, 'Parent 2', [['Name', selected.parent2Name], ['Phone', selected.parent2Phone]])}>
+        <InfoSection title="Mother" copyText={sectionCopyText(selected.name, 'Mother', [["Mother's Name", selected.parent2Name], ["Mother's Number", selected.parent2Phone]])}>
           <Row label="Name" value={selected.parent2Name}/>
           <Row label="Phone">
             {selected.parent2Phone ? <a href={`tel:${selected.parent2Phone}`} className="font-medium text-chess-blue underline">{selected.parent2Phone}</a> : null}
@@ -836,6 +857,7 @@ export function Students() {
   const [importPreview, setImportPreview] = useState<FormData[] | null>(null);
   const [importFileName, setImportFileName] = useState('');
   const [importingFile, setImportingFile] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<number | null>(null);
   const toast = useToast();
 
   const load = () => loadStudents({
@@ -942,15 +964,28 @@ export function Students() {
     const file = event.target.files?.[0];
     if (!file) return;
     setImportingFile(true);
+    setOcrProgress(file.type.startsWith('image/') ? 0 : null);
     try {
+      if (file.type.startsWith('image/')) {
+        const extracted = await parseStudentDetailsImage(file, (progress) => setOcrProgress(Math.round(progress * 100)));
+        const initialBatch = batches[0] ?? 'Beginner';
+        const defaultCoach = batchCoaches[initialBatch] || coachName || coaches[0] || '';
+        setForm({ ...EMPTY, batch: initialBatch, level: initialBatch, coachName: defaultCoach, ...extracted });
+        setImportFileName(file.name);
+        setShowAdd(true);
+        const extractedCount = Object.values(extracted).filter(Boolean).length;
+        toast.info(`Read ${extractedCount} labeled field${extractedCount === 1 ? '' : 's'} from ${file.name}. Review and complete the student form.`);
+        return;
+      }
       const parsed = await parseExcelOrCsvFile(file, coachName);
       setImportFileName(file.name);
       setImportPreview(parsed);
       toast.info(`Parsed ${parsed.length} students from ${file.name}. Review and confirm to import.`);
     } catch (err: any) {
-      toast.error('File parse error: ' + (err.message || 'Could not parse Excel/CSV.'));
+      toast.error('File parse error: ' + (err.message || 'Could not read the selected file.'));
     } finally {
       setImportingFile(false);
+      setOcrProgress(null);
       event.target.value = '';
     }
   };
@@ -987,7 +1022,7 @@ export function Students() {
         <button type="button" onClick={() => setEditMode(false)} className="header-action">Cancel</button>
       }>
         <div className="p-4 pb-28 space-y-3 overflow-y-auto">
-          <StudentForm form={form} setForm={setForm} batches={batches} schoolOptions={schools} coachOptions={coaches} batchCoaches={batchCoaches} />
+          <StudentForm form={form} setForm={setForm} batches={batches} schoolOptions={availableSchools} coachOptions={coaches} batchCoaches={batchCoaches} />
         </div>
         <div className="fixed bottom-16 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 p-4 z-50 shadow-lg">
           {formValidationError(form) && <p role="alert" className="text-xs text-red-600 mb-2">{formValidationError(form)}</p>}
@@ -1012,28 +1047,28 @@ export function Students() {
       }>
         <div className="flex flex-col min-h-full">
           {/* Identity bar — photo + chips + quick-contact */}
-          <div className="bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800 px-4 py-3 space-y-2.5">
+          <div className="student-identity-bar bg-white dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800 px-4 py-3 space-y-2.5">
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1 flex flex-wrap gap-1.5 items-center">
-                <span className={selected.status==='Active'?'badge-green':'badge-gray'}>{selected.status}</span>
-                {category && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${CATEGORY_COLOR[category]??'badge-blue'}`}>{category}</span>}
-                <span className="text-xs text-gray-500 dark:text-gray-400">{selected.batch}</span>
+                <span className={`student-status ${selected.status === 'Active' ? 'is-active' : ''}`}>{selected.status}</span>
+                {category && <span className="student-meta-chip">{category}</span>}
+                <span className="student-meta-text">{selected.batch}</span>
               </div>
             </div>
             {(selected.parent1Phone || (selected.parent1WhatsApp && parentWa)) && (
-              <div className="flex flex-wrap gap-2 items-center">
+              <div className="student-contact-actions flex flex-wrap gap-2 items-center">
                 {selected.parent1Phone && (
                   <a href={`tel:${selected.parent1Phone}`}
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300">
-                    📞 Call parent
+                    className="student-contact-button">
+                    <Phone size={14} aria-hidden="true" /> <span>Call parent</span>
                   </a>
                 )}
                 {/* plain span keeps exact-text findability for tests */}
                 {selected.parent1Phone && <span className="text-xs text-gray-400">{selected.parent1Phone}</span>}
                 {selected.parent1WhatsApp && parentWa && (
                   <a href={`https://wa.me/91${parentWa}`} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
-                    💬 WhatsApp
+                    className="student-contact-button is-whatsapp">
+                    <MessageCircle size={14} aria-hidden="true" /> <span>WhatsApp</span>
                   </a>
                 )}
               </div>
@@ -1076,9 +1111,9 @@ export function Students() {
   return (
     <Layout title="Students" action={
       <>
-        <label className="icon-button cursor-pointer" aria-label="Import students from Excel or CSV" title="Import from Excel / CSV">
+        <label className="icon-button cursor-pointer relative" aria-label="Import students from Excel, CSV, or image" title={importingFile && ocrProgress !== null ? `Reading image ${ocrProgress}%` : 'Import Excel / CSV or read student image'}>
           <Upload size={16} className={importingFile ? 'animate-spin' : ''} aria-hidden="true" />
-          <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" aria-label="Import students from Excel or CSV" onChange={handleFileUpload} />
+          <input type="file" accept=".xlsx,.xls,.csv,image/png,image/jpeg,image/webp" className="sr-only" aria-label="Import students from Excel, CSV, or image" onChange={handleFileUpload} />
         </label>
         <button type="button" onClick={sync} disabled={syncing} aria-label="Sync latest changes" title="Sync latest changes"
           className="icon-button"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} aria-hidden="true" /></button>
@@ -1210,7 +1245,7 @@ export function Students() {
         form={form}
         setForm={setForm}
         batches={batches}
-        schoolOptions={schools}
+        schoolOptions={availableSchools}
         coachOptions={coaches}
         batchCoaches={batchCoaches}
         saving={saving}
@@ -1335,11 +1370,17 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
   batchCoaches?: Record<string, string>;
 }>) {
   const [sameAsPhone, setSameAsPhone] = useState(
-    Boolean(form.parent1Phone && form.parent1WhatsApp && form.parent1Phone === form.parent1WhatsApp)
+    form.parent1Phone ? form.parent1Phone === form.parent1WhatsApp : true
   );
 
   const f = <K extends keyof FormData>(k: K) =>
     (e: React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm({ ...form, [k]: e.target.value });
+
+  const handleDobChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const dob = event.target.value;
+    const suggestedStandard = standardForDob(dob);
+    setForm({ ...form, dob, standard: suggestedStandard || form.standard });
+  };
   
   const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const val = digitsOnly(event.target.value).slice(0, 15);
@@ -1394,7 +1435,7 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
       <Section title="Basic Info">
         <Field label="Full Name *"><input required maxLength={100} value={form.name} onChange={f('name')} className="input"/></Field>
         <Field label="Date of Birth *">
-          <input required type="date" value={form.dob} onChange={f('dob')} className="input"/>
+          <input required type="date" value={form.dob} onChange={handleDobChange} className="input"/>
           {computedAge !== null && (
             <div className="flex gap-2 mt-1">
               <span className="text-xs text-gray-500">Age: <strong>{computedAge}</strong></span>
@@ -1441,9 +1482,9 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
       </Section>
 
       {/* Parent — required */}
-      <Section title="Parent / Guardian">
-        <Field label="Parent / Guardian Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
-        <Field label="Phone *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={handlePhoneChange} className="input"/></Field>
+      <Section title="Father">
+        <Field label="Father's Name *"><input required maxLength={100} value={form.parent1Name} onChange={f('parent1Name')} className="input"/></Field>
+        <Field label="Father's Number *"><input required type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent1Phone} onChange={handlePhoneChange} className="input"/></Field>
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="field-label mb-0">WhatsApp</span>
@@ -1471,8 +1512,8 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
           />
         </div>
         <Field label="Email"><input type="email" maxLength={254} value={form.parent1Email} onChange={f('parent1Email')} className="input"/></Field>
-        <Field label="Parent 2 Name"><input maxLength={100} value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
-        <Field label="Parent 2 Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent2Phone} onChange={phone('parent2Phone')} className="input"/></Field>
+        <Field label="Mother's Name"><input maxLength={100} value={form.parent2Name} onChange={f('parent2Name')} className="input"/></Field>
+        <Field label="Mother's Number"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.parent2Phone} onChange={phone('parent2Phone')} className="input"/></Field>
       </Section>
 
       {/* Ratings */}
@@ -1496,13 +1537,19 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
       {/* Academic */}
       <Section title="School &amp; Academic">
         <Field label="School Name">
-          <select value={form.school} onChange={f('school')} className="input">
-            <option value="">Select school…</option>
-            {!schoolOptions.includes(form.school) && form.school && <option value={form.school}>{form.school}</option>}
-            {schoolOptions.filter(Boolean).map(school => <option key={school} value={school}>{school}</option>)}
-          </select>
+          <input
+            value={form.school}
+            onChange={f('school')}
+            className="input"
+            list="student-school-options"
+            placeholder="Select or type a school"
+            aria-label="School Name"
+          />
+          <datalist id="student-school-options">
+            {schoolOptions.filter(Boolean).map(school => <option key={school} value={school} />)}
+          </datalist>
         </Field>
-        <Field label="Standard / Class">
+        <Field label="Standard / Class (auto-filled from DOB, editable)">
           <select value={form.standard} onChange={f('standard')} className="input">
             <option value="">Select…</option>
             {STANDARDS.map(o=><option key={o}>{o}</option>)}
@@ -1515,9 +1562,16 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
         <Field label="Emergency Contact Name"><input maxLength={100} value={form.emergencyContact} onChange={f('emergencyContact')} className="input"/></Field>
         <Field label="Emergency Phone"><input type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={15} value={form.emergencyPhone} onChange={phone('emergencyPhone')} className="input"/></Field>
         <Field label="Home Address"><input value={form.address} onChange={f('address')} className="input"/></Field>
-        <Field label="Photo Consent">
-          <select value={form.photoConsent} onChange={f('photoConsent')} className="input"><option>Yes</option><option>No</option></select>
-        </Field>
+        <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 cursor-pointer">
+          <span className="flex items-center gap-2 text-sm font-medium text-gray-700"><MessageCircle size={16} className="text-green-600" /> WhatsApp group member</span>
+          <input
+            type="checkbox"
+            checked={form.whatsappGroup === 'Yes'}
+            onChange={event => setForm({ ...form, whatsappGroup: event.target.checked ? 'Yes' : 'No' })}
+            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+            aria-label="WhatsApp group member"
+          />
+        </label>
         <Field label="Notes"><textarea value={form.notes} onChange={f('notes')} className="input" rows={2}/></Field>
       </Section>
     </div>

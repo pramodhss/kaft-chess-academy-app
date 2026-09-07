@@ -146,6 +146,7 @@ export async function parseExcelOrCsvFile(file: File | Blob | ArrayBuffer | Uint
       emergencyContact: parentName,
       emergencyPhone: phone,
       address: 'Tamil Nadu, India',
+      whatsappGroup: 'Yes',
       photoConsent: 'Yes',
       notes: cleanString(findKey(/notes/i, /achievement/i, /verification/i)),
       school: school || 'Local School',

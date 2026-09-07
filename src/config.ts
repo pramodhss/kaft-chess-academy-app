@@ -3,6 +3,7 @@ const FALLBACK_GOOGLE_CLIENT_ID = '16060935138-l3bdagved67grnreahq96fbmjge7pamu.
 
 export const SHEET_ID = import.meta.env.VITE_SHEET_ID ?? FALLBACK_SHEET_ID;
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? FALLBACK_GOOGLE_CLIENT_ID;
+export const WHATSAPP_GROUP_URL = import.meta.env.VITE_WHATSAPP_GROUP_URL ?? 'https://chat.whatsapp.com/G0CMQKsQXj3KTvE0ycBNMF';
 export const SCOPES         = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
 export const TABS = {

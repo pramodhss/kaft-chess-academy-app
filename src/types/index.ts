@@ -17,6 +17,7 @@ export interface Student {
   emergencyContact: string;
   emergencyPhone: string;
   address: string;
+  whatsappGroup: string;
   photoConsent: string;
   thisMonthAttended: string;
   notes: string;

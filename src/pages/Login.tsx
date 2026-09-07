@@ -29,9 +29,10 @@ export function Login() {
           type="button"
           onClick={login}
           disabled={noClientId}
-          className="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200
-                     hover:border-chess-blue hover:bg-chess-light text-gray-700 font-semibold
-                     py-3 px-4 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Sign in with Google"
+          className="login-signin-button w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-300
+                     hover:border-chess-blue hover:bg-chess-light text-gray-900 font-bold
+                     py-3 px-4 rounded-lg shadow-md transition-all disabled:opacity-100 disabled:cursor-not-allowed"
         >
           <svg width="20" height="20" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>

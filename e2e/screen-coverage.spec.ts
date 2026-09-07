@@ -75,6 +75,16 @@ test.describe('screen-by-screen end-to-end coverage', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
+  test('Students: detail Back button returns to the roster without changing data', async ({ page, sheets }) => {
+    void sheets;
+    await assertHealthyScreen(page, '#/students');
+    await page.getByRole('button', { name: /Aarav Kumar/ }).first().click();
+    await expect(page.getByRole('heading', { name: 'Aarav Kumar' })).toBeVisible();
+    await page.getByRole('button', { name: 'Go back' }).click();
+    await expect(page.getByRole('heading', { name: 'Students' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Aarav Kumar/ }).first()).toBeVisible();
+  });
+
   test('Attendance: date dialog opens and can be cancelled', async ({ page, sheets }) => {
     void sheets;
     await assertHealthyScreen(page, '#/attendance');
@@ -163,6 +173,7 @@ test.describe('screen-by-screen end-to-end coverage', () => {
   test('Online Chess: ID roster filters and inline fields are available', async ({ page, sheets }) => {
     void sheets;
     await assertHealthyScreen(page, '#/online-chess');
+    await page.getByRole('button', { name: 'Open online ID roster' }).click();
     await expect(page.getByRole('heading', { name: 'Add online chess IDs' })).toBeVisible();
     await expect(page.getByLabel('Filter online IDs by batch')).toBeVisible();
     await expect(page.getByLabel('Filter online IDs by school')).toBeVisible();

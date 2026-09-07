@@ -21,6 +21,7 @@ const baseStudent: Student = {
   emergencyContact: '',
   emergencyPhone: '',
   address: '',
+  whatsappGroup: 'Yes',
   photoConsent: 'Yes',
   thisMonthAttended: '8',
   notes: '',

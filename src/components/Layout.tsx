@@ -27,7 +27,17 @@ export function Layout({ title, children, action, showBack, onBack, hideMobileHe
   const mainRef = useRef<HTMLElement>(null);
   const displayBack = showBack ?? location.pathname !== '/';
   const { coachName: coach } = useCoachName();
-  const handleBack = () => onBack ? onBack() : navigate(-1);
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/');
+  };
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       mainRef.current?.scrollTo({ top: routeScrollPositions.get(location.pathname) ?? 0 });

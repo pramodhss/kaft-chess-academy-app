@@ -495,7 +495,7 @@ function AssignSchoolToStudents({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search students…"
-              className="input pl-8 text-xs w-full"
+              className="input input-with-icon text-xs w-full"
               aria-label="Search students to assign school"
             />
           </div>

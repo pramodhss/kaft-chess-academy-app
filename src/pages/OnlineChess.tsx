@@ -12,6 +12,7 @@ import {
   Save,
   Search,
   Trophy,
+  UsersRound,
   UserRound,
   X,
 } from "lucide-react";
@@ -113,6 +114,7 @@ export function OnlineChess() {
   const [rosterSchool, setRosterSchool] = useState("all");
   const [rosterCoach, setRosterCoach] = useState("all");
   const [rosterLinkStatus, setRosterLinkStatus] = useState<"all" | "linked" | "unlinked">("all");
+  const [showRoster, setShowRoster] = useState(false);
   const [rosterDrafts, setRosterDrafts] = useState<Record<number, { chessComUsername: string; lichessUsername: string }>>({});
   const [savingRosterRow, setSavingRosterRow] = useState<number | null>(null);
 
@@ -371,9 +373,23 @@ export function OnlineChess() {
               <p className="online-directory-eyebrow text-xs uppercase tracking-wide font-bold">
                 Player directory
               </p>
-              <h2 className="text-xl font-bold text-navy dark:text-gray-100">
-                Online Chess IDs
-              </h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xl font-bold text-navy dark:text-gray-100">
+                  Online Chess IDs
+                </h2>
+                <button
+                  type="button"
+                  className="secondary-action shrink-0 py-1.5 px-2.5 text-xs"
+                  onClick={() => setShowRoster((value) => !value)}
+                  aria-expanded={showRoster}
+                  aria-controls="online-id-roster"
+                  aria-label={showRoster ? "Close online ID roster" : "Open online ID roster"}
+                  title={showRoster ? "Hide online ID roster" : "Open online ID roster"}
+                >
+                  <UsersRound size={14} />
+                  <span className="hidden sm:inline">{showRoster ? "Hide roster" : "Open roster"}</span>
+                </button>
+              </div>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Open a student profile, visit either platform, and review online
                 activity.
@@ -386,7 +402,7 @@ export function OnlineChess() {
                 aria-hidden="true"
               />
               <input
-                className="input pl-9"
+                className="input input-with-icon"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search students or IDs"
@@ -423,7 +439,7 @@ export function OnlineChess() {
           </div>
         </section>
 
-        <section className="surface-card p-4 md:p-5">
+        {showRoster && <section id="online-id-roster" className="surface-card p-4 md:p-5">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
             <div>
               <p className="online-directory-eyebrow text-xs uppercase tracking-wide font-bold">
@@ -439,7 +455,7 @@ export function OnlineChess() {
             <label className="relative w-full lg:w-80">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
               <input
-                className="input pl-9"
+                className="input input-with-icon"
                 value={rosterSearch}
                 onChange={(event) => setRosterSearch(event.target.value)}
                 placeholder="Search roster"
@@ -481,12 +497,10 @@ export function OnlineChess() {
             </label>
           </div>
           <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[600px] text-sm">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-800/60 dark:text-gray-400">
                 <tr>
                   <th className="px-3 py-3">Student</th>
-                  <th className="px-3 py-3">Batch</th>
-                  <th className="px-3 py-3">School</th>
                   <th className="px-3 py-3">Chess.com ID</th>
                   <th className="px-3 py-3">Lichess.com ID</th>
                   <th className="px-3 py-3 text-right">Action</th>
@@ -507,8 +521,6 @@ export function OnlineChess() {
                         </button>
                         {student.coachName && <span className="block text-xs text-gray-500">{student.coachName}</span>}
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-500">{student.batch || "—"}</td>
-                      <td className="px-3 py-2 text-xs text-gray-500">{student.school || student.grade || "—"}</td>
                       <td className="px-3 py-2">
                         <input
                           className="input min-w-[150px] py-1.5 text-xs"
@@ -549,7 +561,7 @@ export function OnlineChess() {
             {rosterStudents.length === 0 && <p className="p-6 text-center text-sm text-gray-500">No active students match these filters.</p>}
           </div>
           <p className="mt-2 text-xs text-gray-500">Showing {rosterStudents.length} of {activeStudents.length} active students.</p>
-        </section>
+        </section>}
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {visibleStudents.map((student) => (

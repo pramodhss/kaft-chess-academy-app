@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, BookOpen, CalendarCheck, CheckCircle2, ChevronRight, ClipboardCheck, Clock3, FileWarning, MapPin, MessageCircle, RefreshCw, SlidersHorizontal, Trophy, UserRound, Users, Wallet } from 'lucide-react';
+import { AlertCircle, BookOpen, CalendarCheck, CheckCircle2, ChevronRight, Clock3, FileWarning, MapPin, MessageCircle, RefreshCw, SlidersHorizontal, Trophy, UserRound, Users, Wallet } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -88,7 +88,6 @@ export function Dashboard() {
   const [birthdays, setBirthdays] = useState<{ name: string; dob: string; daysLeft: number }[]>([]);
   const [classes, setClasses] = useState<ReturnType<typeof upcomingClasses>>([]);
   const [overdueCount, setOverdueCount] = useState(0);
-  const [attendanceRiskCount, setAttendanceRiskCount] = useState(0);
   const [feeIssueCount, setFeeIssueCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -101,11 +100,10 @@ export function Dashboard() {
     if (isBackgroundSync) setSyncing(true); else setLoading(true);
     setError('');
     try {
-      const [studentRows, feeRows, timetableRows, attendanceRows] = await Promise.all([
+      const [studentRows, feeRows, timetableRows] = await Promise.all([
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`),
         readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
         readSheet(token, SHEET_ID, `'${TABS.TIMETABLE}'!A:M`).catch(() => []),
-        readSheet(token, SHEET_ID, `'${TABS.MONTHLY_ATT}'!A:E`).catch(() => []),
       ]);
       const allStudentNames = uniqueStudentNames(studentRows);
       const activeStudentNames = uniqueStudentNames(studentRows, true);
@@ -129,15 +127,6 @@ export function Dashboard() {
         if (name && balance > 0) overdueMap.set(name, (overdueMap.get(name) ?? 0) + balance);
       });
       setOverdueCount(overdueMap.size);
-      const activeNames = new Set(activeStudentNames.map(name => name.toLowerCase()));
-      const attendanceRisk = new Set<string>();
-      attendanceRows.slice(1).forEach(row => {
-        const name = (row[0] ?? '').trim().toLowerCase();
-        const scheduled = Number.parseInt(row[3] ?? '0', 10) || 0;
-        const attended = Number.parseInt(row[2] ?? '0', 10) || 0;
-        if (name && activeNames.has(name) && scheduled >= 2 && attended === 0) attendanceRisk.add(name);
-      });
-      setAttendanceRiskCount(attendanceRisk.size);
       const feeKeys = new Set<string>();
       let feeIssues = 0;
       feeRows.slice(1).forEach(row => {
@@ -180,7 +169,6 @@ export function Dashboard() {
     });
     const actions: DashboardAction[] = [
       ...(overdueCount > 0 ? [{ id: 'fees', title: 'Send fee reminders', detail: 'Accounts still have a balance this month', count: overdueCount, tone: 'amber' as const, Icon: MessageCircle, to: '/operations' }] : []),
-      ...(attendanceRiskCount > 0 ? [{ id: 'attendance', title: 'Review attendance risk', detail: 'Active students have missed every recorded class', count: attendanceRiskCount, tone: 'red' as const, Icon: ClipboardCheck, to: '/attendance' }] : []),
       ...(feeIssueCount > 0 ? [{ id: 'quality', title: 'Resolve fee data issues', detail: 'Duplicate or inconsistent fee records need review', count: feeIssueCount, tone: 'blue' as const, Icon: FileWarning, to: '/operations' }] : []),
     ];
     content = (

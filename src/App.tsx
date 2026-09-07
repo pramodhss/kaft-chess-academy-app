@@ -67,12 +67,20 @@ function AppRoutes() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    const timer = window.setTimeout(() => {
+    const preload = () => {
       void Promise.allSettled([
         loadDashboard(), loadStudents(), loadAttendance(), loadFees(), loadVan(), loadTimetable(), loadMore(),
       ]);
-    }, 1_000);
-    return () => window.clearTimeout(timer);
+    };
+    let cancelPreload: () => void;
+    if ('requestIdleCallback' in window) {
+      const idleWindow = window.requestIdleCallback(preload, { timeout: 1_500 });
+      cancelPreload = () => window.cancelIdleCallback(idleWindow);
+    } else {
+      const timeout = globalThis.setTimeout(preload, 250);
+      cancelPreload = () => globalThis.clearTimeout(timeout);
+    }
+    return cancelPreload;
   }, [isLoggedIn]);
 
   if (location.pathname === '/parent') {
