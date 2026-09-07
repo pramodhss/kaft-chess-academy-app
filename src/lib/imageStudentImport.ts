@@ -39,7 +39,7 @@ function cleanValue(value: string): string {
   return value.replace(/[|]/g, 'I').replace(/\s+/g, ' ').trim();
 }
 
-export function parseStudentDetailsText(text: string): ImageStudentFields {
+function parseStudentDetailsText(text: string): ImageStudentFields {
   const fields: ImageStudentFields = {};
   text.split(/\r?\n/).map(cleanValue).filter(Boolean).forEach((line) => {
     const match = LABELS.find(([, pattern]) => pattern.test(line));
