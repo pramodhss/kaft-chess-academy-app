@@ -4,6 +4,7 @@ import {
   DEFAULT_COACHES,
   bulkAssignSchoolToStudents,
   loadStudentOptions,
+  renameStudentsForSchoolChanges,
   saveBatchCoachAssignments,
   saveStudentOptionList,
   syncBatchCoachesToStudents,
@@ -138,6 +139,36 @@ describe('studentOptions', () => {
       [
         { range: "'Students & Parents'!V2", values: [['Greenwood International School']] },
         { range: "'Students & Parents'!V3", values: [['Greenwood International School']] },
+      ],
+    );
+  });
+
+  it('renames schools in both dedicated and legacy grade/school fields', async () => {
+    const batchWriteSpy = vi.spyOn(sheets, 'batchWriteRanges').mockResolvedValue({} as any);
+    vi.spyOn(sheets, 'readSheetLive').mockResolvedValue([
+      ['Full Name', 'DOB', 'Age', 'Gender', 'Grade / School', 'Batch', 'Level', 'Joining Date', 'Status',
+       'Parent Name', 'Parent Phone', 'Parent WhatsApp', 'Parent Email', 'Parent 2 Name', 'Parent 2 Phone',
+       'Emergency Contact', 'Emergency Phone', 'Address', 'Photo Consent', 'This Month Attended', 'Notes',
+       'School', 'Standard', 'TNSCA ID', 'FIDE ID', 'AICF ID', 'Classical Rating', 'Rapid Rating',
+       'Blitz Rating', 'Coach Name', 'Chess.com Username', 'Lichess Username', 'Photo URL'],
+      ['Aarav Kumar', '', '', '', '6th, Venus', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+       'Venus', '', '', '', '', '', '', '', '', '', '', ''],
+    ]);
+
+    const updatedCount = await renameStudentsForSchoolChanges(
+      'fake-token',
+      'fake-sheet',
+      ['Lakeview School', 'Venus'],
+      ['Lakeview School', 'Venus Matriculation'],
+    );
+
+    expect(updatedCount).toBe(2);
+    expect(batchWriteSpy).toHaveBeenCalledWith(
+      'fake-token',
+      'fake-sheet',
+      [
+        { range: "'Students & Parents'!V2", values: [['Venus Matriculation']] },
+        { range: "'Students & Parents'!E2", values: [['6th, Venus Matriculation']] },
       ],
     );
   });

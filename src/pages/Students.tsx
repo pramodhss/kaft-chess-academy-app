@@ -870,7 +870,7 @@ export function Students() {
 
   const availableSchools = useMemo(() => {
     const unique = new Map<string, string>();
-    [...schools, ...students.map(s => s.school.trim())].filter(Boolean).forEach(school => {
+    schools.filter(Boolean).forEach(school => {
       const key = school.toLocaleLowerCase();
       if (!unique.has(key)) unique.set(key, school);
     });

@@ -67,6 +67,12 @@ test.describe('UI & Fees Fixes Validation', () => {
 
     await expect(page.getByText('School list updated successfully.')).toBeVisible();
     expect(sheets.workbook['Students & Parents'][1][21]).toBe('Venus Matriculation');
+
+    await openApp(page, '#/students');
+    await page.getByRole('button', { name: 'Add student' }).click();
+    const schoolDropdown = page.getByRole('dialog').getByLabel('School dropdown');
+    await expect(schoolDropdown.locator('option', { hasText: 'Venus Matriculation' })).toHaveCount(1);
+    await expect(schoolDropdown.getByRole('option', { name: 'Venus', exact: true })).toHaveCount(0);
   });
 
   test('Fees Page: Balance display updates after clearing collected fees', async ({ page }) => {

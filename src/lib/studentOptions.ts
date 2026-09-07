@@ -148,7 +148,9 @@ export async function renameStudentsForSchoolChanges(
   const studentRows = await readSheetLive(token, sheetId, `'${TABS.STUDENTS}'!A:AG`);
   if (studentRows.length <= 1) return 0;
   const headerMap = createHeaderMap(studentRows[0]);
+  const gradeColumnIndex = headerMap['grade / school'] ?? headerMap['grade'] ?? headerMap['class'] ?? 4;
   const schoolColumnIndex = headerMap['school'] ?? headerMap['school name'] ?? 21;
+  const gradeColumn = getColumnLetter(gradeColumnIndex);
   const schoolColumn = getColumnLetter(schoolColumnIndex);
   const renames = new Map(changedValues.map(({ oldValue, newValue }) => [oldValue.toLocaleLowerCase(), newValue]));
   const updates: { range: string; values: string[][] }[] = [];
@@ -161,6 +163,26 @@ export async function renameStudentsForSchoolChanges(
         range: `'${TABS.STUDENTS}'!${schoolColumn}${index + 2}`,
         values: [[replacement]],
       });
+    }
+
+    const currentGradeOrSchool = (row[gradeColumnIndex] ?? '').trim();
+    const matchingRename = [...renames.entries()].find(([oldValue]) => {
+      if (!currentGradeOrSchool) return false;
+      return currentGradeOrSchool.toLocaleLowerCase() === oldValue
+        || currentGradeOrSchool.split(',').some(part => part.trim().toLocaleLowerCase() === oldValue);
+    });
+    if (matchingRename) {
+      const [oldValue, nextValue] = matchingRename;
+      const updatedGradeOrSchool = currentGradeOrSchool
+        .split(',')
+        .map(part => part.trim().toLocaleLowerCase() === oldValue ? nextValue : part.trim())
+        .join(', ');
+      if (updatedGradeOrSchool !== currentGradeOrSchool) {
+        updates.push({
+          range: `'${TABS.STUDENTS}'!${gradeColumn}${index + 2}`,
+          values: [[updatedGradeOrSchool]],
+        });
+      }
     }
   });
   if (updates.length > 0) {
