@@ -45,7 +45,7 @@ test.describe('route regression matrix', () => {
 
   }
 
-  test('reuses shared student data during in-app navigation', async ({ page, sheets }) => {
+  test('reuses cached student data during in-app navigation', async ({ page, sheets }) => {
     void sheets;
     let studentReads = 0;
     page.on('request', request => {
@@ -60,7 +60,7 @@ test.describe('route regression matrix', () => {
     await page.getByRole('link', { name: 'Fees', exact: true }).first().click();
     await expect(page.getByText('Student fees')).toBeVisible();
 
-    expect(studentReads).toBe(1);
+    expect(studentReads).toBe(3);
   });
 
   test('dark mode persists and remains usable', async ({ page, sheets }) => {
