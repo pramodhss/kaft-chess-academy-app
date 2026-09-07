@@ -436,7 +436,10 @@ async function addStudent(deps: Readonly<{
       toast.error('A student with this name already exists. Use a distinct name before saving.');
       return;
     }
-    await ensureStudentSchema(token);
+    if (!schemaCheckedForToken.has(token)) {
+      await ensureStudentSchema(token);
+      schemaCheckedForToken.add(token);
+    }
     rowIndex = await appendRows(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`, [[
       form.name, form.dob, '=IF(INDEX(B:B,ROW())="","",DATEDIF(INDEX(B:B,ROW()),TODAY(),"Y"))',
       form.gender, form.grade, form.batch, form.level,
@@ -1537,17 +1540,22 @@ function StudentForm({ form, setForm, batches, schoolOptions = [], coachOptions 
       {/* Academic */}
       <Section title="School &amp; Academic">
         <Field label="School Name">
+          <select
+            value={schoolOptions.includes(form.school) ? form.school : ''}
+            onChange={f('school')}
+            className="input mb-2"
+            aria-label="School dropdown"
+          >
+            <option value="">Select a school or type below...</option>
+            {schoolOptions.filter(Boolean).map(school => <option key={school} value={school}>{school}</option>)}
+          </select>
           <input
             value={form.school}
             onChange={f('school')}
             className="input"
-            list="student-school-options"
-            placeholder="Select or type a school"
+            placeholder="Type a school name"
             aria-label="School Name"
           />
-          <datalist id="student-school-options">
-            {schoolOptions.filter(Boolean).map(school => <option key={school} value={school} />)}
-          </datalist>
         </Field>
         <Field label="Standard / Class (auto-filled from DOB, editable)">
           <select value={form.standard} onChange={f('standard')} className="input">

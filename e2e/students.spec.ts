@@ -28,7 +28,11 @@ test('adds a validated student and synchronizes the attendance roster', async ({
   await dialog.getByLabel('AICF ID').fill('AICF200');
   await dialog.getByLabel('Chess.com Username').fill('ishaan_rook');
   await dialog.getByLabel('Lichess Username').fill('ishaan-knight');
-  await dialog.getByLabel('School Name').fill('Lakeview School');
+  await dialog.getByLabel('School dropdown').selectOption('Lakeview School');
+  await expect(dialog.getByLabel('School Name')).toHaveValue('Lakeview School');
+  await dialog.getByLabel('School Name').fill('Typed School');
+  await expect(dialog.getByLabel('School Name')).toHaveValue('Typed School');
+  await dialog.getByLabel('School dropdown').selectOption('Lakeview School');
   await dialog.getByLabel('Standard / Class').selectOption('5th');
   await dialog.getByLabel('Emergency Contact Name').fill('Rohan Rao');
   await dialog.getByLabel('Emergency Phone').fill('9955443322');
