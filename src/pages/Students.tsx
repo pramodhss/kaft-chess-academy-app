@@ -399,7 +399,7 @@ async function loadStudents(deps: Readonly<{
     }
     const [rows, options, registrationRows, weeklyRows] = await Promise.all([
       loadStudentRows(token),
-      loadStudentOptions(token, SHEET_ID),
+      loadStudentOptions(token, SHEET_ID, true),
       readSheet(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A:J`).catch(() => []),
       readSheet(token, SHEET_ID, `'${TABS.WEEKLY_ONLINE_TOURNAMENTS}'!A:N`).catch(() => []),
     ]);
@@ -869,7 +869,7 @@ export function Students() {
   });
 
   const availableSchools = useMemo(() => {
-    return Array.from(new Set([...schools, ...students.map(s => (s.school || s.grade).trim())].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    return Array.from(new Set([...schools, ...students.map(s => s.school.trim())].filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [schools, students]);
 
   const activeFilterCount = selectedBatches.length + selectedCategories.length + selectedCoaches.length + selectedSchools.length + selectedStatuses.length;
