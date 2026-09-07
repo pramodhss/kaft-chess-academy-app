@@ -14,6 +14,7 @@ import {
   bulkAssignSchoolToStudents,
   ensureStudentOptionsSheet,
   loadStudentOptions,
+  renameStudentsForSchoolChanges,
   saveBatchCoachAssignments,
   saveStudentOptionList,
   syncBatchCoachesToStudents,
@@ -75,6 +76,9 @@ export function AdminSettings() {
     const target = key === 'student_batches' ? options.batches : key === 'student_coaches' ? options.coaches : options.schools;
     const label = key === 'student_batches' ? 'Student batches' : key === 'student_coaches' ? 'Coaches list' : 'School list';
     try {
+      const previousValues = key === 'student_schools'
+        ? (await loadStudentOptions(token, SHEET_ID, true)).schools.values
+        : [];
       const result = await saveStudentOptionList(
         token,
         SHEET_ID,
@@ -83,6 +87,9 @@ export function AdminSettings() {
         target.version,
         coachName || 'Admin',
       );
+      if (key === 'student_schools') {
+        await renameStudentsForSchoolChanges(token, SHEET_ID, previousValues, result.latest.values);
+      }
       const latestOptions = await loadStudentOptions(token, SHEET_ID, true);
       setOptions(latestOptions);
       if (result.concurrentUpdate) {

@@ -869,7 +869,12 @@ export function Students() {
   });
 
   const availableSchools = useMemo(() => {
-    return Array.from(new Set([...schools, ...students.map(s => s.school.trim())].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const unique = new Map<string, string>();
+    [...schools, ...students.map(s => s.school.trim())].filter(Boolean).forEach(school => {
+      const key = school.toLocaleLowerCase();
+      if (!unique.has(key)) unique.set(key, school);
+    });
+    return [...unique.values()].sort((a, b) => a.localeCompare(b));
   }, [schools, students]);
 
   const activeFilterCount = selectedBatches.length + selectedCategories.length + selectedCoaches.length + selectedSchools.length + selectedStatuses.length;

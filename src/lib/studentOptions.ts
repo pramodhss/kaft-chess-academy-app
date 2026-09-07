@@ -129,6 +129,47 @@ export async function saveStudentOptionList(
   return { latest, concurrentUpdate: competingUpdates.length > 1 || latest.version !== version };
 }
 
+export async function renameStudentsForSchoolChanges(
+  token: string,
+  sheetId: string,
+  previousValues: string[],
+  nextValues: string[],
+): Promise<number> {
+  const previousKeys = new Set(previousValues.map(value => value.trim().toLocaleLowerCase()).filter(Boolean));
+  const nextKeys = new Set(nextValues.map(value => value.trim().toLocaleLowerCase()).filter(Boolean));
+  const changedValues = previousValues
+    .map((value, index) => ({ oldValue: value.trim(), newValue: nextValues[index]?.trim() ?? '' }))
+    .filter(({ oldValue, newValue }) => oldValue && newValue
+      && oldValue.toLocaleLowerCase() !== newValue.toLocaleLowerCase()
+      && !nextKeys.has(oldValue.toLocaleLowerCase())
+      && !previousKeys.has(newValue.toLocaleLowerCase()));
+  if (changedValues.length === 0) return 0;
+
+  const studentRows = await readSheetLive(token, sheetId, `'${TABS.STUDENTS}'!A:AG`);
+  if (studentRows.length <= 1) return 0;
+  const headerMap = createHeaderMap(studentRows[0]);
+  const schoolColumnIndex = headerMap['school'] ?? headerMap['school name'] ?? 21;
+  const schoolColumn = getColumnLetter(schoolColumnIndex);
+  const renames = new Map(changedValues.map(({ oldValue, newValue }) => [oldValue.toLocaleLowerCase(), newValue]));
+  const updates: { range: string; values: string[][] }[] = [];
+
+  studentRows.slice(1).forEach((row, index) => {
+    const currentSchool = (row[schoolColumnIndex] ?? '').trim();
+    const replacement = renames.get(currentSchool.toLocaleLowerCase());
+    if (replacement && replacement !== currentSchool) {
+      updates.push({
+        range: `'${TABS.STUDENTS}'!${schoolColumn}${index + 2}`,
+        values: [[replacement]],
+      });
+    }
+  });
+  if (updates.length > 0) {
+    await batchWriteRanges(token, sheetId, updates);
+    clearSheetReadCache(sheetId);
+  }
+  return updates.length;
+}
+
 export async function saveBatchCoachAssignments(
   token: string,
   sheetId: string,

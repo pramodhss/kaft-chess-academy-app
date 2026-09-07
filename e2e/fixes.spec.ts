@@ -57,6 +57,18 @@ test.describe('UI & Fees Fixes Validation', () => {
     console.log('✓ Admin Settings - Bulk clear fees feature is present and validation works');
   });
 
+  test('Admin Settings: renaming a school updates matching student profiles', async ({ page, sheets }) => {
+    sheets.workbook['Students & Parents'][1][21] = 'Venus';
+    sheets.workbook['App Settings'][3][1] = '["Lakeview School", "Venus", "Oxford"]';
+    await openApp(page, '#/admin-settings');
+
+    await page.getByLabel('School Values option 2').fill('Venus Matriculation');
+    await page.getByRole('button', { name: 'Save School Values' }).click();
+
+    await expect(page.getByText('School list updated successfully.')).toBeVisible();
+    expect(sheets.workbook['Students & Parents'][1][21]).toBe('Venus Matriculation');
+  });
+
   test('Fees Page: Balance display updates after clearing collected fees', async ({ page }) => {
     await openApp(page, '#/fees');
     
