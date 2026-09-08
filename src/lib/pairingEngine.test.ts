@@ -73,4 +73,30 @@ describe('pairingEngine', () => {
     const byeBoard = round1.find(board => board.black === null)!;
     expect(history.points[byeBoard.white]).toBe(1);
   });
+
+  it('pairs players in the same score group when the group is available', () => {
+    const four = players.slice(0, 4);
+    let history = createInitialHistory(four);
+    const round1 = generateNextRound(four, history, 1);
+    history = applyRoundResults(history, round1.map(board => ({ ...board, result: '1-0' as const })));
+
+    const round2 = generateNextRound(four, history, 2);
+    expect(round2.map(board => [board.white, board.black].sort().join('|'))).toEqual([
+      'Aarav|Bala',
+      'Chitra|Deepa',
+    ]);
+  });
+
+  it('calculates Buchholz and Sonneborn-Berger from completed results', () => {
+    let history = createInitialHistory(players.slice(0, 4));
+    const round = generateNextRound(players.slice(0, 4), history, 1);
+    history = applyRoundResults(history, round.map(board => ({
+      ...board,
+      result: board.white === 'Aarav' ? '1-0' as const : '1/2-1/2' as const,
+    })));
+
+    const aarav = computeStandings(players.slice(0, 4), history).find(row => row.name === 'Aarav')!;
+    expect(aarav.buchholz).toBe(0);
+    expect(aarav.sonnebornBerger).toBe(0);
+  });
 });

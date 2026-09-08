@@ -92,6 +92,8 @@ export function MiniTournament() {
   const [mode, setMode] = useState<"individual" | "team">("individual");
   const [teamSize, setTeamSize] = useState(2);
   const [ratingMode, setRatingMode] = useState<"rated" | "casual">("rated");
+  const [format, setFormat] = useState<"practical" | "swiss">("swiss");
+  const [totalRounds, setTotalRounds] = useState(3);
   const [sessionFilter, setSessionFilter] = useState<"active" | "archive">(
     "active",
   );
@@ -235,6 +237,8 @@ export function MiniTournament() {
         mode,
         teamSize,
         ratingMode,
+        format,
+        totalRounds,
         participants,
         rounds: [firstRound],
       };
@@ -253,6 +257,8 @@ export function MiniTournament() {
       setBatchFilter("all");
       setMode("individual");
       setRatingMode("rated");
+      setFormat("swiss");
+      setTotalRounds(3);
       toast.success("Mini tournament created. Round 1 pairings are ready.");
     } catch (error: any) {
       if (error.message === "TOKEN_EXPIRED") return;
@@ -291,6 +297,10 @@ export function MiniTournament() {
 
   const startNextRound = async () => {
     if (!activeSession || !history || !currentRound) return;
+    if (activeSession.rounds.length >= activeSession.totalRounds) {
+      await finishTournament();
+      return;
+    }
     setSavingRound(true);
     try {
       const nextRound = generateNextRound(
@@ -576,6 +586,31 @@ export function MiniTournament() {
                     <option value="casual">Casual (ratings optional)</option>
                   </select>
                 </label>
+                <label className="text-xs font-semibold sm:order-3">
+                  Pairing system
+                  <select
+                    className="input mt-1"
+                    value={format}
+                    onChange={(event) => setFormat(event.target.value as "practical" | "swiss")}
+                    aria-label="Pairing system"
+                  >
+                    <option value="swiss">Swiss (score groups)</option>
+                    <option value="practical">Practical pairing</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold sm:order-4">
+                  Total rounds
+                  <select
+                    className="input mt-1"
+                    value={totalRounds}
+                    onChange={(event) => setTotalRounds(Number(event.target.value))}
+                    aria-label="Total rounds"
+                  >
+                    {[3, 4, 5, 6, 7].map((roundCount) => (
+                      <option key={roundCount} value={roundCount}>{roundCount} rounds</option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <p className="text-xs font-semibold mb-2">
                 Select participants ({selectedNames.length} selected)
@@ -728,6 +763,8 @@ export function MiniTournament() {
                       onClick={() => {
                         setName(activeSession.name);
                         setRatingMode(activeSession.ratingMode);
+                        setFormat(activeSession.format);
+                        setTotalRounds(activeSession.totalRounds);
                         setEditingSession(true);
                       }}
                     >
@@ -815,7 +852,7 @@ export function MiniTournament() {
                     onClick={requestNextRound}
                   >
                     <ChevronRight size={16} />
-                    Next round
+                    {activeSession.rounds.length >= activeSession.totalRounds ? "Finish tournament" : "Next round"}
                   </button>
                 </div>
               )}
@@ -831,6 +868,8 @@ export function MiniTournament() {
                       <th className="pb-2">Player</th>
                       <th className="pb-2">Rating</th>
                       <th className="pb-2">Points</th>
+                      <th className="pb-2">Buchholz</th>
+                      <th className="pb-2">SB</th>
                       <th className="pb-2">Games</th>
                     </tr>
                   </thead>
@@ -846,6 +885,8 @@ export function MiniTournament() {
                           {activeSession.ratingMode === "casual" ? "—" : row.rating}
                         </td>
                         <td className="py-1.5 font-bold">{row.points}</td>
+                        <td className="py-1.5">{row.buchholz}</td>
+                        <td className="py-1.5">{row.sonnebornBerger}</td>
                         <td className="py-1.5">{row.games}</td>
                       </tr>
                     ))}

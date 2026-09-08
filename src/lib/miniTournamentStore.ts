@@ -10,12 +10,14 @@ export interface MiniTournamentSession {
   mode: 'individual' | 'team';
   teamSize: number;
   ratingMode: 'rated' | 'casual';
+  format: 'practical' | 'swiss';
+  totalRounds: number;
   participants: PairingParticipant[];
   rounds: BoardPairing[][];
   rowIndex: number;
 }
 
-const HEADERS = ['Session ID', 'Name', 'Date', 'Status', 'Participants JSON', 'Rounds JSON', 'Created By', 'Updated At', 'Mode', 'Team Size', 'Rating Mode'];
+const HEADERS = ['Session ID', 'Name', 'Date', 'Status', 'Participants JSON', 'Rounds JSON', 'Created By', 'Updated At', 'Mode', 'Team Size', 'Rating Mode', 'Format', 'Total Rounds'];
 
 function safeParseArray<T>(value: string | undefined): T[] {
   if (!value) return [];
@@ -36,6 +38,8 @@ function rowToSession(row: string[], rowIndex: number): MiniTournamentSession {
     mode: row[8] === 'team' ? 'team' : 'individual',
     teamSize: Number(row[9]) || 2,
     ratingMode: row[10] === 'casual' ? 'casual' : 'rated',
+    format: row[11] === 'swiss' ? 'swiss' : 'practical',
+    totalRounds: Math.max(1, Number(row[12]) || 3),
     participants: safeParseArray<PairingParticipant>(row[4]),
     rounds: safeParseArray<BoardPairing[]>(row[5]),
     rowIndex,
@@ -45,15 +49,15 @@ function rowToSession(row: string[], rowIndex: number): MiniTournamentSession {
 export async function ensureMiniTournamentSheet(token: string, sheetId: string): Promise<void> {
   await ensureSheet(token, sheetId, TABS.MINI_TOURNAMENTS, HEADERS);
   await ensureSheetColumns(token, sheetId, TABS.MINI_TOURNAMENTS, HEADERS.length);
-  const header = await readSheetLive(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!K1:K1`);
-  if (!header[0]?.[0]) {
-    await writeRange(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!K1`, [['Rating Mode']]);
+  const header = await readSheetLive(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!K1:M1`);
+  if (!header[0]?.[0] || !header[0]?.[1] || !header[0]?.[2]) {
+    await writeRange(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!K1:M1`, [['Rating Mode', 'Format', 'Total Rounds']]);
   }
 }
 
 export async function loadMiniTournamentSessions(token: string, sheetId: string, live = false): Promise<MiniTournamentSession[]> {
   const read = live ? readSheetLive : readSheet;
-  const rows = await read(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:K`);
+  const rows = await read(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:M`);
   return rows.slice(1).map((row, index) => rowToSession(row, index + 2)).filter(session => session.sessionId);
 }
 
@@ -66,7 +70,7 @@ export async function createMiniTournamentSession(
   const rowIndex = await appendRows(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:K`, [[
     session.sessionId, session.name, session.date, session.status,
     JSON.stringify(session.participants), JSON.stringify(session.rounds),
-    createdBy, new Date().toISOString(), session.mode, session.teamSize, session.ratingMode,
+    createdBy, new Date().toISOString(), session.mode, session.teamSize, session.ratingMode, session.format, session.totalRounds,
   ]]);
   clearSheetReadCache(sheetId);
   return rowIndex;
@@ -75,13 +79,13 @@ export async function createMiniTournamentSession(
 export async function updateMiniTournamentDetails(token: string, sheetId: string, session: MiniTournamentSession): Promise<void> {
   await batchWriteRanges(token, sheetId, [
     { range: `'${TABS.MINI_TOURNAMENTS}'!B${session.rowIndex}:C${session.rowIndex}`, values: [[session.name, session.date]] },
-    { range: `'${TABS.MINI_TOURNAMENTS}'!I${session.rowIndex}:K${session.rowIndex}`, values: [[session.mode, session.teamSize, session.ratingMode]] },
+    { range: `'${TABS.MINI_TOURNAMENTS}'!I${session.rowIndex}:M${session.rowIndex}`, values: [[session.mode, session.teamSize, session.ratingMode, session.format, session.totalRounds]] },
   ]);
   clearSheetReadCache(sheetId);
 }
 
 export async function deleteMiniTournamentSession(token: string, sheetId: string, rowIndex: number): Promise<void> {
-  await clearSheetRange(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A${rowIndex}:K${rowIndex}`);
+  await clearSheetRange(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A${rowIndex}:M${rowIndex}`);
   clearSheetReadCache(sheetId);
 }
 
