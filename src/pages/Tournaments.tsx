@@ -577,7 +577,7 @@ export function Tournaments() {
               group.length > 0 && (
                 <details key={title} className="tournament-collapsible">
                   <summary className="tournament-collapsible-summary">
-                    <span className={`shrink-0 ${badgeClass}`}>{group.length}</span>
+                    <span className={`tournament-count-badge shrink-0 ${badgeClass}`}>{group.length}</span>
                     <span className="min-w-0 flex-1 truncate section-label">{title}</span>
                     <CopyButton text={groupCopyText(title, group)} label={`Copy ${title}`} />
                     <ChevronDown size={15} className="tournament-collapsible-chevron shrink-0" />
