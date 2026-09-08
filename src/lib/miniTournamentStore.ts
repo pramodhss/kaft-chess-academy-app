@@ -1,6 +1,6 @@
 import { TABS } from '../config';
 import { appendRows, batchWriteRanges, clearSheetReadCache, clearSheetRange, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, writeRange } from './sheets';
-import type { BoardPairing, PairingParticipant } from './pairingEngine';
+import { applyRoundResults, createInitialHistory, type BoardPairing, type PairingHistory, type PairingParticipant } from './pairingEngine';
 
 export interface MiniTournamentSession {
   sessionId: string;
@@ -15,6 +15,17 @@ export interface MiniTournamentSession {
   participants: PairingParticipant[];
   rounds: BoardPairing[][];
   rowIndex: number;
+}
+
+export function historyFromSession(session: MiniTournamentSession): PairingHistory {
+  let history = createInitialHistory(session.participants);
+  session.rounds.forEach((round) => {
+    const complete = round.every(
+      (board) => board.black === null || board.result,
+    );
+    if (complete) history = applyRoundResults(history, round);
+  });
+  return history;
 }
 
 const HEADERS = ['Session ID', 'Name', 'Date', 'Status', 'Participants JSON', 'Rounds JSON', 'Created By', 'Updated At', 'Mode', 'Team Size', 'Rating Mode', 'Format', 'Total Rounds'];
@@ -67,7 +78,7 @@ export async function createMiniTournamentSession(
   session: Omit<MiniTournamentSession, 'rowIndex'>,
   createdBy: string,
 ): Promise<number> {
-  const rowIndex = await appendRows(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:K`, [[
+  const rowIndex = await appendRows(token, sheetId, `'${TABS.MINI_TOURNAMENTS}'!A:M`, [[
     session.sessionId, session.name, session.date, session.status,
     JSON.stringify(session.participants), JSON.stringify(session.rounds),
     createdBy, new Date().toISOString(), session.mode, session.teamSize, session.ratingMode, session.format, session.totalRounds,

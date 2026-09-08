@@ -471,7 +471,7 @@ function RosterView({ tournament, students, roster, query, saving, setQuery, tog
               <label className="flex justify-center" title="Fee paid"><span className="sr-only">{s} fee paid</span><input type="checkbox" checked={roster[s]?.feePaid ?? false} onChange={() => toggleFee(s)} disabled={!roster[s]?.playing} className="h-5 w-5 cursor-pointer accent-green-700 disabled:opacity-30" /></label>
               <label className="flex justify-center" title="Van required"><span className="sr-only">{s} van required</span><input type="checkbox" checked={roster[s]?.vanRequired ?? false} onChange={() => toggleVan(s)} disabled={!roster[s]?.playing} className="h-5 w-5 cursor-pointer accent-amber-500 disabled:opacity-30" /></label>
               <button type="button" onClick={() => openNotes(s)} title="Notes" aria-label={`Notes for ${s}`}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-gray-100 ${roster[s]?.notes ? 'text-chess-blue' : 'text-gray-300'}`}>
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:bg-amber-100 ${roster[s]?.notes ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
                 <StickyNote size={14} />
               </button>
             </div>
@@ -488,9 +488,9 @@ function RosterView({ tournament, students, roster, query, saving, setQuery, tog
               <button type="button" onClick={() => setNotesStudent(null)} className="icon-button" aria-label="Close"><X size={17} /></button>
             </div>
             <textarea className="input" rows={4} value={notesText} onChange={e => setNotesText(e.target.value)} placeholder="Pickup point, travel details, special requirements…" autoFocus />
-            <div className="mt-3 flex gap-2">
-              <button type="button" onClick={() => setNotesStudent(null)} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700">Cancel</button>
-              <button type="button" onClick={saveNotes} className="primary-action flex-1">Save note</button>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <button type="button" onClick={() => setNotesStudent(null)} className="secondary-action">Cancel</button>
+              <button type="button" onClick={saveNotes} className="primary-action">Save note</button>
             </div>
           </dialog>
         </div>

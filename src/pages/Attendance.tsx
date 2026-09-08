@@ -116,12 +116,12 @@ export function Attendance() {
   const [rows, setRows] = useState<AttRow[]>([]);
   const [configuredBatches, setConfiguredBatches] = useState<string[]>([...DEFAULT_BATCHES]);
   const [configuredCoaches, setConfiguredCoaches] = useState<string[]>([...DEFAULT_COACHES]);
-  const [studentMetaMap, setStudentMetaMap] = useState<Map<string, { coach: string; category: string }>>(new Map());
+  const [studentMetaMap, setStudentMetaMap] = useState<Map<string, { coach: string; category: string; age: number }>>(new Map());
   const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<'name' | 'batch' | 'status'>('name');
+  const [sortKey, setSortKey] = useState<'name' | 'batch' | 'status' | 'age'>('name');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [dirty, setDirty] = useState<Map<number, boolean>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -190,7 +190,7 @@ export function Attendance() {
         readSheet(token, SHEET_ID, `'${TABS.STUDENTS}'!A:AG`).catch(() => []),
       ]);
       const studentHeaderMap = studentRows.length > 0 ? createHeaderMap(studentRows[0]) : undefined;
-      const meta = new Map<string, { coach: string; category: string }>();
+      const meta = new Map<string, { coach: string; category: string; age: number }>();
       const activeNames = new Set<string>();
 
       studentRows.slice(1).forEach((r, idx) => {
@@ -200,7 +200,7 @@ export function Attendance() {
           const status = student.status.trim().toLowerCase();
           if (!status || status === 'active') {
             activeNames.add(norm);
-            meta.set(norm, { coach: student.coachName, category: getCategory(student.age) });
+            meta.set(norm, { coach: student.coachName, category: getCategory(student.age), age: Number.parseFloat(student.age) || Number.POSITIVE_INFINITY });
           }
         }
       });
@@ -377,6 +377,7 @@ export function Attendance() {
   }).sort((left, right) => {
     if (sortKey === 'batch') return left.batch.localeCompare(right.batch) || left.name.localeCompare(right.name);
     if (sortKey === 'status') return Number(right.present) - Number(left.present) || left.name.localeCompare(right.name);
+    if (sortKey === 'age') return (studentMetaMap.get(left.name.toLowerCase())?.age ?? Number.POSITIVE_INFINITY) - (studentMetaMap.get(right.name.toLowerCase())?.age ?? Number.POSITIVE_INFINITY) || left.name.localeCompare(right.name);
     return left.name.localeCompare(right.name);
   });
 
@@ -605,6 +606,7 @@ export function Attendance() {
                   aria-label="Sort attendance">
                   <option value="name">A → Z</option>
                   <option value="batch">By Batch</option>
+                  <option value="age">By Age</option>
                   <option value="status">Present First</option>
                 </select>
               </div>

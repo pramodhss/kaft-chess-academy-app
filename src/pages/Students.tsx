@@ -810,12 +810,17 @@ function matchesStudentFilters(
   return matchesStudentCoachAndMeta(s, coaches, schools, statuses);
 }
 
-function sortStudents(list: Student[], sortKey: 'name' | 'batch' | 'status' | 'attendance'): Student[] {
+function sortStudents(list: Student[], sortKey: 'name' | 'batch' | 'status' | 'attendance' | 'age'): Student[] {
   return [...list].sort((a, b) => {
     if (sortKey === 'name') return a.name.localeCompare(b.name);
     if (sortKey === 'batch') return a.batch.localeCompare(b.batch);
     if (sortKey === 'status') return a.status === 'Active' ? -1 : 1;
     if (sortKey === 'attendance') return Number.parseInt(b.thisMonthAttended || '0') - Number.parseInt(a.thisMonthAttended || '0');
+    if (sortKey === 'age') {
+      const leftDob = a.dob ? new Date(a.dob).getTime() : Number.POSITIVE_INFINITY;
+      const rightDob = b.dob ? new Date(b.dob).getTime() : Number.POSITIVE_INFINITY;
+      return rightDob - leftDob;
+    }
     return 0;
   });
 }
@@ -854,7 +859,7 @@ export function Students() {
   const [selectedSchools, setSelectedSchools] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [sortKey, setSortKey] = useState<'name'|'batch'|'status'|'attendance'>('name');
+  const [sortKey, setSortKey] = useState<'name'|'batch'|'status'|'attendance'|'age'>('name');
   const [detailTab, setDetailTab] = useState<'chess'|'contact'|'info'>('info');
   const [syncing, setSyncing] = useState(false);
   const [importPreview, setImportPreview] = useState<FormData[] | null>(null);
@@ -1191,35 +1196,38 @@ export function Students() {
         )}
 
         <div className="student-list-controls flex gap-2 items-center">
-          <p className="text-xs text-gray-400 flex-1 truncate">{filtered.filter(student => (student.status || 'Active').toLowerCase() === 'active').length} active · {filtered.length} total</p>
-          <CopyButton text={studentRosterText(sortStudents(filtered, sortKey))} label="Copy student names, batches and FIDE IDs" />
-          <button
-            type="button"
-            onClick={() => setShowFilterModal(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-              activeFilterCount > 0
-                ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800'
-                : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-750'
-            }`}
-            aria-label="Filter students"
-            title="Filter by batch, category, coach, school and status"
-          >
-            <Filter size={14} />
-            <span>Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-navy dark:bg-amber-500 text-white dark:text-slate-950 text-[10px] font-bold flex items-center justify-center">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          <select value={sortKey} onChange={e=>setSortKey(e.target.value as typeof sortKey)}
-            className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none bg-white dark:bg-slate-800 font-medium"
-            aria-label="Sort students">
-            <option value="name">A → Z</option>
-            <option value="batch">By Batch</option>
-            <option value="status">Active First</option>
-            <option value="attendance">Attendance ↓</option>
-          </select>
+          <p className="text-[11px] text-gray-400 shrink-0 whitespace-nowrap">Total: {filtered.length}</p>
+          <div className="ml-auto flex items-center gap-2">
+            <CopyButton text={studentRosterText(sortStudents(filtered, sortKey))} label="Copy student names, batches and FIDE IDs" />
+            <button
+              type="button"
+              onClick={() => setShowFilterModal(true)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                activeFilterCount > 0
+                  ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800'
+                  : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-750'
+              }`}
+              aria-label="Filter students"
+              title="Filter by batch, category, coach, school and status"
+            >
+              <Filter size={14} />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-navy dark:bg-amber-500 text-white dark:text-slate-950 text-[10px] font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <select value={sortKey} onChange={e=>setSortKey(e.target.value as typeof sortKey)}
+              className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none bg-white dark:bg-slate-800 font-medium"
+              aria-label="Sort students">
+              <option value="name">A → Z</option>
+              <option value="age">By Age</option>
+              <option value="batch">By Batch</option>
+              <option value="status">Active First</option>
+              <option value="attendance">Attendance ↓</option>
+            </select>
+          </div>
         </div>
         {sortStudents(filtered, sortKey).map(s => {
           const cat = getCategory(s.age);
@@ -1237,7 +1245,7 @@ export function Students() {
                   <span>{s.batch}</span>
                   {cat && <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${CATEGORY_COLOR[cat]??'badge-blue'}`}>{cat}</span>}
                   {s.coachName && <span className="text-purple-600 dark:text-purple-400 font-medium text-[10px]">{s.coachName}</span>}
-                  {s.fideId && <span className="text-gray-400">FIDE: {s.fideId}</span>}
+                  {s.fideId && <span className="text-gray-400">FIDE ID: {s.fideId}</span>}
                 </p>
               </div>
               <div className="flex flex-shrink-0 items-center gap-1.5">
@@ -1312,7 +1320,7 @@ function ImportPreviewModal({
                 <span className="text-gray-500 block truncate">DOB: {item.dob} · {item.batch} · Parent: {item.parent1Name} ({item.parent1Phone})</span>
                 {(item.tnscaId || item.fideId || item.ratingClassical) && (
                   <span className="text-[10px] text-chess-blue block truncate">
-                    {[item.tnscaId ? `TNSCA: ${item.tnscaId}` : '', item.fideId ? `FIDE: ${item.fideId}` : '', item.ratingClassical ? `Rating: ${item.ratingClassical}` : ''].filter(Boolean).join(' · ')}
+                    {[item.tnscaId ? `TNSCA: ${item.tnscaId}` : '', item.fideId ? `FIDE ID: ${item.fideId}` : '', item.ratingClassical ? `Rating: ${item.ratingClassical}` : ''].filter(Boolean).join(' · ')}
                   </span>
                 )}
               </div>

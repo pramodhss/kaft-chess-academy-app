@@ -23,13 +23,13 @@ import {
   createMiniTournamentSession,
   deleteMiniTournamentSession,
   ensureMiniTournamentSheet,
+  historyFromSession,
   loadMiniTournamentSessions,
   saveMiniTournamentSession,
   updateMiniTournamentDetails,
   type MiniTournamentSession,
 } from "../lib/miniTournamentStore";
 import {
-  applyRoundResults,
   computeStandings,
   createInitialHistory,
   generateNextRound,
@@ -42,7 +42,7 @@ const RESULT_OPTIONS: { value: GameResult; label: string }[] = [
   { value: "", label: "—" },
   { value: "1-0", label: "1-0" },
   { value: "0-1", label: "0-1" },
-  { value: "1/2-1/2", label: "Draw" },
+  { value: "1/2-1/2", label: "1/2-1/2" },
 ];
 
 type ConfirmationRequest = {
@@ -58,20 +58,6 @@ function ratingFor(student: Student): number {
     10,
   );
   return Number.isFinite(value) && value > 0 ? value : 1000;
-}
-
-// Only folds rounds where every board has a recorded result — an in-progress
-// round with pending boards is intentionally excluded so standings never throw
-// while results are still being entered.
-function historyFromSession(session: MiniTournamentSession) {
-  let history = createInitialHistory(session.participants);
-  session.rounds.forEach((round) => {
-    const complete = round.every(
-      (board) => board.black === null || board.result,
-    );
-    if (complete) history = applyRoundResults(history, round);
-  });
-  return history;
 }
 
 export function MiniTournament() {
@@ -594,7 +580,7 @@ export function MiniTournament() {
                     onChange={(event) => setFormat(event.target.value as "practical" | "swiss")}
                     aria-label="Pairing system"
                   >
-                    <option value="swiss">Swiss (score groups)</option>
+                    <option value="swiss">Swiss system</option>
                     <option value="practical">Practical pairing</option>
                   </select>
                 </label>
@@ -606,7 +592,7 @@ export function MiniTournament() {
                     onChange={(event) => setTotalRounds(Number(event.target.value))}
                     aria-label="Total rounds"
                   >
-                    {[3, 4, 5, 6, 7].map((roundCount) => (
+                    {[2, 3, 4, 5, 6, 7, 8, 9].map((roundCount) => (
                       <option key={roundCount} value={roundCount}>{roundCount} rounds</option>
                     ))}
                   </select>
@@ -796,49 +782,65 @@ export function MiniTournament() {
 
             <section className="surface-card p-4">
               <h3 className="font-bold text-sm mb-3">Boards</h3>
-              <div className="tournament-pairing-headings" aria-hidden="true">
-                <span>White</span>
-                <span>Result</span>
-                <span>Black</span>
-              </div>
               <div className="space-y-2">
                 {currentRound.map((board) => (
                   <div
                     key={board.board}
-                    className="tournament-board tournament-pairing-row"
+                    className={`tournament-board ${board.black === null ? "tournament-bye-card" : "tournament-match-card"}`}
                   >
-                    <span className="tournament-board-number">Board {board.board}</span>
+                    <div className="flex items-center justify-between text-[11px] font-mono text-gray-400 dark:text-gray-500 mb-1.5 pb-1 border-b border-gray-100 dark:border-slate-800/60">
+                      <span>BOARD {board.board}</span>
+                      {board.black === null && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          AUTO-WIN · 1 PT
+                        </span>
+                      )}
+                    </div>
                     {board.black === null ? (
-                      <span className="tournament-player tournament-player-white">
-                        <strong>{board.white}</strong>
-                      </span>
+                      <div className="py-1 text-center">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate">{board.white}</p>
+                        <p className="text-xs text-amber-500/90 font-medium mt-0.5">Assigned Bye (No opponent this round)</p>
+                      </div>
                     ) : (
-                      <>
-                        <span className="tournament-player tournament-player-white">
-                          <strong>{board.white}</strong>
-                        </span>
-                        <select
-                          className="input tournament-result-select"
-                          value={board.result}
-                          disabled={activeSession.status !== "active"}
-                          onChange={(event) =>
-                            updateResult(
-                              board.board,
-                              event.target.value as GameResult,
-                            )
-                          }
-                          aria-label={`Result for board ${board.board}`}
-                        >
-                          {RESULT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="tournament-player tournament-player-black">
-                          <strong>{board.black}</strong>
-                        </span>
-                      </>
+                      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                        {/* White player */}
+                        <div className="min-w-0 pr-1 text-left">
+                          <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">White</span>
+                          <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 truncate" title={board.white}>
+                            {board.white}
+                          </p>
+                        </div>
+
+                        {/* Result selector */}
+                        <div className="flex flex-col items-center shrink-0">
+                          <select
+                            className="h-8 px-2 rounded-lg text-xs font-bold font-mono tracking-tight text-center bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/50 cursor-pointer disabled:opacity-60"
+                            value={board.result}
+                            disabled={activeSession.status !== "active"}
+                            onChange={(event) =>
+                              updateResult(
+                                board.board,
+                                event.target.value as GameResult,
+                              )
+                            }
+                            aria-label={`Result for board ${board.board}`}
+                          >
+                            {RESULT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Black player */}
+                        <div className="min-w-0 pl-1 text-right">
+                          <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">Black</span>
+                          <p className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 truncate" title={board.black}>
+                            {board.black}
+                          </p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -954,7 +956,7 @@ export function MiniTournament() {
                   <option value="casual">Casual (ratings optional)</option>
                 </select>
               </label>
-              <div className="flex justify-end gap-2">
+              <div className="flex items-center justify-between gap-3 mt-4">
                 <button
                   type="button"
                   className="secondary-action"
@@ -993,7 +995,7 @@ export function MiniTournament() {
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
                 {confirmation.message}
               </p>
-              <div className="flex justify-end gap-2">
+              <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
                   className="secondary-action"

@@ -103,7 +103,7 @@ export function OnlineChess() {
   const [monthlyLoading, setMonthlyLoading] = useState(false);
   const [dataFetched, setDataFetched] = useState(false);
   const [fetchMessage, setFetchMessage] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "rating">("name");
+  const [sortBy, setSortBy] = useState<"name" | "rating" | "age">("name");
   const [linkedOnly, setLinkedOnly] = useState(false);
   const [editingIds, setEditingIds] = useState(false);
   const [chessComUsername, setChessComUsername] = useState("");
@@ -317,7 +317,9 @@ export function OnlineChess() {
     .sort((left, right) =>
       sortBy === "name"
         ? left.name.localeCompare(right.name)
-        : ratingForOnline(right) - ratingForOnline(left),
+        : sortBy === "age"
+          ? (Number.parseFloat(left.age) || Number.POSITIVE_INFINITY) - (Number.parseFloat(right.age) || Number.POSITIVE_INFINITY)
+          : ratingForOnline(right) - ratingForOnline(left),
     );
   const rosterOptions = (field: "batch" | "school" | "coachName") => Array.from(
     new Set(activeStudents.map((student) => student[field].trim()).filter(Boolean)),
@@ -425,11 +427,12 @@ export function OnlineChess() {
                 className="bg-transparent font-semibold outline-none"
                 value={sortBy}
                 onChange={(event) =>
-                  setSortBy(event.target.value as "name" | "rating")
+                  setSortBy(event.target.value as "name" | "rating" | "age")
                 }
                 aria-label="Sort online students"
               >
                 <option value="name">Name</option>
+                <option value="age">Age</option>
                 <option value="rating">Rating</option>
               </select>
             </label>
@@ -790,7 +793,7 @@ export function OnlineChess() {
                         }
                       />
                     </label>
-                    <div className="sm:col-span-2 flex justify-end gap-2">
+                    <div className="sm:col-span-2 flex items-center justify-between gap-3 mt-2">
                       <button
                         type="button"
                         className="secondary-action"
