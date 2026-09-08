@@ -575,11 +575,13 @@ export function Tournaments() {
               ['In-Class Mini Tournaments', 'badge-purple', visibleMini],
             ] as const).map(([title, badgeClass, group]) =>
               group.length > 0 && (
-                <section key={title} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h2 className="section-label flex items-center gap-2"><span className={badgeClass}>{group.length}</span>{title}</h2>
+                <details key={title} className="tournament-collapsible">
+                  <summary className="tournament-collapsible-summary">
+                    <span className={`shrink-0 ${badgeClass}`}>{group.length}</span>
+                    <span className="min-w-0 flex-1 truncate section-label">{title}</span>
                     <CopyButton text={groupCopyText(title, group)} label={`Copy ${title}`} />
-                  </div>
+                    <ChevronDown size={15} className="tournament-collapsible-chevron shrink-0" />
+                  </summary>
                   {title === 'In-Class Mini Tournaments' ? (
                     <div className="grid gap-2">
                       {Array.from(new Set(group.map(item => item.key.split('-').slice(0, 2).join('-')))).map(sessionKey => {
@@ -599,9 +601,9 @@ export function Tournaments() {
                       })}
                     </div>
                   ) : (
-                    <div className="grid gap-1.5">{group.map(item => <div key={item.key}>{item.node}</div>)}</div>
+                    <div className="grid gap-1.5 border-t border-gray-100 p-2">{group.map(item => <div key={item.key}>{item.node}</div>)}</div>
                   )}
-                </section>
+                </details>
               )
             )}
           </div>
