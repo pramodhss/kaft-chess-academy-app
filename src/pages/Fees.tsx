@@ -33,7 +33,7 @@ function rosterValidationError(amountDue: number, amountPaid: number): string {
   if (amountPaid < 0 || (amountDue > 0 && amountPaid > amountDue)) {
     return `Paid amount must be between ₹0 and ₹${amountDue}.`;
   }
-  if (amountDue <= 0) return 'Enter a monthly fee amount greater than zero.';
+  if (amountDue < 0) return 'Enter a non-negative monthly fee amount.';
   return '';
 }
 
@@ -44,7 +44,7 @@ function feeAmountValidationError(form: FeeForm): string {
   if (paidError) return paidError;
   const amountDue = Number(form.amountDue);
   const amountPaid = form.amountPaid.trim() ? Number(form.amountPaid) : 0;
-  if (amountDue <= 0) return 'Amount due must be greater than zero.';
+  if (amountDue < 0) return 'Amount due cannot be negative.';
   if (amountDue > 10_000_000 || amountPaid > 10_000_000) return 'Fee amounts cannot exceed ₹1,00,00,000.';
   if (amountPaid > amountDue) return 'Amount paid cannot be greater than amount due.';
   return paymentStatusValidationError(form.paymentStatus, amountDue, amountPaid);
@@ -325,12 +325,13 @@ export function Fees() {
   const [students, setStudents]   = useState<string[]>([]);
   const [batchMap, setBatchMap]   = useState<Map<string,string>>(new Map());
   const [coachMap, setCoachMap]   = useState<Map<string,string>>(new Map());
+  const [ageMap, setAgeMap] = useState<Map<string, number>>(new Map());
   const [configuredBatches, setConfiguredBatches] = useState<string[]>([...DEFAULT_BATCHES]);
   const [configuredCoaches, setConfiguredCoaches] = useState<string[]>([...DEFAULT_COACHES]);
   const [selectedBatches, setSelectedBatches] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedCoaches, setSelectedCoaches] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<'name' | 'batch' | 'status'>('name');
+  const [sortKey, setSortKey] = useState<'name' | 'batch' | 'status' | 'age'>('name');
   const [showFilterModal, setShowFilterModal] = useState(false);
     const [showFeeSettings, setShowFeeSettings] = useState(false);
   const [loading, setLoading]     = useState(true);
@@ -378,16 +379,19 @@ export function Fees() {
       setStudents(names);
       const batches = new Map<string,string>();
       const coaches = new Map<string,string>();
+      const ages = new Map<string, number>();
       const studentHeaderMap = studentRows.length > 0 ? createHeaderMap(studentRows[0]) : undefined;
       studentRows.slice(1).forEach((r, idx) => {
         const student = parseStudentRow(r, idx + 2, studentHeaderMap);
         if (student.name) {
           batches.set(student.name, student.batch);
           if (student.coachName) coaches.set(student.name, student.coachName);
+          ages.set(normalized(student.name), Number.parseFloat(student.age) || Number.POSITIVE_INFINITY);
         }
       });
       setBatchMap(batches);
       setCoachMap(coaches);
+      setAgeMap(ages);
     } catch(e:any) {
       if(e.message==='TOKEN_EXPIRED'){logout();return;}
       setError(e.message);
@@ -410,7 +414,7 @@ export function Fees() {
     if (validationError) { toast.error(validationError); return; }
     const amountDue = parseSheetNumber(form.amountDue);
     const amountPaid = parseSheetNumber(form.amountPaid);
-    if (amountDue <= 0) { toast.error('Amount due must be greater than zero.'); return; }
+    if (amountDue < 0) { toast.error('Amount due cannot be negative.'); return; }
     if (amountPaid < 0 || amountPaid > amountDue) { toast.error('Amount paid must be between zero and the amount due.'); return; }
     setSaving(true);
     try {
@@ -462,7 +466,7 @@ export function Fees() {
     if (validationError) { toast.error(validationError); return; }
     const amountDue = parseSheetNumber(form.amountDue);
     const amountPaid = parseSheetNumber(form.amountPaid);
-    if (amountDue <= 0) { toast.error('Amount due must be greater than zero.'); return; }
+    if (amountDue < 0) { toast.error('Amount due cannot be negative.'); return; }
     if (amountPaid < 0 || amountPaid > amountDue) { toast.error('Amount paid must be between zero and the amount due.'); return; }
     setSaving(true);
     try {
@@ -595,7 +599,8 @@ export function Fees() {
 
   const feeDraft = (student: string): FeeDraft => {
     const fee = monthlyByStudent.get(normalized(student));
-    const amountDue = fee ? String(parseSheetNumber(fee.amountDue)) : String(knownAmountDue(student) || '');
+    const knownDue = knownAmountDue(student);
+    const amountDue = fee ? String(parseSheetNumber(fee.amountDue)) : String(knownDue);
     return drafts.get(student) ?? {
       paid: fee?.paymentStatus === 'Paid' || fee?.paymentStatus === 'Waived',
       amountDue,
@@ -664,6 +669,7 @@ export function Fees() {
       });
     }).sort((left, right) => {
       if (sortKey === 'batch') return (batchMap.get(left) ?? '').localeCompare(batchMap.get(right) ?? '') || left.localeCompare(right);
+      if (sortKey === 'age') return (ageMap.get(left) ?? Number.POSITIVE_INFINITY) - (ageMap.get(right) ?? Number.POSITIVE_INFINITY) || left.localeCompare(right);
       if (sortKey === 'status') {
         const leftStatus = monthlyByStudent.get(normalized(left))?.paymentStatus ?? 'Pending';
         const rightStatus = monthlyByStudent.get(normalized(right))?.paymentStatus ?? 'Pending';
@@ -671,7 +677,7 @@ export function Fees() {
       }
       return left.localeCompare(right);
     }),
-    [students, feeSearch, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap, monthlyByStudent, drafts, sortKey]
+    [students, feeSearch, selectedBatches, selectedCoaches, selectedStatuses, batchMap, coachMap, ageMap, monthlyByStudent, drafts, sortKey]
   );
 
   const updateDraft = (student: string, next: FeeDraft) => {
@@ -865,10 +871,50 @@ export function Fees() {
     }
   };
 
+  const clearDueForVisible = async () => {
+    if (!token || rosterSavingAll || visibleStudents.length === 0) return;
+    const visibleNames = new Set(visibleStudents.map(normalized));
+    const liveRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`);
+    const entries = feeRowsToEntries(liveRows).filter(fee => fee.feeType === 'Monthly Tuition'
+      && normalizeFeeMonth(fee.feeMonth) === selectedMonth
+      && visibleNames.has(normalized(fee.studentName)));
+    if (entries.length === 0) {
+      toast.info(`No monthly fee records found for ${monthDisplay}.`);
+      return;
+    }
+    if (!window.confirm(`Clear the due amount for all ${visibleStudents.length} displayed students in ${monthDisplay}?`)) return;
+    setRosterSavingAll(true);
+    try {
+      const updates = entries.flatMap(fee => [
+        { range: `'${TABS.FEES}'!F${fee.rowIndex}`, value: 0 },
+        { range: `'${TABS.FEES}'!G${fee.rowIndex}`, value: 0 },
+        { range: `'${TABS.FEES}'!H${fee.rowIndex}`, value: 0 },
+        { range: `'${TABS.FEES}'!L${fee.rowIndex}`, value: 'Pending' },
+      ]);
+      await batchWrite(token, SHEET_ID, updates);
+      const clearedRows = new Set(entries.map(fee => fee.rowIndex));
+      setFees(current => current.map(fee => clearedRows.has(fee.rowIndex)
+        ? { ...fee, amountDue: '0', amountPaid: '0', balance: '0', paymentStatus: 'Pending' }
+        : fee));
+      setDrafts(current => {
+        const next = new Map(current);
+        entries.forEach(fee => next.set(fee.studentName, { paid: false, amountDue: '0', amountPaid: '0' }));
+        return next;
+      });
+      clearSheetReadCache(SHEET_ID);
+      void recordAudit(token, 'UPDATE', 'Fees', `Cleared due for ${selectedMonth}`, `${entries.length} students`).catch(() => undefined);
+      toast.success(`Cleared due for ${entries.length} student${entries.length === 1 ? '' : 's'}.`);
+    } catch (error: any) {
+      toast.error(`Could not clear due amounts: ${error.message}`);
+    } finally {
+      setRosterSavingAll(false);
+    }
+  };
+
   const applyBulkAmountDue = async () => {
     if (!token) return;
     const amountDue = parseSheetNumber(bulkAmountDue);
-    if (amountDue <= 0) { toast.error('Enter an amount due greater than zero.'); return; }
+    if (amountDue < 0) { toast.error('Enter a non-negative amount due.'); return; }
     if (visibleStudents.length === 0) { toast.info('No students match the current filters.'); return; }
     if (!window.confirm(`Set ${formatCurrency(amountDue)} due for ${visibleStudents.length} student${visibleStudents.length === 1 ? '' : 's'} in ${monthDisplay}? Existing payments will be preserved.`)) return;
     setBulkApplying(true);
@@ -1054,6 +1100,7 @@ export function Fees() {
               aria-label="Sort fees">
               <option value="name">A → Z</option>
               <option value="batch">By Batch</option>
+              <option value="age">By Age</option>
               <option value="status">By Status</option>
             </select>
             <button
@@ -1143,6 +1190,10 @@ export function Fees() {
                 <span className={`text-xs ${balance>0?'text-amber-700':'text-green-700'}`}>{balance>0?`Balance ${formatCurrency(balance)}`:'No balance'}</span>
               </div>
               <div className="mt-2 flex items-center gap-1.5">
+                <button type="button" onClick={() => updateDraft(student, { ...draft, amountDue: '0', amountPaid: '0', paid: false })}
+                  disabled={rosterSaving === student} className="secondary-action h-9 px-2.5 text-xs text-red-700 border-red-200 hover:bg-red-50">
+                  Clear Due
+                </button>
                 <button type="button" onClick={()=>saveRosterFee(student)} disabled={!changed || rosterSaving===student}
                   className="primary-action h-9 flex-1 px-3 text-xs">
                   {rosterSaveButtonLabel(rosterSaving === student, Boolean(fee))}
@@ -1260,9 +1311,14 @@ export function Fees() {
                 <p className="mt-1 text-xs text-gray-500">Applies to {visibleStudents.length} students currently shown after filtering and sorting. Existing payments stay unchanged.</p>
                 <div className="mt-3 flex gap-2">
                   <label className="sr-only" htmlFor="bulk-amount-due">Amount due for filtered students</label>
-                  <input id="bulk-amount-due" type="number" min="1" step="1" value={bulkAmountDue} onChange={event => setBulkAmountDue(event.target.value)} placeholder="Amount due" className="input flex-1" />
+                  <input id="bulk-amount-due" type="number" min="0" step="1" value={bulkAmountDue} onChange={event => setBulkAmountDue(event.target.value)} placeholder="Amount due" className="input flex-1" />
                   <button type="button" onClick={() => void applyBulkAmountDue()} disabled={bulkApplying || visibleStudents.length === 0} className="primary-action whitespace-nowrap text-xs">{bulkApplying ? 'Saving…' : 'Apply'}</button>
                 </div>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50/60 p-3 dark:border-red-900 dark:bg-red-950/30">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">Clear due amounts</p>
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">Sets the monthly due, paid, and balance to ₹0 for the displayed students without deleting their fee records.</p>
+                <button type="button" onClick={() => void clearDueForVisible()} disabled={rosterSavingAll || visibleStudents.length === 0} className="secondary-action mt-3 w-full border-amber-300 text-amber-700 hover:bg-amber-50">{rosterSavingAll ? 'Saving…' : 'Clear due for all displayed students'}</button>
               </div>
               <div className="rounded-xl border border-red-200 bg-red-50/60 p-3 dark:border-red-900 dark:bg-red-950/30">
                 <p className="text-sm font-semibold text-red-700 dark:text-red-300">Remove monthly fees</p>

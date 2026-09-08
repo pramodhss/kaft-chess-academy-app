@@ -43,7 +43,7 @@ export function calculateRosterPayment(
   }
 
   let status = 'Pending';
-  if (amountPaid >= amountDue) status = 'Paid';
+  if (amountDue > 0 && amountPaid >= amountDue) status = 'Paid';
   else if (amountPaid > 0) status = 'Partial';
   if (existing?.paymentStatus === 'Waived' && draft.paid) status = 'Waived';
   if (existing?.paymentStatus === 'Overdue' && amountPaid < amountDue) status = 'Overdue';
