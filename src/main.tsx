@@ -10,14 +10,28 @@ window.addEventListener('vite:preloadError', (event) => {
   const lastRecovery = Number(sessionStorage.getItem(recoveryKey) ?? '0');
   if (Date.now() - lastRecovery > 30_000) {
     sessionStorage.setItem(recoveryKey, String(Date.now()));
-    window.location.reload();
+    void Promise.all([
+      'caches' in window ? caches.keys().then(names => Promise.all(names.map(name => caches.delete(name)))) : Promise.resolve(),
+      'serviceWorker' in navigator ? navigator.serviceWorker.getRegistrations().then(registrations =>
+        Promise.all(registrations.map(registration => registration.unregister())),
+      ) : Promise.resolve(),
+    ]).finally(() => window.location.reload());
   }
 });
 
-if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker.getRegistrations().then(registrations =>
-    Promise.all(registrations.map(registration => registration.unregister())),
-  );
+if ('serviceWorker' in navigator) {
+  const refreshServiceWorker = () => {
+    void navigator.serviceWorker.ready.then(registration => registration.update()).catch(() => undefined);
+  };
+  window.addEventListener('pageshow', refreshServiceWorker);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshServiceWorker();
+  });
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    void navigator.serviceWorker.getRegistrations().then(registrations =>
+      Promise.all(registrations.map(registration => registration.unregister())),
+    );
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

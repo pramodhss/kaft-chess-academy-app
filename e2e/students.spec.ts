@@ -312,7 +312,7 @@ test('filters students list by age category like Under 11, Under 13 via filter m
 
   await expect(page.getByText('Aarav Kumar', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Diya Shah', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('0 active · 0 total')).toBeVisible();
+  await expect(page.getByText('Total: 0', { exact: true })).toBeVisible();
 
   // Reset filters via Clear all chip
   await page.getByRole('button', { name: 'Clear all' }).click();

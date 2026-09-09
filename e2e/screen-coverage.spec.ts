@@ -116,7 +116,7 @@ test.describe('screen-by-screen end-to-end coverage', () => {
     void sheets;
     await assertHealthyScreen(page, '#/tournaments');
     await page.getByRole('button', { name: /Leaderboard/ }).click();
-    await expect(page.getByText('Student Medal Standings')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'All-Time Student Standings' })).toBeVisible();
     await page.getByRole('button', { name: /Results/ }).click();
     await expect(page.getByLabel('Search tournament results')).toBeVisible();
   });
