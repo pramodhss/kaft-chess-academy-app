@@ -424,27 +424,27 @@ export function MiniTournament() {
     <Layout title="Mini Tournament">
       <div className="page-stack p-4 md:p-6 max-w-5xl mx-auto">
         {!activeSession && (
-          <section className="surface-card p-4 md:p-5">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gold font-bold">
+          <section className="surface-card p-5 md:p-6 mb-4 border border-slate-200/80 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="max-w-xl">
+                <p className="text-[11px] uppercase tracking-wider text-amber-500 font-bold mb-1">
                   In-class pairing
                 </p>
-                <h2 className="text-xl font-bold text-navy dark:text-gray-100">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-gray-100">
                   Mini Tournament Pairing
                 </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-sm text-slate-500 dark:text-gray-400 mt-1 leading-relaxed">
                   Pick students, pair them by rating or casually, and record
                   results round by round without repeated pairings.
                 </p>
               </div>
               <button
                 type="button"
-                className="primary-action"
+                className="primary-action self-start sm:self-auto px-5 py-2.5 text-sm font-semibold rounded-xl gap-2 shadow-sm"
                 onClick={() => setShowCreate(true)}
               >
-                <Plus size={16} />
-                New mini tournament
+                <Plus size={18} strokeWidth={2.5} aria-hidden="true" />
+                <span>New mini tournament</span>
               </button>
             </div>
           </section>
@@ -898,23 +898,25 @@ export function MiniTournament() {
             </section>
             {activeSession.status === "completed" && (
               <section className="surface-card p-4">
-                <div className="archive-actions">
-                  <span className="badge-green">Read-only archive</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="badge-green">Read-only archive</span>
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onClick={() =>
+                        void navigator.clipboard?.writeText(
+                          JSON.stringify(activeSession, null, 2),
+                        )
+                      }
+                    >
+                      <Copy size={15} />
+                      Copy archive
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="secondary-action"
-                    onClick={() =>
-                      void navigator.clipboard?.writeText(
-                        JSON.stringify(activeSession, null, 2),
-                      )
-                    }
-                  >
-                    <Copy size={15} />
-                    Copy archive
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-action"
+                    className="secondary-action ml-auto"
                     onClick={() => window.print()}
                   >
                     <Download size={15} />

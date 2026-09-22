@@ -1,6 +1,6 @@
 export interface OnlineProfileRatings {
-  chessCom: { rapid?: number; blitz?: number; bullet?: number; daily?: number };
-  lichess: { rapid?: number; blitz?: number; bullet?: number; classical?: number };
+  chessCom: { rapid?: number; blitz?: number; bullet?: number; daily?: number; puzzle?: number };
+  lichess: { rapid?: number; blitz?: number; bullet?: number; classical?: number; puzzle?: number };
 }
 
 export interface MonthlyOnlineStats {
@@ -68,6 +68,7 @@ export async function fetchOnlineProfileRatings(chessComUsername: string, liches
         blitz: data?.chess_blitz?.last?.rating,
         bullet: data?.chess_bullet?.last?.rating,
         daily: data?.chess_daily?.last?.rating,
+        puzzle: data?.tactics?.highest?.rating ?? data?.tactics?.lowest?.rating,
       };
     }).catch(() => undefined) : Promise.resolve(),
     lichessUsername.trim() ? fetch(`https://lichess.org/api/user/${encodeURIComponent(lichessUsername.trim())}`).then(response => response.ok ? response.json() : null).then(data => {
@@ -76,6 +77,7 @@ export async function fetchOnlineProfileRatings(chessComUsername: string, liches
         blitz: data?.perfs?.blitz?.rating,
         bullet: data?.perfs?.bullet?.rating,
         classical: data?.perfs?.classical?.rating,
+        puzzle: data?.perfs?.puzzle?.rating,
       };
     }).catch(() => undefined) : Promise.resolve(),
   ]);

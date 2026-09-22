@@ -921,7 +921,7 @@ export function OnlineChess() {
                         label="Lichess"
                         stats={monthlyStats.lichess}
                       />
-                      <div className="flex gap-2 pt-2">
+                      <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800/80 mt-1">
                         <button
                           type="button"
                           className="secondary-action py-1.5 px-2.5 text-xs"
@@ -936,7 +936,7 @@ export function OnlineChess() {
                         </button>
                         <button
                           type="button"
-                          className="secondary-action py-1.5 px-2.5 text-xs"
+                          className="secondary-action py-1.5 px-2.5 text-xs ml-auto"
                           onClick={() => window.print()}
                         >
                           <Download size={14} />

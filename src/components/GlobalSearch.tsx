@@ -29,6 +29,17 @@ export function GlobalSearch() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        show();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [rosterStudents, token]);
+
+  useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false);
