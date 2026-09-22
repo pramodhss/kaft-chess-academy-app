@@ -70,6 +70,11 @@ export function weeklyTournamentSource(sourceUrl: string): 'lichess' | 'chess.co
   return 'unknown';
 }
 
+/** Shared display label so every screen renders the same source name. */
+export function weeklyTournamentSourceLabel(source: 'lichess' | 'chess.com' | 'unknown'): string {
+  return source === 'chess.com' ? 'Chess.com' : 'Lichess';
+}
+
 function lichessTournamentLink(sourceUrl: string): LichessTournamentLink {
   let parsed: URL;
   try {

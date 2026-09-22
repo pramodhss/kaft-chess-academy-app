@@ -9,7 +9,7 @@ import { useToast } from '../context/ToastContext';
 import { clearSheetReadCache, readSheet, readSheetLive, appendRows, clearSheetRange } from '../lib/sheets';
 import { matchOnlineTournamentResults, ordinal, type MatchedOnlineResult, type OnlinePlayerDirectory } from '../lib/onlineTournamentMatch';
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
-import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
+import { rowToSavedWeeklyOnlineTournament, weeklyTournamentSourceLabel, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { loadMiniTournamentSessions, historyFromSession, type MiniTournamentSession } from '../lib/miniTournamentStore';
 import { computeStandings } from '../lib/pairingEngine';
 import { SHEET_ID, TABS } from '../config';
@@ -244,7 +244,7 @@ function autoOnlineItem(match: MatchedOnlineResult): ResultItem {
   const dateLabel = dateValue && !Number.isNaN(new Date(dateValue).getTime())
     ? new Date(dateValue).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : 'Date not recorded';
-  const sourceLabel = match.source === 'chess.com' ? 'Chess.com' : 'Lichess';
+  const sourceLabel = weeklyTournamentSourceLabel(match.source);
   const pointsSuffix = match.score ? ` · ${match.score} pts` : '';
   const copyText = `• [Online · ${sourceLabel} · Auto-tracked] ${match.studentName} – ${tournament.name} (${dateLabel}) · Place ${ordinal(match.rank)}${pointsSuffix}`;
   return {

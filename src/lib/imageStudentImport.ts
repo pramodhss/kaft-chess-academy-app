@@ -1,5 +1,3 @@
-import { createWorker } from 'tesseract.js';
-
 export type ImageStudentFields = Partial<Record<
   | 'name' | 'dob' | 'gender' | 'grade' | 'batch' | 'joiningDate' | 'status'
   | 'parent1Name' | 'parent1Phone' | 'parent1WhatsApp' | 'parent1Email'
@@ -49,6 +47,8 @@ function parseStudentDetailsText(text: string): ImageStudentFields {
 }
 
 export async function parseStudentDetailsImage(file: File, onProgress?: (value: number) => void): Promise<ImageStudentFields> {
+  // Lazy-loaded: tesseract.js is a large OCR engine only needed for this rare action.
+  const { createWorker } = await import('tesseract.js');
   const worker = await createWorker('eng', 1, {
     logger: (message) => {
       if (message.status === 'recognizing text' && typeof message.progress === 'number') onProgress?.(message.progress);

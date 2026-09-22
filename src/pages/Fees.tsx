@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Settings2, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, MessageCircle, Pencil, Plus, QrCode, RefreshCw, Search, Settings2, Trash2, Wallet, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -1005,6 +1005,18 @@ export function Fees() {
     }>
       <div className="fee-workspace page-stack mx-auto w-full max-w-4xl">
         {error && <div role="alert" className="error-state">{error}</div>}
+
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-r from-slate-900 via-navy to-indigo-950 p-4 md:p-5 text-white shadow-sm dark:border-slate-800">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400/20 text-amber-400 ring-1 ring-amber-400/30">
+              <Wallet size={22} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight">Fees Hub</h2>
+              <p className="mt-0.5 text-xs text-slate-300">Track collections, balances, and reminders for {monthDisplay}.</p>
+            </div>
+          </div>
+        </div>
 
         {/* Month navigation */}
         <div className="surface-card flex items-center gap-2 px-3 py-2.5">

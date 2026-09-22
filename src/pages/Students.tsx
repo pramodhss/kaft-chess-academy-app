@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, ChevronRight, Copy, ExternalLink, FileChartColumn, FileSpreadsheet, Filter, MessageCircle, Pencil, Phone, Plus, RefreshCw, Share2, Trash2, Upload, X } from 'lucide-react';
+import { Check, ChevronRight, Copy, ExternalLink, FileChartColumn, FileSpreadsheet, Filter, MessageCircle, Pencil, Phone, Plus, RefreshCw, Share2, Trash2, Upload, Users, X } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { CopyButton } from '../components/CopyButton';
 import { PageSkeleton } from '../components/Skeleton';
@@ -12,7 +12,7 @@ import { useCoachName } from '../hooks/useCoachName';
 import { recordAudit } from '../lib/audit';
 import { DEFAULT_BATCHES, DEFAULT_COACHES, loadStudentOptions } from '../lib/studentOptions';
 import { monthLabel, rowToRegistration, type TournamentRegistration } from '../lib/tournamentManagement';
-import { rowToSavedWeeklyOnlineTournament, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
+import { rowToSavedWeeklyOnlineTournament, weeklyTournamentSourceLabel, type SavedWeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
 import { matchOnlineTournamentResults, ordinal } from '../lib/onlineTournamentMatch';
 import { parseExcelOrCsvFile } from '../lib/excelStudentImport';
 import { FilterModal, type FilterSection } from '../components/FilterModal';
@@ -381,7 +381,7 @@ type StudentsSetter = React.Dispatch<React.SetStateAction<Student[]>>;
 async function loadStudents(deps: Readonly<{
   token: string | null; logout: () => void;
   setLoading: (value: boolean) => void; setError: (value: string) => void;
-  setStudents: StudentsSetter; setFiltered: StudentsSetter;
+  setStudents: StudentsSetter;
   setBatches: (value: string[]) => void; setLevels: (value: string[]) => void;
   setCoaches: (value: string[]) => void;
   setSchools: (value: string[]) => void;
@@ -389,7 +389,7 @@ async function loadStudents(deps: Readonly<{
   setTournamentRegistrations: (value: TournamentRegistration[]) => void;
   setWeeklyResults: (value: SavedWeeklyOnlineTournament[]) => void;
 }>) {
-  const { token, logout, setLoading, setError, setStudents, setFiltered, setBatches, setLevels, setCoaches, setSchools, setBatchCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
+  const { token, logout, setLoading, setError, setStudents, setBatches, setLevels, setCoaches, setSchools, setBatchCoaches, setTournamentRegistrations, setWeeklyResults } = deps;
   if (!token) return;
   setLoading(true); setError('');
   try {
@@ -405,7 +405,7 @@ async function loadStudents(deps: Readonly<{
     ]);
     const headerMap = rows.length > 0 ? createHeaderMap(rows[0]) : undefined;
     const data = rows.slice(1).map((row, index) => rowToStudent(row, index + 2, headerMap)).filter(student => student.name.trim());
-    setStudents(data); setFiltered(data);
+    setStudents(data);
     setBatches(options.batches.values.length > 0 ? options.batches.values : [...DEFAULT_BATCHES]);
     setLevels(options.levels.values);
     setCoaches(options.coaches.values.length > 0 ? options.coaches.values : [...DEFAULT_COACHES]);
@@ -578,10 +578,9 @@ async function batchImportStudents(deps: Readonly<{
   toast: ToastApi;
   setSaving: (value: boolean) => void;
   setStudents: StudentsSetter;
-  setFiltered: StudentsSetter;
   setImportPreview: (value: FormData[] | null) => void;
 }>) {
-  const { token, importList, existingStudents, coachName, toast, setSaving, setStudents, setFiltered, setImportPreview } = deps;
+  const { token, importList, existingStudents, coachName, toast, setSaving, setStudents, setImportPreview } = deps;
   if (!token || importList.length === 0) return;
   setSaving(true);
   try {
@@ -611,7 +610,6 @@ async function batchImportStudents(deps: Readonly<{
     // regardless of whether the reconciliation read below succeeds or is delayed.
     const optimisticStudents = filteredToAppend.map((item, idx) => formToStudent(item, -1 - idx));
     setStudents(prev => [...prev, ...optimisticStudents]);
-    setFiltered(prev => [...prev, ...optimisticStudents]);
 
     // Immediately synchronize all newly imported students to Weekend Attendance sheet
     try {
@@ -638,7 +636,6 @@ async function batchImportStudents(deps: Readonly<{
       const freshHeaderMap = freshRows.length > 0 ? createHeaderMap(freshRows[0]) : undefined;
       const freshData = freshRows.slice(1).map((row, index) => rowToStudent(row, index + 2, freshHeaderMap)).filter(s => s.name.trim());
       setStudents(freshData);
-      setFiltered(freshData);
     } catch { /* optimistic students already reflect what was saved; reconciliation will retry on next sync */ }
 
     void recordAudit(token, 'CREATE', 'Students', `Imported ${filteredToAppend.length} students from Excel/CSV`, coachName).catch(() => undefined);
@@ -838,7 +835,6 @@ export function Students() {
   const [students, setStudents] = useState<Student[]>([]);
   const [tournamentRegistrations, setTournamentRegistrations] = useState<TournamentRegistration[]>([]);
   const [weeklyResults, setWeeklyResults] = useState<SavedWeeklyOnlineTournament[]>([]);
-  const [filtered, setFiltered] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchParams] = useSearchParams();
@@ -869,7 +865,7 @@ export function Students() {
   const toast = useToast();
 
   const load = () => loadStudents({
-    token, logout, setLoading, setError, setStudents, setFiltered,
+    token, logout, setLoading, setError, setStudents,
     setBatches, setLevels: () => {}, setCoaches, setSchools, setBatchCoaches, setTournamentRegistrations, setWeeklyResults,
   });
 
@@ -960,11 +956,11 @@ export function Students() {
       setDetailTab('info');
     }
   }, [searchParams, selected, students]);
-  useEffect(() => {
+  const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    setFiltered(students.filter(s => matchesStudentFilters(
+    return students.filter(s => matchesStudentFilters(
       s, q, selectedBatches, selectedCategories, selectedCoaches, selectedSchools, selectedStatuses
-    )));
+    ));
   }, [search, students, selectedBatches, selectedCategories, selectedCoaches, selectedSchools, selectedStatuses]);
 
   const handleAdd = () => addStudent({ token, form, toast, setSaving, setStudents, setShowAdd, setForm });
@@ -1013,7 +1009,6 @@ export function Students() {
       toast,
       setSaving,
       setStudents,
-      setFiltered,
       setImportPreview,
     });
   };
@@ -1147,6 +1142,19 @@ export function Students() {
     }>
       <div className="students-workspace p-4 space-y-3">
         {error && <p className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</p>}
+
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-r from-slate-900 via-navy to-indigo-950 p-4 md:p-5 text-white shadow-sm dark:border-slate-800">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400/20 text-amber-400 ring-1 ring-amber-400/30">
+              <Users size={22} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight">Student Roster</h2>
+              <p className="mt-0.5 text-xs text-slate-300">{students.length} students · search, filter, and manage batches, fees, and imports.</p>
+            </div>
+          </div>
+        </div>
+
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, batch, FIDE ID, school, coach…"
           aria-label="Search students"
@@ -1672,7 +1680,7 @@ function TournamentAttendance({ studentName, lichessUsername, chessComUsername, 
       const dateLabel = dateValue && !Number.isNaN(new Date(dateValue).getTime())
         ? new Date(dateValue).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
         : 'Date not recorded';
-      const sourceLabel = match.source === 'chess.com' ? 'Chess.com' : 'Lichess';
+      const sourceLabel = weeklyTournamentSourceLabel(match.source);
       const pointsSuffix = match.score ? ` · ${match.score} pts` : '';
       return {
         key: `online-${tournament.rowIndex}`,
