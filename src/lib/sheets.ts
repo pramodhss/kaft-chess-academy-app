@@ -250,6 +250,14 @@ export async function clearSheetRange(token: string, sheetId: string, range: str
   });
 }
 
+export async function batchClearRanges(token: string, sheetId: string, ranges: string[]) {
+  if (ranges.length === 0) return;
+  return apiCall(token, `${API}/${sheetId}/values:batchClear`, {
+    method: 'POST',
+    body: JSON.stringify({ ranges }),
+  });
+}
+
 export async function deleteSheetColumn(token: string, sheetId: string, tabName: string, columnIndex: number) {
   const info = await apiCall(token, `${API}/${sheetId}?fields=sheets.properties`);
   const sheet = (info.sheets ?? []).find((item: any) => item.properties?.title === tabName);

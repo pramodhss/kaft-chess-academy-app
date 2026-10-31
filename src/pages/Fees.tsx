@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Filter, MessageCir
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
-import { readSheet, readSheetLive, appendRows, batchWrite, clearSheetRange, clearSheetReadCache, SheetConflictError } from '../lib/sheets';
+import { readSheet, readSheetLive, appendRows, batchWrite, batchClearRanges, clearSheetRange, clearSheetReadCache, SheetConflictError } from '../lib/sheets';
 import { useToast } from '../context/ToastContext';
 import { SHEET_ID, TABS } from '../config';
 import { parseSheetNumber } from '../lib/values';
@@ -853,7 +853,7 @@ export function Fees() {
     setRosterSavingAll(true);
     try {
       const tab = TABS.FEES;
-      await Promise.all(entries.map(fee => clearSheetRange(token, SHEET_ID, `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`)));
+      await batchClearRanges(token, SHEET_ID, entries.map(fee => `'${tab}'!A${fee.rowIndex}:N${fee.rowIndex}`));
       const clearedRows = new Set(entries.map(entry => entry.rowIndex));
       setFees(previous => previous.filter(fee => !clearedRows.has(fee.rowIndex)));
       clearSheetReadCache(SHEET_ID);

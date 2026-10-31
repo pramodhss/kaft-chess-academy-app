@@ -5,7 +5,7 @@ import { PageSkeleton } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useCoachName } from '../hooks/useCoachName';
-import { appendRows, batchWriteRanges, clearSheetRange, clearSheetReadCache, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, SheetConflictError, writeRange } from '../lib/sheets';
+import { appendRows, batchClearRanges, batchWriteRanges, clearSheetReadCache, ensureSheet, ensureSheetColumns, readSheet, readSheetLive, SheetConflictError, writeRange } from '../lib/sheets';
 import { recordAudit } from '../lib/audit';
 import { phoneValidationError } from '../lib/validation';
 import { fetchWeeklyOnlineTournament, rowToSavedWeeklyOnlineTournament, WEEKLY_ONLINE_TOURNAMENT_HEADERS, weeklyTournamentSource, weeklyTournamentSourceLabel, weeklyTournamentValues, weeklyTournamentWhatsAppMessage, type SavedWeeklyOnlineTournament, type WeeklyOnlineTournament } from '../lib/weeklyOnlineTournament';
@@ -269,9 +269,9 @@ export function Van() {
         return;
       }
       const linked = registrations.filter(r => r.tournamentId === t.id);
-      await Promise.all([
-        clearSheetRange(token, SHEET_ID, `'${TABS.UPCOMING}'!A${t.rowIndex}:M${t.rowIndex}`),
-        ...linked.map(r => clearSheetRange(token, SHEET_ID, `'${TABS.TOURNAMENT_REGISTRATIONS}'!A${r.rowIndex}:L${r.rowIndex}`)),
+      await batchClearRanges(token, SHEET_ID, [
+        `'${TABS.UPCOMING}'!A${t.rowIndex}:M${t.rowIndex}`,
+        ...linked.map(r => `'${TABS.TOURNAMENT_REGISTRATIONS}'!A${r.rowIndex}:L${r.rowIndex}`),
       ]);
       setTournaments(c => c.filter(x => x.id !== t.id));
       setRegistrations(c => c.filter(x => x.tournamentId !== t.id));

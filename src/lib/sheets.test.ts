@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appendRows, clearSheetReadCache, ensureSheet, readSheet } from './sheets';
+import { appendRows, batchClearRanges, clearSheetReadCache, ensureSheet, readSheet } from './sheets';
 
 afterEach(() => {
   clearSheetReadCache();
@@ -32,6 +32,27 @@ describe('readSheet', () => {
     await readSheet('token', 'sheet-id', "'Students'!A:A");
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('batchClearRanges', () => {
+  it('clears all ranges in a single request', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ clearedRanges: [] }), { status: 200 }),
+    );
+
+    await batchClearRanges('token', 'sheet-id', ["'Fees'!A2:N2", "'Fees'!A5:N5"]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/sheet-id/values:batchClear');
+    expect(JSON.parse(String(options?.body))).toEqual({ ranges: ["'Fees'!A2:N2", "'Fees'!A5:N5"] });
+  });
+
+  it('skips the request when there is nothing to clear', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    await batchClearRanges('token', 'sheet-id', []);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

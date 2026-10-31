@@ -308,7 +308,11 @@ function StudentDetailActions({ student, onEdit }: Readonly<{
   };
 
   const shareParentLink = () => {
-    const pin = student.parent1Phone ? student.parent1Phone.replace(/\D/g, '').slice(-4) : '0000';
+    const pin = (student.parent1Phone || student.parent1WhatsApp).replace(/\D/g, '').slice(-4);
+    if (pin.length < 4) {
+      toast.error('Add a parent phone number before sharing the portal link.');
+      return;
+    }
     const origin = window.location.origin;
     const path = window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
     const url = `${origin}${path}#/parent?student=${encodeURIComponent(student.name)}&pin=${pin}`;

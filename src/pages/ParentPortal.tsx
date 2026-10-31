@@ -56,8 +56,11 @@ export function ParentPortal() {
       const p1Wa = foundRow[11] ?? '';
       const validPins = [extractPin(p1Phone), extractPin(p1Wa)].filter(Boolean);
 
-      // Verify PIN against last 4 digits of phone
-      if (validPins.length > 0 && !validPins.includes(pin.trim())) {
+      if (validPins.length === 0) {
+        setError('No parent phone is registered for this student. Ask your coach to add one before using the portal.');
+        return;
+      }
+      if (!validPins.includes(pin.trim())) {
         setError('Incorrect PIN. Enter the last 4 digits of your registered phone number.');
         return;
       }

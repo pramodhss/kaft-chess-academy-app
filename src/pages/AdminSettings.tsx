@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GraduationCap, Plus, QrCode, Save, Search, Trash2, UserCheck } from 'lucide-react';
-import { clearSheetRange, clearSheetReadCache, readSheet } from '../lib/sheets';
+import { batchClearRanges, clearSheetReadCache, readSheetLive } from '../lib/sheets';
 import { Layout } from '../components/Layout';
 import { PageSkeleton } from '../components/Skeleton';
 import { SHEET_ID, TABS } from '../config';
@@ -152,9 +152,8 @@ export function AdminSettings() {
     if (!window.confirm(`Clear all monthly fee records for ${monthToClear}? This removes the selected month's collected and pending fee totals.`)) return;
     setClearingMonth(monthToClear);
     try {
-      const [feeRows] = await Promise.all([
-        readSheet(token, SHEET_ID, `'${TABS.FEES}'!A:N`),
-      ]);
+      // Live read: row indexes must not be stale before a destructive clear.
+      const feeRows = await readSheetLive(token, SHEET_ID, `'${TABS.FEES}'!A:N`);
       const month = normalizeFeeMonth(monthToClear);
       const rowsToClear: string[] = [];
       feeRows.slice(1).forEach((row, idx) => {
@@ -166,7 +165,7 @@ export function AdminSettings() {
         }
       });
       if (rowsToClear.length === 0) { toast.info('No fees found for the selected month.'); return; }
-      await Promise.all(rowsToClear.map(range => clearSheetRange(token, SHEET_ID, range)));
+      await batchClearRanges(token, SHEET_ID, rowsToClear);
       clearSheetReadCache(SHEET_ID);
       setMonthToClear('');
       toast.success(`Cleared ${rowsToClear.length} monthly fee record${rowsToClear.length === 1 ? '' : 's'} for ${monthToClear}. Syncing...`);

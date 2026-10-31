@@ -159,6 +159,16 @@ async function fulfillClear(route: Route, mock: SheetsMock, range: string) {
   await route.fulfill({ json: { clearedRange: range } });
 }
 
+async function fulfillBatchClear(route: Route, mock: SheetsMock, request: Request) {
+  const body = await jsonBody(request);
+  const ranges = Array.isArray(body.ranges) ? body.ranges as string[] : [];
+  ranges.forEach(range => {
+    clearRange(mock.workbook, range);
+    mock.writes.push({ operation: 'clear', range, values: [] });
+  });
+  await route.fulfill({ json: { clearedRanges: ranges } });
+}
+
 async function fulfillSheetsRequest(route: Route, mock: SheetsMock) {
   const request = route.request();
   const url = new URL(request.url());
@@ -168,6 +178,7 @@ async function fulfillSheetsRequest(route: Route, mock: SheetsMock) {
   if (method === 'GET' && range) return route.fulfill({ json: { range, majorDimension: 'ROWS', values: readRange(mock.workbook, range) } });
   if (method === 'GET' && url.searchParams.get('fields') === 'sheets.properties') return fulfillMetadata(route, mock);
   if (method === 'POST' && url.pathname.endsWith('/values:batchUpdate')) return fulfillBatchValues(route, mock, request);
+  if (method === 'POST' && url.pathname.endsWith('/values:batchClear')) return fulfillBatchClear(route, mock, request);
   if (method === 'PUT' && range) return fulfillUpdate(route, mock, request, range);
   if (method === 'POST' && url.pathname.endsWith(':append')) return fulfillAppend(route, mock, request, range);
   if (method === 'POST' && url.pathname.endsWith(':clear')) return fulfillClear(route, mock, range);
